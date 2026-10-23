@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLB Optimizer</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
+    --text: #e6e8ec; --muted: #8b93a3; --accent: #4f8cff; --accent2: #2f6ae0;
+    --ok: #3fbf7f; --warn: #e0a83a; --err: #e05a5a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { display: grid; grid-template-columns: 330px 1fr; height: 100vh; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 12px 14px 24px; }
+  h1 { font-size: 15px; margin: 2px 0 10px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row label { flex: 1; color: var(--text); }
+  .row .val { min-width: 54px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: 11.5px; margin: 2px 0 6px; }
+  input[type=number], select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 7px; width: 120px; font: inherit; }
+  input[type=range] { width: 130px; accent-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 11px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent); }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 5px 10px; }
+  .seg button.on { background: var(--accent2); color: #fff; }
+  table.stats { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.stats th, table.stats td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+  table.stats th:first-child, table.stats td:first-child { text-align: left; color: var(--muted); font-weight: normal; }
+  table.stats thead th { color: var(--muted); font-weight: 600; }
+  #log { margin-top: 10px; font: 11.5px/1.45 ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+    max-height: 170px; overflow-y: auto; white-space: pre-wrap; }
+  #log .warn { color: var(--warn); } #log .err { color: var(--err); } #log .ok { color: var(--ok); }
+  main { position: relative; overflow: hidden; }
+  #viewport { position: absolute; inset: 0; }
+  #toolbar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 10px; align-items: center;
+    flex-wrap: wrap; pointer-events: none; }
+  #toolbar > * { pointer-events: auto; }
+  #toolbar .chk { background: rgba(23,26,33,.85); border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; }
+  #filename { margin-left: auto; color: var(--muted); background: rgba(23,26,33,.85); border-radius: 7px; padding: 5px 9px; }
+  #drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column;
+    gap: 12px; color: var(--muted); font-size: 15px; text-align: center; padding: 20px; }
+  #drop.hidden { display: none; }
+  #drop .box { border: 2px dashed var(--line); border-radius: 14px; padding: 40px 50px; }
+  main.dragging #drop { display: flex; background: rgba(79,140,255,.08); }
+  main.dragging #drop .box { border-color: var(--accent); color: var(--text); }
+  #busy { position: absolute; inset: 0; background: rgba(10,12,16,.55); display: none; align-items: center;
+    justify-content: center; font-size: 15px; z-index: 5; }
+  #busy.show { display: flex; }
+  .spinner { width: 22px; height: 22px; border: 3px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite; margin-right: 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 760px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; }
+    main { grid-row: 1; height: 55vh; } aside { grid-row: 2; border-right: 0; }
+  }
+</style>
+<!-- Libraries load from the jsDelivr CDN (needs internet). The "offline" build has them inlined instead. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "meshoptimizer/simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@1.3.0/meshopt_simplifier.js",
+    "meshoptimizer/decoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@1.3.0/meshopt_decoder.mjs",
+    "three-subdivide": "https://cdn.jsdelivr.net/npm/three-subdivide@1.1.5/src/index.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <h1>GLB Optimizer</h1>
+    <div class="btns" style="margin-top:0">
+      <button id="openBtn" class="primary">Open GLB…</button>
+      <button id="sampleBtn">Load sample</button>
+      <input id="fileInput" type="file" accept=".glb,.gltf" hidden>
+    </div>
+
+    <h2>Stats</h2>
+    <table class="stats">
+      <thead><tr><th></th><th>Original</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Faces</td><td id="sOF">–</td><td id="sRF">–</td></tr>
+        <tr><td>Vertices</td><td id="sOV">–</td><td id="sRV">–</td></tr>
+        <tr><td>Meshes</td><td id="sOM">–</td><td id="sRM">–</td></tr>
+        <tr><td>File size</td><td id="sOS">–</td><td id="sRS">–</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Resolution (faces)</h2>
+    <div class="row"><label for="targetFaces">Target faces</label><input id="targetFaces" type="number" min="4" step="1"></div>
+    <div class="row"><input id="ratio" type="range" min="1" max="1600" value="100" style="flex:1;width:auto"><span class="val" id="ratioVal">100%</span></div>
+    <div class="hint">Below 100% decimates (removes faces). Above 100% subdivides first, then trims to the exact target.</div>
+    <div class="row"><label for="subdivLevels">Subdivision levels</label>
+      <select id="subdivLevels"><option value="auto">Auto</option><option value="0">0</option><option value="1">1 (×4)</option><option value="2">2 (×16)</option><option value="3">3 (×64)</option></select></div>
+    <div class="row"><label for="subdivType">Subdivision type</label>
+      <select id="subdivType"><option value="loop">Loop (smooth)</option><option value="flat">Flat (keep shape)</option></select></div>
+    <div class="row"><label for="preserveEdges">Preserve open edges</label><input id="preserveEdges" type="checkbox"></div>
+    <div class="row"><label for="maxError">Max shape error</label><input id="maxError" type="range" min="0" max="100" step="0.5" value="10"><span class="val" id="maxErrorVal">10%</span></div>
+    <div class="hint">Caps how far decimation may deform the shape (relative to model size). Raise it if the face target isn't reached.</div>
+    <div class="row"><label for="lockBorder">Lock borders</label><input id="lockBorder" type="checkbox"></div>
+
+    <h2>Smoothness</h2>
+    <div class="row"><label for="smoothIter">Surface smoothing</label><input id="smoothIter" type="range" min="0" max="50" step="1" value="0"><span class="val" id="smoothIterVal">0</span></div>
+    <div class="hint">Taubin smoothing passes. Removes bumps and faceting without shrinking the model.</div>
+    <div class="row"><label for="shading">Shading / normals</label>
+      <select id="shading"><option value="keep">Keep original</option><option value="smooth">Smooth</option><option value="crease">Auto (crease angle)</option><option value="flat">Flat</option></select></div>
+    <div class="row"><label for="crease">Crease angle</label><input id="crease" type="range" min="1" max="180" value="40"><span class="val" id="creaseVal">40°</span></div>
+
+    <h2>File size</h2>
+    <div class="row"><label for="useSize">Fit to target size</label><input id="useSize" type="checkbox"></div>
+    <div class="row"><label for="targetMB">Target size (MB)</label><input id="targetMB" type="number" min="0.01" step="0.1" value="5"></div>
+    <div class="hint">When on, faces are reduced further (if needed) until the exported GLB fits.</div>
+    <div class="row"><label for="texSize">Max texture size</label>
+      <select id="texSize"><option value="0">Original</option><option>4096</option><option>2048</option><option>1024</option><option>512</option><option>256</option></select></div>
+    <div class="row"><label for="texFormat">Texture format</label>
+      <select id="texFormat"><option value="keep">Keep</option><option value="jpeg">JPEG (smaller)</option><option value="png">PNG (lossless)</option></select></div>
+
+    <div class="btns">
+      <button id="applyBtn" class="primary" disabled>Apply</button>
+      <button id="resetBtn" disabled>Reset</button>
+      <button id="downloadBtn" disabled>Download GLB</button>
+    </div>
+    <div id="log"></div>
+  </aside>
+
+  <main id="main">
+    <div id="viewport"></div>
+    <div id="toolbar">
+      <div class="seg"><button id="viewResult" class="on">Result</button><button id="viewOriginal">Original</button></div>
+      <label class="chk"><input id="wire" type="checkbox"> Wireframe</label>
+      <label class="chk"><input id="rotate" type="checkbox"> Auto-rotate</label>
+      <button id="fitBtn">Fit view</button>
+      <span id="filename"></span>
+    </div>
+    <div id="drop"><div class="box">Drop a <b>.glb</b> file here<br><span style="font-size:12px">or use “Open GLB…”</span></div></div>
+    <div id="busy"><div class="spinner"></div><span id="busyText">Working…</span></div>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeVertices, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { MeshoptSimplifier } from 'meshoptimizer/simplifier';
+import { MeshoptDecoder } from 'meshoptimizer/decoder';
+import { LoopSubdivision } from 'three-subdivide';
+
+const $ = (id) => document.getElementById(id);
+const MAX_SUBDIV_FACES = 3_000_000; // safety cap for subdivision
+
+// ---------- viewer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+$('viewport').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1d24);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+camera.position.set(2, 1.5, 3);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+const grid = new THREE.GridHelper(10, 20, 0x3a404d, 0x272b34);
+scene.add(grid);
+
+function resize() {
+  const el = $('viewport');
+  renderer.setSize(el.clientWidth, el.clientHeight, false);
+  renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%';
+  camera.aspect = el.clientWidth / Math.max(1, el.clientHeight);
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe($('viewport'));
+resize();
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  if (state.mixer) state.mixer.update(dt);
+  controls.autoRotate = $('rotate').checked;
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+// ---------- state ----------
+const state = {
+  name: 'model', original: null, animations: [], originalBytes: 0,
+  result: null, view: 'result', subdivCache: new Map(), mixer: null, lastExport: null,
+};
+
+// ---------- helpers ----------
+const fmtInt = (n) => n.toLocaleString();
+const fmtBytes = (b) => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
+function log(msg, cls = '') {
+  const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = msg;
+  $('log').appendChild(d); $('log').scrollTop = 1e9;
+}
+async function busy(text, fn) {
+  $('busyText').textContent = text; $('busy').classList.add('show');
+  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 20)));
+  try { return await fn(); }
+  catch (e) { console.error(e); log('Error: ' + (e.message || e), 'err'); }
+  finally { $('busy').classList.remove('show'); }
+}
+const triCount = (g) => (g.index ? g.index.count : g.attributes.position.count) / 3 | 0;
+function meshesOf(root) { const out = []; root.traverse((o) => { if (o.isMesh && o.geometry?.attributes.position) out.push(o); }); return out; }
+function statsOf(root) {
+  let f = 0, v = 0; const ms = meshesOf(root);
+  for (const m of ms) { f += triCount(m.geometry); v += m.geometry.attributes.position.count; }
+  return { faces: f, verts: v, meshes: ms.length };
+}
+// Subdivision/smoothing would corrupt skinning weights and morph targets, so those meshes are only decimated.
+const isDeformable = (m) => m.isSkinnedMesh || Object.keys(m.geometry.morphAttributes || {}).length > 0;
+
+// ---------- loading ----------
+const draco = new DRACOLoader().setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+const loader = new GLTFLoader().setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
+
+async function loadBuffer(buf, name) {
+  const gltf = await loader.parseAsync(buf, '');
+  setOriginal(gltf.scene, gltf.animations || [], buf.byteLength, name);
+}
+
+function setOriginal(root, animations, bytes, name) {
+  if (state.original) scene.remove(state.original);
+  if (state.result) scene.remove(state.result);
+  state.original = root; state.animations = animations; state.originalBytes = bytes;
+  state.name = name.replace(/\.(glb|gltf)$/i, ''); state.subdivCache.clear(); state.result = null; state.lastExport = null;
+  scene.add(root);
+  const s = statsOf(root);
+  $('sOF').textContent = fmtInt(s.faces); $('sOV').textContent = fmtInt(s.verts);
+  $('sOM').textContent = s.meshes; $('sOS').textContent = fmtBytes(bytes);
+  for (const id of ['sRF', 'sRV', 'sRM', 'sRS']) $(id).textContent = '–';
+  $('targetFaces').value = s.faces; $('ratio').value = 100; $('ratioVal').textContent = '100%';
+  $('targetMB').value = Math.max(0.01, +(bytes / 1048576 / 2).toFixed(2));
+  $('filename').textContent = name;
+  $('drop').classList.add('hidden');
+  for (const id of ['applyBtn', 'resetBtn', 'downloadBtn']) $(id).disabled = false;
+  setView('original'); fitView(); applyWire(); playAnim(root);
+  log(`Loaded ${name}: ${fmtInt(s.faces)} faces, ${s.meshes} meshes, ${fmtBytes(bytes)}`, 'ok');
+}
+
+function playAnim(root) {
+  state.mixer = null;
+  if (!state.animations.length) return;
+  state.mixer = new THREE.AnimationMixer(root);
+  state.mixer.clipAction(state.animations[0]).play();
+}
+
+$('openBtn').onclick = () => $('fileInput').click();
+$('fileInput').onchange = (e) => { const f = e.target.files[0]; if (f) openFile(f); e.target.value = ''; };
+function openFile(f) {
+  busy('Loading ' + f.name + '…', async () => loadBuffer(await f.arrayBuffer(), f.name));
+}
+const main = $('main');
+main.addEventListener('dragover', (e) => { e.preventDefault(); main.classList.add('dragging'); });
+main.addEventListener('dragleave', (e) => { if (e.target === main || e.target.id === 'drop') main.classList.remove('dragging'); });
+main.addEventListener('drop', (e) => {
+  e.preventDefault(); main.classList.remove('dragging');
+  const f = [...e.dataTransfer.files].find((x) => /\.(glb|gltf)$/i.test(x.name));
+  if (f) openFile(f); else log('Please drop a .glb or .gltf file.', 'warn');
+});
+
+$('sampleBtn').onclick = () => busy('Building sample…', async () => {
+  const root = new THREE.Group(); root.name = 'Sample';
+  const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.6, 0.2, 64, 10),
+    new THREE.MeshStandardMaterial({ color: 0x4f8cff, roughness: 0.35, metalness: 0.2 }));
+  knot.name = 'Knot'; knot.position.y = 1; root.add(knot);
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8),
+    new THREE.MeshStandardMaterial({ color: 0xe0a83a, roughness: 0.6 }));
+  box.name = 'Box'; box.position.set(1.4, 0.4, 0); root.add(box);
+  const buf = await exportGLB(root, []);
+  await loadBuffer(buf, 'sample.glb');
+});
+
+// ---------- view controls ----------
+function setView(v) {
+  state.view = v;
+  $('viewResult').classList.toggle('on', v === 'result'); $('viewOriginal').classList.toggle('on', v === 'original');
+  if (state.original) state.original.visible = v === 'original' || !state.result;
+  if (state.result) state.result.visible = v === 'result';
+}
+$('viewResult').onclick = () => setView('result');
+$('viewOriginal').onclick = () => setView('original');
+function applyWire() {
+  const on = $('wire').checked;
+  for (const root of [state.original, state.result]) if (root) root.traverse((o) => {
+    if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.wireframe = on; });
+  });
+}
+$('wire').onchange = applyWire;
+function fitView() {
+  const root = state.original; if (!root) return;
+  const box = new THREE.Box3().setFromObject(root);
+  if (box.isEmpty()) return;
+  const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+  const r = size.length() / 2 || 1;
+  const dist = r / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.1;
+  camera.near = r / 100; camera.far = r * 100 + dist; camera.updateProjectionMatrix();
+  camera.position.copy(center).add(new THREE.Vector3(0.6, 0.45, 1).normalize().multiplyScalar(dist));
+  controls.target.copy(center); controls.update();
+  grid.position.set(center.x, box.min.y, center.z);
+  grid.scale.setScalar(Math.max(size.x, size.z) / 5 || 1);
+}
+$('fitBtn').onclick = fitView;
+
+// ---------- control wiring ----------
+function origFaces() { return state.original ? statsOf(state.original).faces : 0; }
+$('ratio').oninput = () => {
+  const r = +$('ratio').value; $('ratioVal').textContent = r + '%';
+  if (state.original) $('targetFaces').value = Math.max(4, Math.round(origFaces() * r / 100));
+};
+$('targetFaces').oninput = () => {
+  const f = origFaces(); if (!f) return;
+  const r = Math.round(+$('targetFaces').value / f * 100);
+  $('ratio').value = Math.min(1600, Math.max(1, r)); $('ratioVal').textContent = r + '%';
+};
+const bindVal = (id, suffix) => { const u = () => { $(id + 'Val').textContent = $(id).value + suffix; }; $(id).oninput = u; u(); };
+bindVal('maxError', '%'); bindVal('smoothIter', ''); bindVal('crease', '°');
+
+// ---------- geometry operations ----------
+// Plain (non-interleaved) copy of a geometry with float positions, safe to modify.
+function plainGeometry(src) {
+  const g = new THREE.BufferGeometry();
+  for (const [k, a] of Object.entries(src.attributes)) g.setAttribute(k, a.isInterleavedBufferAttribute ? a.clone() : a.clone());
+  for (const [k, arr] of Object.entries(src.morphAttributes || {})) g.morphAttributes[k] = arr.map((a) => a.clone());
+  g.morphTargetsRelative = src.morphTargetsRelative;
+  if (src.index) g.setIndex(src.index.clone());
+  for (const gr of src.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+  const p = g.attributes.position;
+  if (!(p.array instanceof Float32Array) || p.normalized) {
+    const f = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) { f[i * 3] = p.getX(i); f[i * 3 + 1] = p.getY(i); f[i * 3 + 2] = p.getZ(i); }
+    g.setAttribute('position', new THREE.BufferAttribute(f, 3));
+  }
+  return g;
+}
+const ensureIndexed = (g) => (g.index ? g : mergeVertices(g, 1e-6));
+
+function subdivide(g, levels, type, preserveEdges) {
+  g = plainGeometry(g); g.deleteAttribute('tangent');
+  const out = LoopSubdivision.modify(g, levels, {
+    split: type === 'loop', flatOnly: type === 'flat', preserveEdges, uvSmooth: false, maxTriangles: MAX_SUBDIV_FACES,
+  });
+  return mergeVertices(out, 1e-6);
+}
+
+// Rebuild a geometry keeping only the vertices referenced by `idx`.
+function compact(g, idx) {
+  const remap = new Int32Array(g.attributes.position.count).fill(-1);
+  let n = 0; const order = [];
+  const newIdx = new Uint32Array(idx.length);
+  for (let i = 0; i < idx.length; i++) {
+    let r = remap[idx[i]]; if (r < 0) { r = remap[idx[i]] = n++; order.push(idx[i]); }
+    newIdx[i] = r;
+  }
+  const pick = (a) => {
+    const s = a.itemSize, arr = new a.array.constructor(n * s);
+    for (let i = 0; i < n; i++) for (let c = 0; c < s; c++) arr[i * s + c] = a.array[order[i] * s + c];
+    return new THREE.BufferAttribute(arr, s, a.normalized);
+  };
+  const out = new THREE.BufferGeometry();
+  for (const [k, a] of Object.entries(g.attributes)) out.setAttribute(k, pick(a));
+  for (const [k, arr] of Object.entries(g.morphAttributes)) out.morphAttributes[k] = arr.map(pick);
+  out.morphTargetsRelative = g.morphTargetsRelative;
+  out.setIndex(new THREE.BufferAttribute(n > 65535 ? newIdx : new Uint16Array(newIdx), 1));
+  return out;
+}
+
+function decimate(g, targetTris, maxErr, lockBorder) {
+  g = ensureIndexed(plainGeometry(g));
+  const cur = triCount(g);
+  if (targetTris >= cur || g.groups.length > 1) return { geometry: g, error: 0 };
+  const idx = Uint32Array.from(g.index.array);
+  const pos = g.attributes.position.array;
+  const flags = lockBorder ? ['LockBorder'] : [];
+  let res;
+  const nrm = g.attributes.normal;
+  if (nrm && nrm.itemSize === 3) {
+    const a = new Float32Array(nrm.count * 3);
+    for (let i = 0; i < nrm.count; i++) { a[i * 3] = nrm.getX(i); a[i * 3 + 1] = nrm.getY(i); a[i * 3 + 2] = nrm.getZ(i); }
+    res = MeshoptSimplifier.simplifyWithAttributes(idx, pos, 3, a, 3, [0.5, 0.5, 0.5], null, Math.max(3, targetTris * 3), maxErr, flags);
+  } else {
+    res = MeshoptSimplifier.simplify(idx, pos, 3, Math.max(3, targetTris * 3), maxErr, flags);
+  }
+  const [newIdx, err] = res;
+  if (newIdx.length < 3) return { geometry: g, error: 0 };
+  const out = compact(g, newIdx);
+  out.deleteAttribute('tangent');
+  return { geometry: out, error: err };
+}
+
+// Map each vertex to a welded id by position, so smoothing/normals ignore UV and normal seams.
+function weld(g) {
+  const p = g.attributes.position.array, n = g.attributes.position.count;
+  g.computeBoundingBox();
+  const eps = Math.max(g.boundingBox.getSize(new THREE.Vector3()).length() * 1e-6, 1e-9);
+  const map = new Map(), ids = new Int32Array(n); let count = 0;
+  for (let i = 0; i < n; i++) {
+    const k = Math.round(p[i * 3] / eps) + ',' + Math.round(p[i * 3 + 1] / eps) + ',' + Math.round(p[i * 3 + 2] / eps);
+    let id = map.get(k); if (id === undefined) { id = count++; map.set(k, id); }
+    ids[i] = id;
+  }
+  return { ids, count };
+}
+
+function triIndices(g) {
+  if (g.index) return g.index.array;
+  const a = new Uint32Array(g.attributes.position.count); for (let i = 0; i < a.length; i++) a[i] = i; return a;
+}
+
+// Taubin (lambda|mu) smoothing: smooths without the shrinkage of plain Laplacian smoothing.
+function taubinSmooth(g, iterations, lockBoundary = true) {
+  const { ids, count } = weld(g);
+  const idx = triIndices(g), pos = g.attributes.position.array;
+  const edgeUse = new Map(); const nb = Array.from({ length: count }, () => new Set());
+  for (let t = 0; t < idx.length; t += 3) {
+    for (let e = 0; e < 3; e++) {
+      const a = ids[idx[t + e]], b = ids[idx[t + (e + 1) % 3]]; if (a === b) continue;
+      nb[a].add(b); nb[b].add(a);
+      const key = a < b ? a * count + b : b * count + a; edgeUse.set(key, (edgeUse.get(key) || 0) + 1);
+    }
+  }
+  const locked = new Uint8Array(count);
+  if (lockBoundary) for (const [key, c] of edgeUse) if (c === 1) { locked[Math.floor(key / count)] = 1; locked[key % count] = 1; }
+  let P = new Float32Array(count * 3);
+  for (let i = 0; i < ids.length; i++) { const w = ids[i]; P[w * 3] = pos[i * 3]; P[w * 3 + 1] = pos[i * 3 + 1]; P[w * 3 + 2] = pos[i * 3 + 2]; }
+  const nbArr = nb.map((s) => Int32Array.from(s));
+  let Q = new Float32Array(P.length);
+  for (let it = 0; it < iterations * 2; it++) {
+    const f = it % 2 === 0 ? 0.5 : -0.53;
+    for (let v = 0; v < count; v++) {
+      const ns = nbArr[v];
+      if (locked[v] || ns.length === 0) { Q[v * 3] = P[v * 3]; Q[v * 3 + 1] = P[v * 3 + 1]; Q[v * 3 + 2] = P[v * 3 + 2]; continue; }
+      let x = 0, y = 0, z = 0;
+      for (const u of ns) { x += P[u * 3]; y += P[u * 3 + 1]; z += P[u * 3 + 2]; }
+      const k = 1 / ns.length;
+      Q[v * 3] = P[v * 3] + f * (x * k - P[v * 3]);
+      Q[v * 3 + 1] = P[v * 3 + 1] + f * (y * k - P[v * 3 + 1]);
+      Q[v * 3 + 2] = P[v * 3 + 2] + f * (z * k - P[v * 3 + 2]);
+    }
+    [P, Q] = [Q, P];
+  }
+  for (let i = 0; i < ids.length; i++) { const w = ids[i]; pos[i * 3] = P[w * 3]; pos[i * 3 + 1] = P[w * 3 + 1]; pos[i * 3 + 2] = P[w * 3 + 2]; }
+  g.attributes.position.needsUpdate = true;
+}
+
+// Area-weighted smooth normals shared across UV/normal seams.
+function smoothNormals(g) {
+  const { ids, count } = weld(g);
+  const idx = triIndices(g), p = g.attributes.position.array;
+  const acc = new Float32Array(count * 3);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let t = 0; t < idx.length; t += 3) {
+    const i0 = idx[t], i1 = idx[t + 1], i2 = idx[t + 2];
+    a.fromArray(p, i0 * 3); b.fromArray(p, i1 * 3); c.fromArray(p, i2 * 3);
+    c.sub(b); a.sub(b); c.cross(a); // un-normalized face normal (area-weighted)
+    for (const i of [i0, i1, i2]) { const w = ids[i] * 3; acc[w] += c.x; acc[w + 1] += c.y; acc[w + 2] += c.z; }
+  }
+  const n = new Float32Array(ids.length * 3), v = new THREE.Vector3();
+  for (let i = 0; i < ids.length; i++) {
+    v.fromArray(acc, ids[i] * 3).normalize(); v.toArray(n, i * 3);
+  }
+  g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
+}
+
+function applyShading(g, mode, creaseDeg, positionsChanged) {
+  if (mode === 'keep') { if (positionsChanged || !g.attributes.normal) smoothNormals(g); return g; }
+  g.deleteAttribute('tangent');
+  if (mode === 'smooth') { smoothNormals(g); return g; }
+  if (mode === 'flat') {
+    const ni = g.index ? g.toNonIndexed() : g; ni.deleteAttribute('normal'); ni.computeVertexNormals();
+    return mergeVertices(ni, 1e-6);
+  }
+  const cr = toCreasedNormals(g, THREE.MathUtils.degToRad(creaseDeg));
+  return mergeVertices(cr, 1e-6);
+}
+
+// ---------- pipeline ----------
+function readSettings() {
+  return {
+    target: Math.max(4, Math.round(+$('targetFaces').value || 4)),
+    levels: $('subdivLevels').value, type: $('subdivType').value, preserveEdges: $('preserveEdges').checked,
+    maxErr: +$('maxError').value / 100, lockBorder: $('lockBorder').checked,
+    smooth: +$('smoothIter').value, shading: $('shading').value, crease: +$('crease').value,
+    useSize: $('useSize').checked, targetBytes: +$('targetMB').value * 1048576,
+    texSize: +$('texSize').value, texFormat: $('texFormat').value,
+  };
+}
+
+function resolveLevels(s, origTotal, subdividable) {
+  if (s.levels !== 'auto') return +s.levels;
+  let L = 0;
+  if (!subdividable) return 0;
+  while (L < 4 && origTotal + subdividable * (Math.pow(4, L) - 1) < s.target
+    && subdividable * Math.pow(4, L + 1) <= MAX_SUBDIV_FACES) L++;
+  return L;
+}
+
+// Stage A: subdivided source geometries (cached because subdivision is the slow part).
+function stageA(s) {
+  const srcMeshes = meshesOf(state.original);
+  const total = srcMeshes.reduce((n, m) => n + triCount(m.geometry), 0);
+  const subdividable = srcMeshes.filter((m) => !isDeformable(m)).reduce((n, m) => n + triCount(m.geometry), 0);
+  const L = resolveLevels(s, total, subdividable);
+  const key = [L, s.type, s.preserveEdges].join('|');
+  if (!state.subdivCache.has(key)) {
+    const geoms = srcMeshes.map((m) => (L > 0 && !isDeformable(m)) ? subdivide(m.geometry, L, s.type, s.preserveEdges) : m.geometry);
+    state.subdivCache.clear(); state.subdivCache.set(key, geoms);
+    if (L > 0) log(`Subdivided ${L} level(s) (${s.type}) → ${fmtInt(geoms.reduce((n, g) => n + triCount(g), 0))} faces`);
+    const skipped = srcMeshes.filter(isDeformable).length;
+    if (L > 0 && skipped) log(`${skipped} skinned/morph mesh(es) were not subdivided (would break animation).`, 'warn');
+  }
+  return { levels: L, geoms: state.subdivCache.get(key) };
+}
+
+// Stage B: decimate to `target` faces overall, smooth, fix normals. Returns a new scene root.
+function stageB(s, geoms, target) {
+  const root = SkeletonUtils.clone(state.original);
+  root.visible = true; // the original may be hidden while the result is shown; exporter skips hidden nodes
+  const dst = meshesOf(root);
+  const total = geoms.reduce((n, g) => n + triCount(g), 0);
+  const ratio = Math.min(1, target / total);
+  let maxErrSeen = 0;
+  dst.forEach((m, i) => {
+    let g = geoms[i];
+    let changed = g !== m.geometry;
+    if (ratio < 1) {
+      const r = decimate(g, Math.max(4, Math.round(triCount(g) * ratio)), s.maxErr, s.lockBorder);
+      g = r.geometry; changed = true; maxErrSeen = Math.max(maxErrSeen, r.error);
+    }
+    const deform = isDeformable(m);
+    let moved = false;
+    if (s.smooth > 0 && !deform) {
+      if (!changed) g = plainGeometry(g);
+      taubinSmooth(g, s.smooth); moved = true; changed = true;
+    }
+    if (s.shading !== 'keep' || moved) {
+      if (!changed) g = plainGeometry(g);
+      g = applyShading(g, s.shading, s.crease, moved); changed = true;
+    }
+    if (changed) { g.computeBoundingBox(); g.computeBoundingSphere(); m.geometry = g; }
+  });
+  return { root, maxErr: maxErrSeen };
+}
+
+function geometryBytes(root) {
+  let b = 0;
+  for (const m of meshesOf(root)) {
+    const g = m.geometry;
+    for (const a of Object.values(g.attributes)) b += a.count * a.itemSize * (a.array.BYTES_PER_ELEMENT || 4);
+    for (const arr of Object.values(g.morphAttributes)) for (const a of arr) b += a.count * a.itemSize * 4;
+    if (g.index) b += g.index.count * (g.index.count > 65535 || g.index.array instanceof Uint32Array ? 4 : 2);
+  }
+  return b;
+}
+
+async function exportGLB(root, animations, s = null) {
+  const restore = [];
+  if (s && s.texFormat !== 'keep') {
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const mat of (Array.isArray(o.material) ? o.material : [o.material])) {
+        for (const [k, tex] of Object.entries(mat)) {
+          if (!tex || !tex.isTexture) continue;
+          // keep alpha-carrying base color textures as PNG
+          const alpha = k === 'map' && (mat.transparent || mat.alphaTest > 0);
+          const fmt = s.texFormat === 'jpeg' && !alpha ? 'image/jpeg' : 'image/png';
+          restore.push([tex, tex.userData.mimeType]); tex.userData.mimeType = fmt;
+        }
+      }
+    });
+  }
+  try {
+    return await new GLTFExporter().parseAsync(root, {
+      binary: true, animations, maxTextureSize: s && s.texSize ? s.texSize : Infinity,
+    });
+  } finally { for (const [tex, mt] of restore) tex.userData.mimeType = mt; }
+}
+
+async function runPipeline() {
+  if (!state.original) return;
+  await MeshoptSimplifier.ready;
+  const s = readSettings();
+  const t0 = performance.now();
+  const { geoms } = stageA(s);
+  const avail = geoms.reduce((n, g) => n + triCount(g), 0);
+  let target = Math.min(s.target, avail);
+  let { root, maxErr } = stageB(s, geoms, target);
+  let buf = await exportGLB(root, state.animations, s);
+
+  if (s.useSize && buf.byteLength > s.targetBytes) {
+    // Size ≈ geometry bytes + fixed overhead (textures, JSON, animation). Binary-search the face count.
+    const overhead = buf.byteLength - geometryBytes(root);
+    if (overhead >= s.targetBytes) {
+      log(`Textures/animation alone take ${fmtBytes(overhead)}; lower the max texture size or use JPEG to reach ${fmtBytes(s.targetBytes)}.`, 'warn');
+    }
+    let lo = 4, hi = statsOf(root).faces, best = null;
+    for (let i = 0; i < 18 && hi - lo > Math.max(8, hi * 0.005); i++) {
+      const mid = Math.floor((lo + hi) / 2);
+      const r = stageB(s, geoms, mid);
+      if (geometryBytes(r.root) + overhead <= s.targetBytes) { lo = mid; best = r; } else hi = mid;
+    }
+    if (best) {
+      ({ root, maxErr } = best);
+      buf = await exportGLB(root, state.animations, s);
+      // overhead estimate can drift slightly; tighten once if still over
+      for (let k = 0; k < 3 && buf.byteLength > s.targetBytes; k++) {
+        const f = Math.floor(statsOf(root).faces * (s.targetBytes / buf.byteLength) * 0.97);
+        ({ root, maxErr } = stageB(s, geoms, Math.max(4, f)));
+        buf = await exportGLB(root, state.animations, s);
+      }
+    } else {
+      ({ root, maxErr } = stageB(s, geoms, 4));
+      buf = await exportGLB(root, state.animations, s);
+    }
+  }
+
+  if (state.result) scene.remove(state.result);
+  state.result = root; state.lastExport = buf;
+  scene.add(root);
+  const st = statsOf(root);
+  $('sRF').textContent = fmtInt(st.faces); $('sRV').textContent = fmtInt(st.verts);
+  $('sRM').textContent = st.meshes; $('sRS').textContent = fmtBytes(buf.byteLength);
+  setView('result'); applyWire(); playAnim(root);
+  const dt = ((performance.now() - t0) / 1000).toFixed(1);
+  log(`Result: ${fmtInt(st.faces)} faces, ${fmtBytes(buf.byteLength)} (${dt}s)`, 'ok');
+  if (!s.useSize && st.faces > s.target * 1.02 && s.target < avail)
+    log(`Face target not fully reached (shape error limit ${(s.maxErr * 100).toFixed(1)}%). Raise "Max shape error" or unlock borders to go lower.`, 'warn');
+  if (s.useSize && buf.byteLength > s.targetBytes)
+    log(`Could not reach ${fmtBytes(s.targetBytes)} with geometry alone; reduce texture size/format or raise "Max shape error".`, 'warn');
+  if (maxErr > 0) log(`Max decimation deviation: ${(maxErr * 100).toFixed(2)}% of model size`);
+}
+
+$('applyBtn').onclick = () => busy('Optimizing…', runPipeline);
+$('resetBtn').onclick = () => {
+  if (state.result) scene.remove(state.result);
+  state.result = null; state.lastExport = null; state.subdivCache.clear();
+  for (const id of ['sRF', 'sRV', 'sRM', 'sRS']) $(id).textContent = '–';
+  $('targetFaces').value = origFaces(); $('ratio').value = 100; $('ratioVal').textContent = '100%';
+  setView('original'); playAnim(state.original); log('Reset to original.');
+};
+$('downloadBtn').onclick = () => busy('Exporting…', async () => {
+  if (!state.lastExport) await runPipeline();
+  const blob = new Blob([state.lastExport], { type: 'model/gltf-binary' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = state.name + '_optimized.glb';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  log(`Downloaded ${a.download} (${fmtBytes(blob.size)})`, 'ok');
+});
+
+window.__glbopt = { THREE, state, runPipeline, loadBuffer, exportGLB }; // handy for debugging in the console
+log('Ready. Open a .glb, drop one on the viewer, or load the sample.');
+</script>
+</body>
+</html>
