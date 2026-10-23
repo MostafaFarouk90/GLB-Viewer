@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mystical Character Generator</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
+    --text: #e6e8ec; --muted: #8b93a3; --accent: #9b6bff; --accent2: #7a48e8;
+    --ok: #3fbf7f; --warn: #e0a83a; --err: #e05a5a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { display: grid; grid-template-columns: 330px 1fr; height: 100vh; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 12px 14px 24px; }
+  h1 { font-size: 15px; margin: 2px 0 4px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+  a { color: var(--accent); }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row label { flex: 1; color: var(--text); }
+  .row .val { min-width: 48px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: 11.5px; margin: 2px 0 6px; }
+  input[type=text], input[type=number], select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 7px; width: 140px; font: inherit; }
+  input[type=range] { width: 120px; accent-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); }
+  input[type=color] { width: 100%; height: 26px; padding: 0 2px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 11px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent); }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .colors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 8px; }
+  .colors label { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; color: var(--muted); }
+  table.stats { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.stats td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+  table.stats td:first-child { text-align: left; color: var(--muted); }
+  #log { margin-top: 10px; font: 11.5px/1.45 ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+    max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
+  #log .warn { color: var(--warn); } #log .err { color: var(--err); } #log .ok { color: var(--ok); }
+  main { position: relative; overflow: hidden; }
+  #viewport { position: absolute; inset: 0; }
+  #toolbar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 10px; align-items: center;
+    flex-wrap: wrap; pointer-events: none; }
+  #toolbar > * { pointer-events: auto; }
+  #toolbar .chk { background: rgba(23,26,33,.85); border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; }
+  #charName { margin-left: auto; font-size: 16px; font-weight: 600; letter-spacing: .02em; background: rgba(23,26,33,.85);
+    border-radius: 7px; padding: 5px 11px; }
+  #busy { position: absolute; inset: 0; background: rgba(10,12,16,.55); display: none; align-items: center;
+    justify-content: center; font-size: 15px; z-index: 5; }
+  #busy.show { display: flex; }
+  .spinner { width: 22px; height: 22px; border: 3px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite; margin-right: 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 760px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; }
+    main { grid-row: 1; height: 55vh; } aside { grid-row: 2; border-right: 0; }
+  }
+</style>
+<!-- Libraries load from the jsDelivr CDN (needs internet). The "offline" build has them inlined instead. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <h1>Mystical Character Generator</h1>
+    <div class="hint">Procedural fantasy characters, exported as GLB. Open the result in the <a href="index.html" data-offline-href="glb-viewer-offline.html">GLB viewer &amp; optimizer</a> to smooth it or change its face count.</div>
+
+    <h2>Character</h2>
+    <div class="row"><label for="archetype">Archetype</label>
+      <select id="archetype"></select></div>
+    <div class="row"><label for="seed">Seed</label><input id="seed" type="text" spellcheck="false"></div>
+    <div class="btns" style="margin-top:4px">
+      <button id="randomBtn" class="primary">Randomize</button>
+      <button id="colorsBtn">New colors</button>
+    </div>
+    <div class="hint">The same archetype and seed always give the same character.</div>
+
+    <h2>Body</h2>
+    <div class="row"><label for="height">Height</label><input id="height" type="range" min="0.3" max="3.5" step="0.05"><span class="val" id="heightVal"></span></div>
+    <div class="row"><label for="bulk">Build</label><input id="bulk" type="range" min="0.6" max="1.8" step="0.01"><span class="val" id="bulkVal"></span></div>
+    <div class="row"><label for="head">Head size</label><input id="head" type="range" min="0.7" max="1.8" step="0.01"><span class="val" id="headVal"></span></div>
+    <div class="row"><label for="limbs">Limb length</label><input id="limbs" type="range" min="0.75" max="1.3" step="0.01"><span class="val" id="limbsVal"></span></div>
+    <div class="row"><label for="pose">Pose</label>
+      <select id="pose"><option value="a">A-pose (idle)</option><option value="t">T-pose (for rigging)</option><option value="cast">Casting</option></select></div>
+
+    <h2>Parts</h2>
+    <div class="row"><label for="outfit">Outfit</label><select id="outfit"></select></div>
+    <div class="row"><label for="hair">Hair</label><select id="hair"></select></div>
+    <div class="row"><label for="ears">Ears</label><select id="ears"></select></div>
+    <div class="row"><label for="beard">Beard</label><select id="beard"></select></div>
+    <div class="row"><label for="horns">Horns</label><select id="horns"></select></div>
+    <div class="row"><label for="headwear">Headwear</label><select id="headwear"></select></div>
+    <div class="row"><label for="wings">Wings</label><select id="wings"></select></div>
+    <div class="row"><label for="item">Held item</label><select id="item"></select></div>
+    <div class="row"><label for="tail">Tail</label><select id="tail"></select></div>
+    <div class="row"><label for="aura">Aura</label><select id="aura"></select></div>
+    <div class="row"><label for="glowEyes">Glowing eyes</label><input id="glowEyes" type="checkbox"></div>
+
+    <h2>Colors</h2>
+    <div class="colors" id="colors"></div>
+
+    <h2>Output</h2>
+    <div class="row"><label for="style">Style</label>
+      <select id="style"><option value="smooth">Smooth</option><option value="lowpoly">Low-poly (faceted)</option></select></div>
+    <div class="row"><label for="detail">Detail</label>
+      <select id="detail"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+    <div class="row"><label for="combine">Combine parts per material</label><input id="combine" type="checkbox" checked></div>
+    <div class="hint">On: a few meshes (best for games and the optimizer). Off: every part is its own named mesh (easier to edit in Blender).</div>
+    <div class="row"><label for="anim">Include idle animation</label><input id="anim" type="checkbox" checked></div>
+    <div class="hint">Spins the aura and bobs floating characters. The body itself is not rigged.</div>
+    <table class="stats">
+      <tbody>
+        <tr><td>Faces</td><td id="sF">–</td></tr>
+        <tr><td>Vertices</td><td id="sV">–</td></tr>
+        <tr><td>Parts</td><td id="sP">–</td></tr>
+        <tr><td>Height</td><td id="sH">–</td></tr>
+      </tbody>
+    </table>
+    <div class="btns">
+      <button id="downloadBtn" class="primary">Download GLB</button>
+    </div>
+    <div id="log"></div>
+  </aside>
+
+  <main id="main">
+    <div id="viewport"></div>
+    <div id="toolbar">
+      <label class="chk"><input id="rotate" type="checkbox" checked> Auto-rotate</label>
+      <label class="chk"><input id="bloom" type="checkbox" checked> Glow effect</label>
+      <label class="chk"><input id="wire" type="checkbox"> Wireframe</label>
+      <button id="fitBtn">Fit view</button>
+      <span id="charName"></span>
+    </div>
+    <div id="busy"><div class="spinner"></div><span id="busyText">Working…</span></div>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const $ = (id) => document.getElementById(id);
+const PI = Math.PI;
+
+// ---------- random ----------
+function hashSeed(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+  h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+function makeRng(str) {
+  let a = hashSeed(str);
+  const next = () => { // mulberry32
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const r = {
+    next,
+    range: (lo, hi) => lo + (hi - lo) * next(),
+    int: (lo, hi) => lo + Math.floor(next() * (hi - lo + 1)),
+    pick: (arr) => arr[Math.floor(next() * arr.length)],
+    chance: (p) => next() < p,
+    // {a: 3, b: 1} -> 'a' three times as often as 'b'
+    weighted: (w) => {
+      const keys = Object.keys(w); let sum = 0; for (const k of keys) sum += w[k];
+      let x = next() * sum; for (const k of keys) { x -= w[k]; if (x < 0) return k; }
+      return keys[keys.length - 1];
+    },
+  };
+  return r;
+}
+const randomSeed = () => {
+  const words = ['ember', 'frost', 'moon', 'rune', 'ash', 'star', 'thorn', 'mist', 'void', 'dawn', 'storm', 'shade', 'oak', 'opal', 'wyrm', 'glyph'];
+  const r = makeRng(String(Math.random()) + Date.now());
+  return r.pick(words) + '-' + r.pick(words) + '-' + r.int(10, 999);
+};
+
+// ---------- archetypes ----------
+const OPTIONS = {
+  outfit: { robe: 'Robe', tunic: 'Tunic', dress: 'Dress', armor: 'Armor', none: 'None' },
+  hair: { none: 'None', short: 'Short', long: 'Long' },
+  ears: { none: 'Hidden', round: 'Round', pointed: 'Pointed' },
+  beard: { none: 'None', short: 'Short', long: 'Long' },
+  horns: { none: 'None', ram: 'Curled (ram)', straight: 'Straight', antlers: 'Antlers' },
+  headwear: { none: 'None', wizardHat: 'Wizard hat', hood: 'Hood', crown: 'Crown', halo: 'Halo', circlet: 'Circlet' },
+  wings: { none: 'None', bat: 'Bat', feathered: 'Feathered', butterfly: 'Butterfly' },
+  item: { none: 'None', staff: 'Staff', sword: 'Sword', orb: 'Floating orb', bow: 'Bow' },
+  tail: { none: 'None', demon: 'Demon', furry: 'Furry' },
+  aura: { none: 'None', crystals: 'Orbiting crystals', orbs: 'Spirit orbs', circle: 'Magic circle' },
+};
+const SLOTS = Object.keys(OPTIONS);
+const COLOR_KEYS = { skin: 'Skin', cloth: 'Cloth', cloth2: 'Cloth 2', trim: 'Trim', glow: 'Glow', hair: 'Hair', horn: 'Horn', wing: 'Wings' };
+
+const hsl = (h, s, l) => '#' + new THREE.Color().setHSL(((h % 1) + 1) % 1, s, l, THREE.SRGBColorSpace).getHexString();
+const SKIN = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac', '#d6a77a', '#b07a4f'];
+const GOLD = '#d8a93a', SILVER = '#c9ced8';
+
+// Each archetype: proportion ranges, form (flesh/rock/ghost), float height (m), weights per part slot, palette.
+const ARCH = {
+  wizard: {
+    label: 'Wizard', form: 'flesh', float: 0, height: [1.7, 1.95], bulk: [0.85, 1.05], head: [1, 1.15], limbs: [0.95, 1.05],
+    pose: { a: 2, cast: 1 }, glowEyes: 0.2,
+    parts: { outfit: { robe: 1 }, hair: { long: 2, short: 1, none: 1 }, ears: { round: 4, pointed: 1 }, beard: { long: 5, short: 2, none: 1 },
+      horns: { none: 1 }, headwear: { wizardHat: 6, hood: 3, circlet: 1 }, wings: { none: 1 }, item: { staff: 6, orb: 2 },
+      tail: { none: 1 }, aura: { none: 2, crystals: 2, orbs: 2, circle: 2 } },
+    palette: (r) => { const h = r.pick([0.62, 0.72, 0.8, 0.0, 0.36, 0.08]);
+      return { skin: r.pick(SKIN), cloth: hsl(h, r.range(.4, .6), r.range(.25, .35)), cloth2: hsl(h + .04, .4, .17), trim: r.pick([GOLD, SILVER]),
+        glow: hsl(r.next(), .9, .6), hair: hsl(0, 0, r.range(.7, .92)), horn: '#d9cbb0', wing: '#555555' }; },
+    names: { a: ['Al', 'Mor', 'Zan', 'Eld', 'Thal', 'Gal', 'Ser', 'Vor', 'Bal', 'Ix'], b: ['a', 'e', 'i', 'o', 'ar', 'en', 'is', 'ul'],
+      c: ['dor', 'ion', 'gar', 'wyn', 'thas', 'mir', 'rix', 'zar'], t: ['the Grey', 'the Wise', 'of the Mist', 'Starweaver', 'Runekeeper'] },
+  },
+  elf: {
+    label: 'Elf ranger', form: 'flesh', float: 0, height: [1.75, 2.0], bulk: [0.75, 0.9], head: [0.95, 1.05], limbs: [1.05, 1.15],
+    pose: { a: 3, cast: 1 }, glowEyes: 0.15,
+    parts: { outfit: { tunic: 3, robe: 1 }, hair: { long: 4, short: 1 }, ears: { pointed: 1 }, beard: { none: 1 }, horns: { none: 1 },
+      headwear: { none: 2, circlet: 3, hood: 2 }, wings: { none: 5, feathered: 1 }, item: { bow: 3, sword: 3, staff: 1 },
+      tail: { none: 1 }, aura: { none: 3, orbs: 1 } },
+    palette: (r) => { const h = r.pick([0.3, 0.25, 0.08, 0.55]);
+      return { skin: r.pick(['#ffe3c8', '#f1c27d', '#e8c3a0', '#c68642']), cloth: hsl(h, r.range(.35, .55), r.range(.25, .35)), cloth2: hsl(.08, .35, .22),
+        trim: SILVER, glow: hsl(r.pick([.33, .5, .15]), .85, .6), hair: r.pick(['#e8d38a', '#d9d9e0', '#2b2520', '#8a3b1d', '#f2efe6']),
+        horn: '#d9cbb0', wing: '#e8eef5' }; },
+    names: { a: ['Ae', 'Ela', 'Fae', 'Lir', 'Tha', 'Syl', 'Cael', 'Ith'], b: ['la', 'ri', 'ne', 'ra', 'li', 'tha'],
+      c: ['nor', 'wen', 'driel', 'las', 'rion', 'eth'], t: ['of the Glade', 'Swiftbow', 'Moonshadow', 'the Wanderer'] },
+  },
+  golem: {
+    label: 'Stone golem', form: 'rock', float: 0, height: [2.0, 2.6], bulk: [1.4, 1.7], head: [0.75, 0.9], limbs: [0.9, 1.0],
+    pose: { a: 1 }, glowEyes: 1,
+    parts: { outfit: { none: 1 }, hair: { none: 1 }, ears: { none: 1 }, beard: { none: 1 }, horns: { none: 3, straight: 1 },
+      headwear: { none: 4, crown: 1 }, wings: { none: 1 }, item: { none: 4, sword: 1 }, tail: { none: 1 },
+      aura: { none: 1, crystals: 2, circle: 1 } },
+    palette: (r) => { const moss = r.chance(.4);
+      return { skin: moss ? hsl(r.range(.2, .3), .2, .33) : hsl(r.range(.05, .12), r.range(.06, .18), r.range(.35, .5)), cloth: '#5a5048', cloth2: '#3c3631',
+        trim: GOLD, glow: r.pick(['#43e8ff', '#ff7a1a', '#8dff5a', '#c36bff']), hair: hsl(.28, .5, .3), horn: '#4a4440', wing: '#555555' }; },
+    names: { a: ['Gor', 'Kra', 'Dur', 'Bol', 'Thro', 'Gra'], b: ['u', 'o', 'a', 'om'], c: ['mak', 'gul', 'dun', 'rok', 'thak'],
+      t: ['the Unbroken', 'Mountainheart', 'of the Deep Halls', 'Stoneward'] },
+  },
+  demon: {
+    label: 'Demon', form: 'flesh', float: 0, height: [1.9, 2.3], bulk: [1.1, 1.35], head: [0.95, 1.05], limbs: [1, 1.1],
+    pose: { a: 2, cast: 1 }, glowEyes: 0.85,
+    parts: { outfit: { none: 2, tunic: 2, armor: 2 }, hair: { none: 2, long: 1, short: 1 }, ears: { pointed: 2, round: 1 }, beard: { none: 3, short: 1 },
+      horns: { ram: 3, straight: 3 }, headwear: { none: 4, crown: 1 }, wings: { bat: 4, none: 1 }, item: { sword: 3, none: 1, orb: 1 },
+      tail: { demon: 5, none: 1 }, aura: { none: 2, circle: 1, orbs: 1 } },
+    palette: (r) => { const k = r.int(0, 2);
+      return { skin: [hsl(r.range(0, .02), .6, .35), hsl(.78, .35, .3), hsl(0, 0, .18)][k], cloth: hsl(0, .25, .14), cloth2: hsl(.05, .3, .1),
+        trim: r.pick([GOLD, '#8a8f99']), glow: r.pick(['#ff6a00', '#ffd23f', '#5dff6b', '#ff2d55']), hair: '#141214',
+        horn: r.pick(['#e8dcc2', '#2a2526', '#5a3a2a']), wing: hsl(0, .35, .16) }; },
+    names: { a: ['Az', 'Bel', 'Mal', 'Zar', 'Xal', 'Mor', 'Bael'], b: ['ga', 'ze', 'ka', 'ro', 'ith'], c: ['zul', 'goth', 'roth', 'mon', 'aax', 'ith'],
+      t: ['the Burning', 'of the Abyss', 'Ashlord', 'the Unbound'] },
+  },
+  fairy: {
+    label: 'Fairy', form: 'flesh', float: 0.35, height: [1.0, 1.3], bulk: [0.7, 0.8], head: [1.2, 1.45], limbs: [0.95, 1.05],
+    pose: { a: 2, cast: 2 }, glowEyes: 0.3,
+    parts: { outfit: { dress: 4, tunic: 1 }, hair: { long: 3, short: 2 }, ears: { pointed: 3, round: 1 }, beard: { none: 1 }, horns: { none: 1 },
+      headwear: { none: 2, circlet: 2, crown: 1 }, wings: { butterfly: 6, feathered: 1 }, item: { none: 2, staff: 2, orb: 1 },
+      tail: { none: 1 }, aura: { orbs: 3, none: 1, crystals: 1 } },
+    palette: (r) => { const h = r.next();
+      return { skin: r.pick(['#ffe3c8', '#ffdbac', '#e0ac69', '#cfe8ff', '#d8f5d0']), cloth: hsl(h, r.range(.5, .7), r.range(.55, .68)), cloth2: hsl(h + .1, .5, .45),
+        trim: r.pick([GOLD, SILVER]), glow: hsl(h + .5, .9, .65), hair: hsl(r.next(), r.range(.4, .8), r.range(.45, .7)), horn: '#d9cbb0',
+        wing: hsl(h + r.range(.3, .6), .7, .75) }; },
+    names: { a: ['Pip', 'Lu', 'Fe', 'Twi', 'Bel', 'Wil', 'Nim'], b: ['li', 'na', 'la', 'ri', 'mi'], c: ['wyn', 'bell', 'dew', 'sy', 'ette'],
+      t: ['of the Dewdrops', 'Moonwing', 'the Bright', 'Thistledown'] },
+  },
+  spirit: {
+    label: 'Forest spirit', form: 'flesh', float: 0, height: [1.8, 2.2], bulk: [0.85, 1.0], head: [0.95, 1.1], limbs: [1, 1.1],
+    pose: { a: 2, cast: 1 }, glowEyes: 0.9,
+    parts: { outfit: { robe: 2, dress: 1, none: 1 }, hair: { long: 2, none: 2 }, ears: { pointed: 2, round: 1 }, beard: { none: 3, long: 1 },
+      horns: { antlers: 6, none: 1 }, headwear: { none: 3, crown: 1 }, wings: { none: 1 }, item: { staff: 3, none: 1 },
+      tail: { none: 1 }, aura: { orbs: 3, circle: 1 } },
+    palette: (r) => { const bark = r.chance(.6);
+      return { skin: bark ? hsl(r.range(.06, .09), r.range(.3, .4), r.range(.25, .33)) : hsl(r.range(.22, .3), .35, .32), cloth: hsl(r.range(.25, .33), .45, .25),
+        cloth2: hsl(.08, .35, .2), trim: hsl(.12, .5, .45), glow: r.pick(['#c6ff4d', '#5dffd6', '#ffe066']), hair: hsl(r.range(.22, .32), .55, .35),
+        horn: hsl(.07, .3, .28), wing: '#555555' }; },
+    names: { a: ['Syl', 'Ver', 'Mos', 'Fen', 'Ald', 'Bram'], b: ['wa', 'de', 'ra', 'li'], c: ['nus', 'wood', 'thorn', 'leaf', 'ra'],
+      t: ['the Old Root', 'Grovewarden', 'of the Green', 'Mossheart'] },
+  },
+  specter: {
+    label: 'Specter', form: 'ghost', float: 0.3, height: [1.8, 2.1], bulk: [0.9, 1.1], head: [1, 1.1], limbs: [1, 1.1],
+    pose: { a: 1, cast: 2 }, glowEyes: 1,
+    parts: { outfit: { robe: 1 }, hair: { none: 1 }, ears: { none: 1 }, beard: { none: 1 }, horns: { none: 3, straight: 1 },
+      headwear: { hood: 6, crown: 2, halo: 1 }, wings: { none: 3, feathered: 1 }, item: { orb: 2, staff: 2, none: 1 },
+      tail: { none: 1 }, aura: { orbs: 2, crystals: 1, none: 1 } },
+    palette: (r) => { const g = r.pick(['#5dffd6', '#6bb8ff', '#b86bff', '#9dff6b']);
+      return { skin: hsl(r.range(.45, .6), .35, .75), cloth: hsl(r.range(.6, .75), .3, .12), cloth2: hsl(.65, .2, .08), trim: SILVER, glow: g,
+        hair: '#d0d8e0', horn: '#2a2a33', wing: hsl(.6, .2, .3) }; },
+    names: { a: ['Mor', 'Vael', 'Nyx', 'Sha', 'Wra', 'Ul'], b: ['ae', 'o', 'ith', 'e'], c: ['th', 'ra', 'vex', 'mire', 'gast'],
+      t: ['the Hollow', 'of the Last Bell', 'Gloomveil', 'the Forgotten'] },
+  },
+  celestial: {
+    label: 'Celestial', form: 'flesh', float: 0.15, height: [1.85, 2.1], bulk: [0.9, 1.05], head: [0.95, 1.05], limbs: [1, 1.1],
+    pose: { a: 2, cast: 1 }, glowEyes: 0.5,
+    parts: { outfit: { robe: 2, dress: 1, armor: 2 }, hair: { long: 4, short: 1 }, ears: { round: 3, pointed: 1 }, beard: { none: 4, short: 1 },
+      horns: { none: 1 }, headwear: { halo: 6, circlet: 1 }, wings: { feathered: 1 }, item: { sword: 2, staff: 2 },
+      tail: { none: 1 }, aura: { crystals: 2, orbs: 2, none: 1 } },
+    palette: (r) => ({ skin: r.pick(['#ffe3c8', '#f1c27d', '#e0ac69', '#8d5524']), cloth: hsl(.12, .2, .92), cloth2: hsl(r.pick([.58, .12, .0]), .4, .7),
+      trim: GOLD, glow: r.pick(['#ffe9a8', '#bfe6ff', '#ffffff']), hair: r.pick(['#f2e3a6', '#f5f5f0', '#c79a4a', '#1f1a17']),
+      horn: '#d9cbb0', wing: r.pick(['#f8f8ff', '#fff4d6', '#e6ecff']) }),
+    names: { a: ['Ser', 'Ur', 'Gab', 'Zad', 'Cass', 'Ari'], b: ['a', 'ie', 'ae', 'i'], c: ['phiel', 'riel', 'kiel', 'on', 'ael'],
+      t: ['of the Dawn', 'the Radiant', 'Lightbringer', 'of the Seventh Sky'] },
+  },
+};
+
+function makeName(arch, r) {
+  const n = ARCH[arch].names;
+  let s = r.pick(n.a) + r.pick(n.b) + r.pick(n.c);
+  s = s[0].toUpperCase() + s.slice(1).toLowerCase();
+  return r.chance(0.6) ? s + ' ' + r.pick(n.t) : s;
+}
+
+// Everything that defines a character. The geometry is a pure function of these traits.
+function rollTraits(archetype, seed) {
+  const A = ARCH[archetype], r = makeRng(archetype + '|' + seed);
+  const t = { archetype, seed, name: makeName(archetype, r) };
+  t.height = +r.range(...A.height).toFixed(2);
+  t.bulk = +r.range(...A.bulk).toFixed(2);
+  t.head = +r.range(...A.head).toFixed(2);
+  t.limbs = +r.range(...A.limbs).toFixed(2);
+  t.pose = r.weighted(A.pose);
+  for (const s of SLOTS) t[s] = r.weighted(A.parts[s]);
+  t.glowEyes = r.chance(A.glowEyes);
+  t.colors = A.palette(r);
+  return t;
+}
+
+// ---------- geometry helpers ----------
+// Tube along a smooth curve whose radius goes from r0 to r1 (r1 = 0 makes a point), with a cap at the base.
+function taperTube(points, r0, r1, tubular, radial) {
+  const curve = new THREE.CatmullRomCurve3(points);
+  const fr = curve.computeFrenetFrames(tubular, false);
+  const pos = [], uv = [], idx = [];
+  const P = new THREE.Vector3();
+  for (let i = 0; i <= tubular; i++) {
+    const u = i / tubular; curve.getPointAt(u, P);
+    const N = fr.normals[i], B = fr.binormals[i], r = r0 + (r1 - r0) * u;
+    for (let j = 0; j <= radial; j++) {
+      const v = (j / radial) * PI * 2, s = Math.sin(v), c = -Math.cos(v); // same convention as THREE.TubeGeometry
+      pos.push(P.x + r * (c * N.x + s * B.x), P.y + r * (c * N.y + s * B.y), P.z + r * (c * N.z + s * B.z));
+      uv.push(j / radial, u);
+    }
+  }
+  for (let i = 0; i < tubular; i++) for (let j = 0; j < radial; j++) {
+    const a = i * (radial + 1) + j, b = (i + 1) * (radial + 1) + j;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  // base cap, wound to face backwards along the curve
+  const c0 = curve.getPointAt(0), center = pos.length / 3;
+  pos.push(c0.x, c0.y, c0.z); uv.push(0.5, 0);
+  for (let j = 0; j < radial; j++) idx.push(center, j + 1, j);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const lathe = (pts, seg, phiStart = 0, phiLength = PI * 2) =>
+  new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(Math.max(r, 0), y)), seg, phiStart, phiLength);
+function hash3(x, y, z, s) {
+  const h = Math.sin(Math.round(x * 1e4) * 0.1271 + Math.round(y * 1e4) * 0.3117 + Math.round(z * 1e4) * 0.0747 + s * 13.37) * 43758.5453;
+  return h - Math.floor(h);
+}
+// Lumpy faceted boulder. Displacement is a function of position, so the shared corners stay closed.
+function rock(radius, detail, salt) {
+  const g = new THREE.IcosahedronGeometry(radius, detail);
+  const p = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    v.multiplyScalar(0.82 + 0.36 * hash3(v.x / radius, v.y / radius, v.z / radius, salt));
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+// ---------- materials ----------
+function makeMaterials(t) {
+  const c = t.colors, ghost = ARCH[t.archetype].form === 'ghost', rocky = ARCH[t.archetype].form === 'rock';
+  const std = (name, o) => Object.assign(new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0 }), { name }, o);
+  const col = (h) => new THREE.Color(h);
+  const glassy = t.wings === 'butterfly' || (t.wings === 'feathered' && t.archetype === 'specter');
+  const m = {
+    skin: std('Skin', { color: col(c.skin), roughness: rocky ? 0.95 : 0.6 }),
+    cloth: std('Cloth', { color: col(c.cloth), roughness: 0.85, side: THREE.DoubleSide }),
+    cloth2: std('Cloth2', { color: col(c.cloth2), roughness: 0.8, side: THREE.DoubleSide }),
+    trim: std('Trim', { color: col(c.trim), metalness: 0.85, roughness: 0.3 }),
+    glow: std('Glow', { color: col(c.glow), emissive: col(c.glow), emissiveIntensity: 2.5, roughness: 0.4 }),
+    hair: std('Hair', { color: col(c.hair), roughness: 0.75, side: THREE.DoubleSide }),
+    horn: std('Horn', { color: col(c.horn), roughness: 0.45 }),
+    wing: std('Wings', { color: col(c.wing), roughness: 0.6, side: THREE.DoubleSide }),
+    eye: std('Eyes', { color: col('#111318'), roughness: 0.15 }),
+    wood: std('Wood', { color: col(t.archetype === 'spirit' ? c.horn : '#6b4a2b'), roughness: 0.8 }),
+    steel: std('Steel', { color: col('#cfd3da'), metalness: 1, roughness: 0.25 }),
+    void: std('Shadow', { color: col('#05060a'), roughness: 1 }),
+  };
+  if (glassy) Object.assign(m.wing, { transparent: true, opacity: 0.72, emissive: col(c.wing), emissiveIntensity: 0.35 });
+  if (ghost) {
+    Object.assign(m.skin, { transparent: true, opacity: 0.6, emissive: col(c.skin), emissiveIntensity: 0.35 });
+    Object.assign(m.cloth, { transparent: true, opacity: 0.88 });
+  }
+  return m;
+}
+
+// ---------- character builder ----------
+// Built in "design units" (about 1.8 tall, feet at y=0, facing +Z), then scaled so the top of the head is at t.height metres.
+function buildCharacter(t) {
+  const A = ARCH[t.archetype], r = makeRng(t.archetype + '|' + t.seed + '|shape');
+  const D = { low: 0.5, medium: 1, high: 1.8 }[t.detail];
+  const seg = (n) => Math.max(3, Math.round(n * D));
+  const M = makeMaterials(t);
+  const form = A.form, rocky = form === 'rock', ghost = form === 'ghost';
+
+  const root = new THREE.Group(); root.name = 'Character';
+  const body = new THREE.Group(); body.name = 'Body';
+  const aura = new THREE.Group(); aura.name = 'Aura';
+  root.add(body, aura);
+  let partNo = 0;
+  const add = (parent, name, geo, mat, p = [0, 0, 0], rot = [0, 0, 0], s = [1, 1, 1]) => {
+    const m = new THREE.Mesh(geo, mat); m.name = name || 'Part' + (++partNo);
+    m.position.set(...p); m.rotation.set(...rot); m.scale.set(...s);
+    parent.add(m); return m;
+  };
+  const group = (parent, name, p = [0, 0, 0], rot = [0, 0, 0]) => {
+    const g = new THREE.Group(); g.name = name; g.position.set(...p); g.rotation.set(...rot); parent.add(g); return g;
+  };
+  const sphere = (rad, w = 24, h = 16) => new THREE.SphereGeometry(rad, seg(w), seg(h));
+  const capsule = (rad, len) => new THREE.CapsuleGeometry(rad, Math.max(0.001, len), seg(6), seg(14));
+  const sides = [[1, 'L'], [-1, 'R']];
+
+  // proportions
+  const b = t.bulk, hr = 0.115 * t.head, lim = t.limbs;
+  const legL = 0.82 * lim, footH = 0.05, hipY = legL + footH;
+  const torsoL = 0.5 + 0.05 * (b - 1), shY = hipY + torsoL, waistY = hipY + 0.2;
+  const headY = rocky ? shY + 0.1 * b : shY + 0.05 + hr * 0.9, headTop = headY + hr * (rocky ? 1.1 : 1);
+  const sw = (rocky ? 0.25 : 0.19) * b;
+  const robed = !rocky && (t.outfit === 'robe' || ghost);
+  const sleeves = !rocky && ['robe', 'tunic', 'armor'].includes(t.outfit);
+  const armMat = sleeves ? M.cloth : M.skin;
+  const k = t.height / headTop;
+  const floatUnits = A.float / k;
+
+  // ---- torso and legs ----
+  if (rocky) {
+    const ro = (name, rad, p, s = [1, 1, 1]) => add(body, name, rock(rad, D >= 1 ? 1 : 0, r.next() * 100), M.skin, p, [r.next(), r.next(), r.next()], s);
+    ro('Chest', 0.2 * b, [0, shY - 0.14, 0], [1.15, 0.9, 0.8]);
+    ro('Belly', 0.15 * b, [0, hipY + 0.16, 0.01], [1, 0.9, 0.85]);
+    ro('Pelvis', 0.13 * b, [0, hipY, 0], [1.2, 0.8, 0.9]);
+    add(body, 'Core', new THREE.OctahedronGeometry(0.05 * b, 0), M.glow, [0, shY - 0.12, 0.16 * b * 0.8], [0, 0, 0], [1, 1.4, 0.5]);
+    for (const [s, n] of sides) {
+      ro('Thigh_' + n, 0.12 * b, [s * 0.11 * b, hipY - legL * 0.28, 0]);
+      ro('Knee_' + n, 0.1 * b, [s * 0.115 * b, hipY - legL * 0.5, 0.02]);
+      ro('Shin_' + n, 0.11 * b, [s * 0.12 * b, hipY - legL * 0.72, 0]);
+      ro('Foot_' + n, 0.11 * b, [s * 0.12 * b, 0.05, 0.04], [1, 0.55, 1.3]);
+    }
+    if (r.chance(0.6)) for (let i = 0; i < 4; i++) {
+      const s = r.chance(0.5) ? 1 : -1;
+      add(body, 'Moss' + i, sphere(0.06 * b, 10, 6), M.hair, [s * r.range(0, sw), shY - r.range(0, 0.1), r.range(-0.05, 0.05)], [0, 0, 0], [1.4, 0.35, 1.2]);
+    }
+  } else if (robed) {
+    const fl = r.range(1, 1.25);
+    const hem = ghost ? [[0, 0.05], [0.04, 0.08], [0.12 * b, 0.25], [0.2 * b, hipY * 0.7]]
+      : [[0, 0], [0.3 * b * fl, 0], [0.31 * b * fl, 0.03], [0.24 * b, hipY * 0.6]];
+    const robe = lathe([...hem, [0.17 * b, hipY], [0.14 * b, waistY], [0.165 * b, shY - 0.15], [0.18 * b, shY - 0.06],
+      [0.12 * b, shY], [0.05, shY + 0.04], [0, shY + 0.045]], seg(36));
+    if (ghost) { // swirl the lower half into a wisp
+      const p = robe.attributes.position, v = new THREE.Vector3();
+      for (let i = 0; i < p.count; i++) {
+        v.fromBufferAttribute(p, i); const f = Math.max(0, 1 - v.y / hipY);
+        const a = f * 1.6, c = Math.cos(a), s = Math.sin(a);
+        p.setXYZ(i, v.x * c - v.z * s + Math.sin(v.y * 9) * 0.04 * f, v.y, v.x * s + v.z * c - f * 0.15);
+      }
+      robe.computeVertexNormals();
+    }
+    add(body, 'Robe', robe, M.cloth, [0, 0, 0], [0, 0, 0], [1, 1, 0.8]);
+    if (!ghost) {
+      add(body, 'Hem', new THREE.TorusGeometry(0.305 * b * fl, 0.018, seg(8), seg(36)), M.trim, [0, 0.03, 0], [PI / 2, 0, 0], [1, 0.8, 1]);
+      for (const [s, n] of sides) add(body, 'Foot_' + n, sphere(0.05, 12, 8), M.cloth2, [s * 0.08, 0.025, 0.22 * b], [0, 0, 0], [1, 0.6, 1.6]);
+    }
+    add(body, 'Belt', new THREE.TorusGeometry(0.142 * b, 0.018, seg(8), seg(32)), M.trim, [0, waistY, 0], [PI / 2, 0, 0], [1, 0.8, 1]);
+  } else {
+    const legMat = ['tunic', 'armor'].includes(t.outfit) ? M.cloth2 : M.skin;
+    const torso = lathe([[0, -0.06], [0.13 * b, -0.04], [0.15 * b, 0.05], [0.135 * b, 0.2], [0.125 * b, 0.27], [0.155 * b, 0.4],
+      [0.17 * b, torsoL - 0.07], [0.12 * b, torsoL - 0.01], [0.05, torsoL + 0.03], [0, torsoL + 0.035]], seg(28));
+    add(body, 'Torso', torso, t.outfit === 'none' ? M.skin : M.cloth, [0, hipY - 0.04, 0], [0, 0, 0], [1, 1, 0.72]);
+    for (const [s, n] of sides) {
+      const leg = group(body, 'Leg_' + n, [s * 0.085 * b, hipY, 0], [0, 0, s * 0.04]);
+      add(leg, 'Thigh_' + n, capsule(0.062 * b, legL * 0.5 - 0.1 * b), legMat, [0, -legL * 0.25, 0]);
+      add(leg, 'Shin_' + n, capsule(0.05 * b, legL * 0.5 - 0.08 * b), legMat, [0, -legL * 0.72, 0]);
+      const hoof = t.archetype === 'demon' && t.outfit === 'none';
+      add(leg, 'Foot_' + n, sphere(0.058, 14, 10), hoof ? M.horn : M.cloth2, [0, -legL - 0.02, 0.04], [0, 0, 0], [1, 0.55, hoof ? 1.2 : 1.9]);
+    }
+    if (t.outfit === 'tunic' || t.outfit === 'dress') {
+      const len = t.outfit === 'dress' ? 0.55 : 0.33, flare = t.outfit === 'dress' ? 1.6 : 1.15;
+      add(body, 'Skirt', lathe([[0.17 * b * flare, hipY - legL * len], [0.17 * b * (1 + (flare - 1) * 0.4), hipY - legL * len * 0.5],
+        [0.165 * b, hipY], [0.14 * b, waistY], [0.13 * b, waistY + 0.03]], seg(32)), M.cloth, [0, 0, 0], [0, 0, 0], [1, 1, 0.8]);
+    }
+    if (t.outfit !== 'none' || r.chance(0.5)) add(body, 'Belt', new THREE.TorusGeometry(0.142 * b, 0.018, seg(8), seg(32)), M.trim, [0, waistY, 0], [PI / 2, 0, 0], [1, 0.78, 1]);
+    if (t.outfit === 'armor') {
+      add(body, 'Breastplate', sphere(0.16 * b, 24, 16), M.trim, [0, hipY + 0.36, 0.035], [0, 0, 0], [1, 1.15, 0.6]);
+      add(body, 'Gem', new THREE.OctahedronGeometry(0.03, 0), M.glow, [0, hipY + 0.4, 0.13 * b], [0, 0, 0], [1, 1.3, 0.6]);
+    }
+  }
+
+  // ---- neck ----
+  if (!rocky) add(body, 'Neck', new THREE.CylinderGeometry(0.042 * b, 0.05 * b, headY - shY, seg(14)), M.skin, [0, (shY + headY) / 2 - hr * 0.3, -0.01]);
+
+  // ---- arms ----
+  const POSES = { a: [[0.32, 0, 0.25], [0.32, 0, 0.25]], t: [[PI / 2 - 0.05, 0, 0.05], [PI / 2 - 0.05, 0, 0.05]],
+    cast: [[0.3, -0.6, 0.55], [0.45, -1.9, 0.4]] }; // [abduction, forward swing, elbow bend] for [left, right]
+  let itemHand = null, itemArmUp = false;
+  for (const [s, n] of sides) {
+    const [abd, fwd, bend] = POSES[t.pose][s === 1 ? 0 : 1];
+    const ua = 0.29 * lim, fa = 0.26 * lim;
+    const sh = group(body, 'Arm_' + n, [s * sw, shY - 0.05, 0], [fwd, 0, s * abd]);
+    const elbow = group(sh, 'Elbow_' + n, [0, -ua, 0], [-bend, 0, 0]);
+    const hand = group(elbow, 'Hand_' + n, [0, -fa, 0]);
+    if (rocky) {
+      const ro = (parent, nm, rad, p) => add(parent, nm, rock(rad, D >= 1 ? 1 : 0, r.next() * 100), M.skin, p, [r.next(), r.next(), r.next()]);
+      ro(sh, 'Shoulder_' + n, 0.11 * b, [0, 0, 0]);
+      ro(sh, 'UpperArm_' + n, 0.095 * b, [0, -ua * 0.5, 0]);
+      ro(elbow, 'ElbowRock_' + n, 0.085 * b, [0, 0, 0]);
+      ro(elbow, 'Forearm_' + n, 0.105 * b, [0, -fa * 0.5, 0]);
+      ro(hand, 'Fist_' + n, 0.1 * b, [0, -0.05, 0]);
+    } else {
+      add(sh, 'Shoulder_' + n, sphere(0.06 * b, 16, 12), t.outfit === 'armor' ? M.trim : armMat, [0, 0, 0], [0, 0, 0], t.outfit === 'armor' ? [1.5, 1, 1.4] : [1, 1, 1]);
+      add(sh, 'UpperArm_' + n, capsule(0.045 * b, ua - 0.06), armMat, [0, -ua / 2, 0]);
+      if (robed) add(elbow, 'Sleeve_' + n, lathe([[0.1 * b, -fa - 0.01], [0.07 * b, -fa * 0.6], [0.046 * b, 0]], seg(18)), M.cloth);
+      else add(elbow, 'Forearm_' + n, capsule(0.04 * b, fa - 0.05), armMat, [0, -fa / 2, 0]);
+      if (t.outfit === 'armor' || (t.outfit === 'tunic' && r.chance(0.5)))
+        add(elbow, 'Bracer_' + n, new THREE.CylinderGeometry(0.047 * b, 0.05 * b, fa * 0.35, seg(14)), M.trim, [0, -fa * 0.72, 0]);
+      add(hand, 'Hand_' + n, sphere(0.045 * b, 14, 10), M.skin, [0, -0.035, 0], [0, 0, 0], [0.9, 1.2, 0.75]);
+    }
+    if (s === -1) { itemHand = hand; itemArmUp = fwd < -1; }
+  }
+
+  // ---- head ----
+  const head = group(body, 'Head', [0, headY, rocky ? 0.1 * b : 0]);
+  const hooded = t.headwear === 'hood';
+  const faceMat = ghost && hooded ? M.void : M.skin;
+  if (rocky) add(head, 'Skull', rock(hr * 1.1, D >= 1 ? 1 : 0, r.next() * 100), M.skin, [0, 0, 0], [r.next(), r.next(), 0], [1.1, 0.9, 1]);
+  else add(head, 'Skull', sphere(hr, 28, 20), faceMat, [0, 0, 0], [0, 0, 0], [0.92, 1.05, 0.98]);
+  const eyeMat = t.glowEyes ? M.glow : M.eye;
+  for (const [s, n] of sides) add(head, 'Eye_' + n, sphere(hr * (t.glowEyes ? 0.13 : 0.11), 12, 8), eyeMat,
+    [s * hr * 0.36, hr * 0.08, hr * (rocky ? 1.08 : 0.86)], [0, 0, 0], [1, t.glowEyes ? 0.6 : 1, 0.5]);
+  if (!rocky && !ghost) add(head, 'Nose', new THREE.ConeGeometry(hr * 0.1, hr * 0.28, seg(8)), M.skin, [0, -hr * 0.12, hr * 0.98], [PI / 2 - 0.3, 0, 0]);
+
+  if (t.ears !== 'none' && !rocky) for (const [s, n] of sides) {
+    if (t.ears === 'round') add(head, 'Ear_' + n, sphere(hr * 0.18, 10, 8), M.skin, [s * hr * 0.92, 0, -hr * 0.02], [0, 0, 0], [0.45, 1, 0.75]);
+    else {
+      const h = hr * (t.archetype === 'elf' ? 0.95 : 0.6), a = PI / 2 - 0.55;
+      add(head, 'Ear_' + n, new THREE.ConeGeometry(hr * 0.16, h, seg(10)), M.skin,
+        [s * (hr * 0.86 + Math.sin(a) * h / 2), hr * 0.05 + Math.cos(a) * h / 2, -hr * 0.1], [-0.25, 0, -s * a], [1, 1, 0.4]);
+    }
+  }
+  if (t.hair !== 'none' && !rocky) {
+    add(head, 'Hair', new THREE.SphereGeometry(hr * 1.07, seg(28), seg(14), 0, PI * 2, 0, PI * 0.56), M.hair, [0, hr * 0.03, -hr * 0.04], [-0.35, 0, 0]);
+    if (t.hair === 'long') add(head, 'HairBack', lathe([[hr * 0.8, -hr * 2.4], [hr * 1.0, -hr * 1.3], [hr * 1.07, -hr * 0.3], [hr * 1.06, hr * 0.25]],
+      seg(24), PI * 0.5, PI), M.hair, [0, 0, -hr * 0.05], [0, 0, 0], [1, 1, 0.85]);
+  }
+  if (t.beard === 'long' && !rocky) add(head, 'Beard', new THREE.ConeGeometry(hr * 0.58, hr * 1.7, seg(16)), M.hair, [0, -hr * 1.2, hr * 0.5], [PI - 0.25, 0, 0], [1, 1, 0.6]);
+  if (t.beard === 'short' && !rocky) add(head, 'Beard', sphere(hr * 0.62, 16, 12), M.hair, [0, -hr * 0.55, hr * 0.45], [0, 0, 0], [1, 0.7, 0.65]);
+
+  // horns
+  if (t.horns === 'ram') for (const [s, n] of sides) {
+    const pts = [];
+    for (let i = 0; i <= 10; i++) {
+      const th = (i / 10) * PI * 1.6, R = hr * 0.48 * (1 - 0.45 * i / 10);
+      pts.push(V(s * (hr * 0.7 + hr * 0.12 * th), hr * 0.25 + R * Math.cos(th), -hr * 0.05 - R * Math.sin(th)));
+    }
+    add(head, 'Horn_' + n, taperTube(pts, hr * 0.2, hr * 0.03, seg(32), seg(10)), M.horn);
+  } else if (t.horns === 'straight') {
+    const L = r.range(0.8, 1.35);
+    for (const [s, n] of sides) add(head, 'Horn_' + n, taperTube([V(s * hr * 0.42, hr * 0.7, hr * 0.15), V(s * hr * (0.42 + 0.3 * L), hr * (0.7 + 0.6 * L), 0),
+      V(s * hr * (0.45 + 0.5 * L), hr * (0.7 + 1.1 * L), -hr * 0.35 * L)], hr * 0.15, 0, seg(20), seg(10)), M.horn);
+  } else if (t.horns === 'antlers') {
+    const leafy = t.archetype === 'spirit';
+    const branch = (n, from, dir, len, rad, depth) => {
+      const mid = from.clone().addScaledVector(dir, len * 0.5).add(V(r.range(-.02, .02), r.range(-.02, .02), r.range(-.02, .02)));
+      const end = from.clone().addScaledVector(dir, len);
+      add(head, n, taperTube([from, mid, end], rad, rad * 0.45, seg(10), seg(7)), M.horn);
+      if (depth === 0) { if (leafy) add(head, n + '_Leaf', sphere(hr * 0.12, 8, 6), M.hair, end.toArray(), [r.next() * 3, 0, r.next() * 3], [1, 0.35, 1.8]); return; }
+      const kids = depth === 2 ? 2 : r.int(1, 2);
+      for (let i = 0; i < kids; i++) {
+        const d = dir.clone().applyAxisAngle(V(0, 0, 1), (i === 0 ? -1 : 1) * Math.sign(dir.x || 1) * r.range(0.3, 0.7))
+          .applyAxisAngle(V(1, 0, 0), r.range(-0.4, 0.2)).normalize();
+        branch(n + '_' + i, end, d, len * r.range(0.6, 0.8), rad * 0.45, depth - 1);
+      }
+    };
+    for (const [s, n] of sides) branch('Antler_' + n, V(s * hr * 0.45, hr * 0.75, 0), V(s * 0.6, 1, -0.2).normalize(), hr * 1.4, hr * 0.13, 2);
+  }
+
+  // headwear
+  if (t.headwear === 'wizardHat') {
+    const hat = group(head, 'Hat', [0, hr * 0.5, -hr * 0.05], [-0.15, 0, 0]);
+    add(hat, 'HatBrim', new THREE.CylinderGeometry(hr * 2.0, hr * 2.0, hr * 0.06, seg(36)), M.cloth);
+    const cone = lathe([[hr * 1.05, 0], [hr * 0.82, hr * 0.8], [hr * 0.5, hr * 1.6], [hr * 0.2, hr * 2.3], [0.002, hr * 2.7]], seg(32));
+    const p = cone.attributes.position, bendDir = r.chance(0.5) ? 1 : -1;
+    for (let i = 0; i < p.count; i++) { const y = p.getY(i) / (hr * 2.7); p.setZ(i, p.getZ(i) - y * y * hr * 0.9); p.setX(i, p.getX(i) + bendDir * y * y * y * hr * 0.4); }
+    cone.computeVertexNormals();
+    add(hat, 'HatCone', cone, M.cloth);
+    add(hat, 'HatBand', new THREE.TorusGeometry(hr * 1.02, hr * 0.07, seg(8), seg(32)), M.trim, [0, hr * 0.12, 0], [PI / 2, 0, 0]);
+    if (r.chance(0.6)) add(hat, 'HatStar', new THREE.OctahedronGeometry(hr * 0.16, 0), M.glow, [0, hr * 0.5, hr * 0.78], [0, 0, PI / 4], [1, 1, 0.4]);
+  } else if (t.headwear === 'hood') {
+    const gap = PI * 0.8;
+    add(head, 'Hood', new THREE.SphereGeometry(hr * 1.28, seg(28), seg(16), PI / 2 + gap / 2, PI * 2 - gap, 0, PI * 0.72), M.cloth, [0, hr * 0.08, -hr * 0.12]);
+    add(head, 'HoodDrape', lathe([[sw * 1.05, shY - headY - 0.03], [hr * 1.25, -hr * 0.4]], seg(24), PI * 0.28, PI * 1.44), M.cloth, [0, 0, -hr * 0.1], [0, 0, 0], [1, 1, 0.8]);
+  } else if (t.headwear === 'crown') {
+    const cr = group(head, 'Crown', [0, hr * 0.62, 0]);
+    add(cr, 'CrownBand', new THREE.TorusGeometry(hr * 0.86, hr * 0.07, seg(8), seg(32)), M.trim, [0, 0, 0], [PI / 2, 0, 0]);
+    const spikes = r.int(5, 9);
+    for (let i = 0; i < spikes; i++) {
+      const a = (i / spikes) * PI * 2, x = Math.sin(a) * hr * 0.86, z = Math.cos(a) * hr * 0.86;
+      add(cr, 'CrownSpike' + i, new THREE.ConeGeometry(hr * 0.09, hr * (i % 2 ? 0.3 : 0.45), seg(8)), M.trim, [x, hr * 0.2, z]);
+      if (i % 2 === 0) add(cr, 'CrownGem' + i, new THREE.OctahedronGeometry(hr * 0.07, 0), M.glow, [x * 1.08, 0, z * 1.08]);
+    }
+  } else if (t.headwear === 'halo') {
+    add(head, 'Halo', new THREE.TorusGeometry(hr * 0.9, hr * 0.06, seg(8), seg(40)), M.glow, [0, hr * 1.5, -hr * 0.25], [PI / 2 - 0.3, 0, 0]);
+  } else if (t.headwear === 'circlet') {
+    add(head, 'Circlet', new THREE.TorusGeometry(hr * 0.99, hr * 0.035, seg(6), seg(36)), M.trim, [0, hr * 0.3, 0], [PI / 2 + 0.18, 0, 0], [0.93, 1, 1]);
+    add(head, 'CircletGem', new THREE.OctahedronGeometry(hr * 0.09, 0), M.glow, [0, hr * 0.13, hr * 0.98], [0, 0, 0], [1, 1.3, 0.6]);
+  }
+
+  // ---- wings ----
+  if (t.wings !== 'none') {
+    const span = (t.wings === 'butterfly' ? 0.75 : 0.95) * Math.max(0.8, b) * r.range(0.9, 1.2);
+    const extrude = (shapes) => new THREE.ExtrudeGeometry(shapes, { depth: 0.008, bevelEnabled: false, curveSegments: seg(8) });
+    for (const [s, n] of sides) {
+      const S = (x, y) => new THREE.Vector2(s * x * span, y * span);
+      let shapes = [];
+      if (t.wings === 'bat') {
+        const sh = new THREE.Shape([S(0, 0.12), S(0.4, 0.42), S(1, 0.55)]);
+        const tips = [S(0.82, 0.08), S(0.62, -0.25), S(0.36, -0.38), S(0, -0.08)];
+        let prev = S(1, 0.55);
+        for (const tp of tips) { const c = prev.clone().add(tp).multiplyScalar(0.5).lerp(S(0.25, 0.25), 0.35); sh.quadraticCurveTo(c.x, c.y, tp.x, tp.y); prev = tp; }
+        shapes = [sh];
+      } else if (t.wings === 'feathered') {
+        const pts = [S(0, 0.08), S(0.3, 0.38), S(0.6, 0.6), S(0.95, 0.68)];
+        const tips = [[0.92, 0.42], [0.82, 0.18], [0.7, -0.05], [0.56, -0.22], [0.4, -0.34], [0.24, -0.36], [0.1, -0.24]];
+        let px = 0.95, py = 0.68;
+        for (const [x, y] of tips) { pts.push(S((px + x) / 2 - 0.05, (py + y) / 2 + 0.03), S(x, y)); px = x; py = y; }
+        pts.push(S(0, -0.06));
+        shapes = [new THREE.Shape(pts)];
+      } else {
+        const up = new THREE.Shape(); up.moveTo(0, 0);
+        up.bezierCurveTo(s * 0.2 * span, 0.75 * span, s * 0.75 * span, 0.85 * span, s * 0.72 * span, 0.42 * span);
+        up.bezierCurveTo(s * 0.7 * span, 0.15 * span, s * 0.3 * span, 0.05 * span, 0, 0);
+        const lo = new THREE.Shape(); lo.moveTo(0, -0.01 * span);
+        lo.bezierCurveTo(s * 0.45 * span, -0.1 * span, s * 0.55 * span, -0.45 * span, s * 0.3 * span, -0.55 * span);
+        lo.bezierCurveTo(s * 0.12 * span, -0.6 * span, s * 0.05 * span, -0.3 * span, 0, -0.01 * span);
+        shapes = [up, lo];
+      }
+      const w = group(body, 'Wing_' + n, [s * 0.04, shY - 0.12, -0.12 * b * (robed ? 1.1 : 0.85)], [0.15, s * 0.45, s * 0.12]);
+      add(w, 'Wing_' + n, extrude(shapes), M.wing);
+      if (t.wings === 'butterfly') add(w, 'WingSpot_' + n, new THREE.CylinderGeometry(0.06 * span, 0.06 * span, 0.012, seg(16)), M.glow,
+        [s * 0.48 * span, 0.42 * span, 0.004], [PI / 2, 0, 0]);
+      if (t.wings === 'bat') add(w, 'WingBone_' + n, taperTube([V(0, 0.12 * span, 0.004), V(s * 0.4 * span, 0.42 * span, 0.004), V(s * span, 0.55 * span, 0.004)],
+        0.018, 0.004, seg(12), seg(6)), M.horn);
+    }
+  }
+
+  // ---- tail ----
+  if (t.tail !== 'none') {
+    const z0 = -0.1 * b;
+    if (t.tail === 'demon') {
+      const pts = [V(0, hipY, z0), V(0, hipY - 0.18, z0 - 0.25), V(0.1, hipY - 0.32, z0 - 0.55), V(0.25, hipY - 0.2, z0 - 0.8), V(0.3, hipY + 0.02, z0 - 0.9)];
+      add(body, 'Tail', taperTube(pts, 0.035 * b, 0.01, seg(32), seg(8)), M.skin);
+      const tip = add(body, 'TailTip', new THREE.OctahedronGeometry(0.075, 0), t.archetype === 'demon' ? M.horn : M.skin, pts[4].toArray(), [0, 0, 0], [0.4, 1.6, 1]);
+      tip.lookAt(pts[4].clone().sub(pts[3]).add(pts[4])); tip.rotateX(PI / 2);
+    } else {
+      const pts = [V(0, hipY, z0), V(0, hipY - 0.15, z0 - 0.3), V(-0.05, hipY + 0.05, z0 - 0.6), V(-0.1, hipY + 0.35, z0 - 0.65)];
+      add(body, 'Tail', taperTube(pts, 0.06 * b, 0.05 * b, seg(28), seg(12)), M.hair);
+      add(body, 'TailTip', sphere(0.055 * b, 16, 12), M.hair, pts[3].toArray(), [0, 0, 0], [1, 1.5, 1]);
+    }
+  }
+
+  // body is posed; item positions use the hand's world position
+  body.scale.setScalar(k); aura.scale.setScalar(k);
+  root.updateMatrixWorld(true);
+
+  // ---- held item ----
+  if (t.item !== 'none' && itemHand) {
+    const hp = body.worldToLocal(itemHand.localToWorld(V(0, -0.04, 0)));
+    const it = group(body, 'Item', hp.toArray());
+    if (t.item === 'staff') {
+      const wand = t.archetype === 'fairy';
+      const Ls = wand ? 0.45 : headTop * 1.02;
+      const bottom = wand ? -Ls * 0.25 : Math.max(-hp.y, -Ls * 0.45);
+      const top = bottom + Ls, wob = () => r.range(-0.015, 0.015) * (wand ? 0 : 1);
+      add(it, 'StaffShaft', taperTube([V(0, bottom, 0), V(wob(), bottom + Ls * 0.33, wob()), V(wob(), bottom + Ls * 0.66, wob()), V(0, top, 0)],
+        wand ? 0.008 : 0.016, wand ? 0.012 : 0.022, seg(16), seg(8)), wand ? M.trim : M.wood);
+      const kind = wand ? 'star' : r.pick(['orb', 'crystal', 'crescent']);
+      if (kind === 'orb' || kind === 'star') {
+        add(it, 'StaffOrb', kind === 'star' ? new THREE.OctahedronGeometry(0.04, 0) : sphere(0.06, 20, 14), M.glow, [0, top + 0.07, 0]);
+        if (kind === 'orb') for (let i = 0; i < 3; i++) {
+          const a = (i / 3) * PI * 2;
+          add(it, 'StaffProng' + i, taperTube([V(0, top - 0.02, 0), V(Math.sin(a) * 0.07, top + 0.05, Math.cos(a) * 0.07), V(Math.sin(a) * 0.035, top + 0.14, Math.cos(a) * 0.035)],
+            0.012, 0.003, seg(10), seg(6)), M.wood);
+        }
+      } else if (kind === 'crystal') {
+        add(it, 'StaffCrystal', new THREE.OctahedronGeometry(0.06, 0), M.glow, [0, top + 0.09, 0], [0, r.next(), 0], [0.7, 1.9, 0.7]);
+        add(it, 'StaffCollar', new THREE.CylinderGeometry(0.03, 0.022, 0.05, seg(10)), M.trim, [0, top, 0]);
+      } else {
+        add(it, 'StaffCrescent', new THREE.TorusGeometry(0.11, 0.014, seg(8), seg(28), PI * 1.3), M.trim, [0, top + 0.1, 0], [0, 0, PI * 0.85]); // opening faces up
+        add(it, 'StaffOrb', sphere(0.04, 16, 12), M.glow, [0, top + 0.1, 0]);
+      }
+    } else if (t.item === 'sword') {
+      const sc = t.archetype === 'demon' || rocky ? 1.35 : 1;
+      const sword = group(it, 'Sword', [0, 0, 0], [itemArmUp ? 0 : 2.75, 0, 0]);
+      const blade = new THREE.Shape([new THREE.Vector2(-0.024, 0), new THREE.Vector2(0.024, 0), new THREE.Vector2(0.024, 0.62), new THREE.Vector2(0, 0.7), new THREE.Vector2(-0.024, 0.62)]);
+      add(sword, 'Blade', new THREE.ExtrudeGeometry(blade, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 1 }),
+        t.archetype === 'demon' ? M.glow : M.steel, [0, 0.07 * sc, -0.003], [0, 0, 0], [sc, sc, 1]);
+      add(sword, 'Guard', new THREE.BoxGeometry(0.17 * sc, 0.025, 0.035), M.trim, [0, 0.06 * sc, 0]);
+      add(sword, 'Grip', new THREE.CylinderGeometry(0.016, 0.016, 0.13 * sc, seg(10)), M.cloth2, [0, 0, 0]);
+      add(sword, 'Pommel', sphere(0.025, 12, 8), M.trim, [0, -0.07 * sc, 0]);
+    } else if (t.item === 'orb') {
+      const up = itemArmUp ? 0.14 : 0.1;
+      add(it, 'Orb', sphere(0.075, 24, 16), M.glow, [0, up, itemArmUp ? 0 : 0.08]);
+      add(it, 'OrbRing', new THREE.TorusGeometry(0.11, 0.008, seg(6), seg(32)), M.trim, [0, up, itemArmUp ? 0 : 0.08], [PI / 2 - 0.4, 0.3, 0]);
+    } else if (t.item === 'bow') {
+      const R = 0.42, bow = group(it, 'Bow', [0, 0, 0], [0, -PI / 2, 0]);
+      const inner = group(bow, 'BowArc', [-R, 0, 0]);
+      add(inner, 'BowLimb', new THREE.TorusGeometry(R, 0.013, seg(6), seg(28), PI * 0.9), M.wood, [0, 0, 0], [0, 0, -PI * 0.45]);
+      const ex = R * Math.cos(PI * 0.45), ey = R * Math.sin(PI * 0.45);
+      add(inner, 'BowString', new THREE.CylinderGeometry(0.002, 0.002, ey * 2, 4), M.hair, [ex, 0, 0]);
+      add(inner, 'BowGrip', new THREE.CylinderGeometry(0.02, 0.02, 0.1, seg(8)), M.cloth2, [R, 0, 0]);
+    }
+  }
+
+  // ---- aura (separate node so it can spin) ----
+  const auraY0 = -floatUnits;
+  if (t.aura === 'crystals') {
+    const n = r.int(5, 7);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * PI * 2 + r.range(-0.2, 0.2), R = 0.5 * Math.max(1, b) + r.range(0, 0.1);
+      add(aura, 'Crystal' + i, new THREE.OctahedronGeometry(r.range(0.04, 0.07), 0), M.glow,
+        [Math.sin(a) * R, hipY + r.range(-0.25, 0.45), Math.cos(a) * R], [r.range(-0.4, 0.4), r.next() * PI, r.range(-0.4, 0.4)], [0.7, 1.9, 0.7]);
+    }
+  } else if (t.aura === 'orbs') {
+    for (let i = 0; i < 14; i++) {
+      const a = i * 2.399, y = 0.15 + (i / 13) * headTop * 0.95, R = 0.42 * Math.max(1, b) + 0.12 * Math.sin(i * 1.7);
+      add(aura, 'Wisp' + i, sphere(r.range(0.015, 0.032), 10, 8), M.glow, [Math.sin(a) * R, y, Math.cos(a) * R]);
+    }
+  } else if (t.aura === 'circle') {
+    const R = 0.75 * Math.max(1, b), y = auraY0 + 0.006, flat = [PI / 2, 0, 0];
+    add(aura, 'CircleOuter', new THREE.TorusGeometry(R, 0.012, seg(4), seg(64)), M.glow, [0, y, 0], flat, [1, 1, 0.25]);
+    add(aura, 'CircleInner', new THREE.TorusGeometry(R * 0.82, 0.008, seg(4), seg(64)), M.glow, [0, y, 0], flat, [1, 1, 0.25]);
+    for (let tri = 0; tri < 2; tri++) for (let i = 0; i < 3; i++) { // hexagram
+      const a0 = tri * PI / 3 + (i / 3) * PI * 2, a1 = a0 + (PI * 2) / 3, p0 = V(Math.sin(a0) * R * 0.82, y, Math.cos(a0) * R * 0.82), p1 = V(Math.sin(a1) * R * 0.82, y, Math.cos(a1) * R * 0.82);
+      const len = p0.distanceTo(p1), m = add(aura, `Glyph${tri}_${i}`, new THREE.BoxGeometry(len, 0.004, 0.012), M.glow, p0.clone().add(p1).multiplyScalar(0.5).toArray());
+      m.rotation.y = Math.atan2(-(p1.z - p0.z), p1.x - p0.x);
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * PI * 2;
+      add(aura, 'Rune' + i, new THREE.BoxGeometry(0.035, 0.004, 0.06), M.glow, [Math.sin(a) * R * 0.91, y, Math.cos(a) * R * 0.91], [0, a, 0]);
+    }
+  }
+
+  if (t.style === 'lowpoly') root.traverse((o) => {
+    if (!o.isMesh) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
+    g.computeVertexNormals(); if (g !== o.geometry) o.geometry.dispose(); o.geometry = g;
+  });
+  root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  root.position.y = A.float;
+  root.userData = { scale: k, float: A.float };
+  return { root, body, aura, materials: M };
+}
+
+// ---------- viewer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+$('viewport').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x121420);
+scene.fog = new THREE.Fog(0x121420, 8, 20);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.6;
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 200);
+camera.position.set(2.2, 1.6, 3.4);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.autoRotateSpeed = 1.2;
+const key = new THREE.DirectionalLight(0xffffff, 1.6);
+key.position.set(2.5, 5, 3); key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 0.5, far: 15 });
+const rim = new THREE.DirectionalLight(0x9b6bff, 1.2); rim.position.set(-3, 2.5, -3);
+scene.add(key, rim, new THREE.HemisphereLight(0x8090ff, 0x201810, 0.35));
+const ground = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.MeshStandardMaterial({ color: 0x1b1e2b, roughness: 1 }));
+ground.rotation.x = -PI / 2; ground.receiveShadow = true; scene.add(ground);
+const grid = new THREE.PolarGridHelper(4, 16, 8, 64, 0x2c3145, 0x23273a); grid.position.y = 0.001; scene.add(grid);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.45, 0.9);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+function resize() {
+  const el = $('viewport'), w = el.clientWidth, h = Math.max(1, el.clientHeight);
+  renderer.setSize(w, h, false); composer.setSize(w, h);
+  renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%';
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe($('viewport'));
+resize();
+
+const ANIM_PERIOD = 6, BOB = 0.04; // idle animation: seconds per aura turn, bob height (m)
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.1), time = clock.elapsedTime;
+  const c = state.current;
+  if (c) { // preview of the exported idle animation
+    c.aura.rotation.y = (time / ANIM_PERIOD) * PI * 2;
+    c.root.position.y = c.root.userData.float + (c.root.userData.float ? Math.sin((time / ANIM_PERIOD) * PI * 4) * BOB : 0);
+  }
+  controls.autoRotate = $('rotate').checked;
+  controls.update(dt);
+  if ($('bloom').checked) composer.render(); else renderer.render(scene, camera);
+});
+
+function fitView() {
+  const c = state.current; if (!c) return;
+  const box = new THREE.Box3().setFromObject(c.root), size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+  const dist = (Math.max(size.y, size.x * 0.8) / 2) / Math.tan((camera.fov * PI) / 360) * 1.35;
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  if (!isFinite(dir.x)) dir.set(0.5, 0.25, 1).normalize();
+  controls.target.copy(center); camera.position.copy(center).addScaledVector(dir, dist);
+  camera.near = dist / 100; camera.far = dist * 50; camera.updateProjectionMatrix();
+  const s = Math.max(2, size.y * 1.5);
+  Object.assign(key.shadow.camera, { left: -s, right: s, top: s, bottom: -s }); key.shadow.camera.updateProjectionMatrix();
+}
+
+// ---------- state / UI ----------
+const state = { traits: null, current: null, busy: false };
+const fmtInt = (n) => n.toLocaleString();
+const fmtBytes = (b) => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
+function log(msg, cls = '') {
+  const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = msg;
+  $('log').appendChild(d); $('log').scrollTop = 1e9;
+}
+const triCount = (g) => (g.index ? g.index.count : g.attributes.position.count) / 3 | 0;
+function meshesOf(root) { const out = []; root.traverse((o) => { if (o.isMesh) out.push(o); }); return out; }
+
+for (const [id, a] of Object.entries(ARCH)) $('archetype').add(new Option(a.label, id));
+for (const s of SLOTS) for (const [v, label] of Object.entries(OPTIONS[s])) $(s).add(new Option(label, v));
+for (const [k, label] of Object.entries(COLOR_KEYS)) {
+  const l = document.createElement('label'); l.textContent = label;
+  const inp = document.createElement('input'); inp.type = 'color'; inp.id = 'c_' + k; l.appendChild(inp); $('colors').appendChild(l);
+}
+const SLIDERS = { height: (v) => v.toFixed(2) + ' m', bulk: (v) => v.toFixed(2), head: (v) => v.toFixed(2), limbs: (v) => v.toFixed(2) };
+
+function writeUI(t) {
+  $('archetype').value = t.archetype; $('seed').value = t.seed;
+  for (const s of Object.keys(SLIDERS)) $(s).value = t[s];
+  $('pose').value = t.pose;
+  for (const s of SLOTS) $(s).value = t[s];
+  $('glowEyes').checked = t.glowEyes;
+  for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).value = t.colors[k];
+  updateLabels();
+}
+function readUI() {
+  const t = { ...state.traits, colors: {} };
+  for (const s of Object.keys(SLIDERS)) t[s] = Number($(s).value);
+  t.pose = $('pose').value;
+  for (const s of SLOTS) t[s] = $(s).value;
+  t.glowEyes = $('glowEyes').checked;
+  for (const k of Object.keys(COLOR_KEYS)) t.colors[k] = $('c_' + k).value;
+  Object.assign(t, outputSettings());
+  return t;
+}
+const outputSettings = () => ({ style: $('style').value, detail: $('detail').value });
+function updateLabels() { for (const [s, f] of Object.entries(SLIDERS)) $(s + 'Val').textContent = f(Number($(s).value)); }
+
+function disposeCurrent() {
+  const c = state.current; if (!c) return;
+  scene.remove(c.root);
+  for (const m of meshesOf(c.root)) m.geometry.dispose();
+  for (const m of Object.values(c.materials)) m.dispose();
+  state.current = null;
+}
+function rebuild({ fit = false } = {}) {
+  const t = state.traits;
+  const t0 = performance.now();
+  disposeCurrent();
+  const c = buildCharacter(t);
+  state.current = c; scene.add(c.root);
+  applyWire();
+  let f = 0, v = 0; const ms = meshesOf(c.root);
+  for (const m of ms) { f += triCount(m.geometry); v += m.geometry.attributes.position.count; }
+  $('sF').textContent = fmtInt(f); $('sV').textContent = fmtInt(v); $('sP').textContent = fmtInt(ms.length);
+  $('sH').textContent = new THREE.Box3().setFromObject(c.root).getSize(new THREE.Vector3()).y.toFixed(2) + ' m';
+  $('charName').textContent = t.name;
+  rim.color.set(t.colors.glow);
+  if (fit) fitView();
+  state.buildMs = performance.now() - t0;
+  return c;
+}
+function roll(archetype, seed) {
+  state.traits = { ...rollTraits(archetype, seed), ...outputSettings() };
+  writeUI(state.traits);
+  rebuild({ fit: true });
+  log(`${state.traits.name} (${ARCH[archetype].label}, seed "${seed}")`);
+}
+function applyWire() { if (state.current) for (const m of Object.values(state.current.materials)) m.wireframe = $('wire').checked; }
+
+let pending = 0;
+const scheduleRebuild = () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(() => { state.traits = readUI(); rebuild(); }); };
+
+$('archetype').addEventListener('change', () => roll($('archetype').value, $('seed').value.trim() || randomSeed()));
+$('seed').addEventListener('change', () => roll($('archetype').value, $('seed').value.trim() || randomSeed()));
+$('randomBtn').addEventListener('click', () => roll($('archetype').value, randomSeed()));
+$('colorsBtn').addEventListener('click', () => {
+  const c = ARCH[state.traits.archetype].palette(makeRng(randomSeed()));
+  for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).value = c[k];
+  scheduleRebuild();
+});
+for (const s of Object.keys(SLIDERS)) $(s).addEventListener('input', () => { updateLabels(); scheduleRebuild(); });
+for (const id of ['pose', 'glowEyes', 'style', 'detail', ...SLOTS]) $(id).addEventListener('change', scheduleRebuild);
+for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).addEventListener('input', scheduleRebuild);
+$('wire').addEventListener('change', applyWire);
+$('fitBtn').addEventListener('click', fitView);
+
+// ---------- export ----------
+const nodeName = (s) => THREE.PropertyBinding.sanitizeNodeName(s.replace(/\s+/g, '_')) || 'Character';
+// Copy of the character with every transform baked into the geometry (in metres), grouped as Root > Body, Aura.
+function exportScene(c, { combine, anim }) {
+  c.root.updateMatrixWorld(true);
+  const k = c.root.userData.scale, S = new THREE.Matrix4().makeScale(k, k, k);
+  const out = new THREE.Group(); out.name = nodeName(state.traits.name); out.position.y = c.root.userData.float;
+  const nodes = [];
+  for (const g of [c.body, c.aura]) {
+    const meshes = meshesOf(g); if (!meshes.length) continue;
+    const node = new THREE.Group(); node.name = g.name; out.add(node); nodes.push(node);
+    const inv = g.matrixWorld.clone().invert();
+    const baked = meshes.map((m) => {
+      const geo = m.geometry.clone().applyMatrix4(S.clone().multiply(inv).multiply(m.matrixWorld));
+      return { name: m.name, mat: m.material, geo };
+    });
+    if (!combine) { for (const p of baked) { const m = new THREE.Mesh(p.geo, p.mat); m.name = p.name; node.add(m); } continue; }
+    const byMat = new Map();
+    for (const p of baked) { if (!byMat.has(p.mat)) byMat.set(p.mat, []); byMat.get(p.mat).push(p.geo); }
+    for (const [mat, geos] of byMat) {
+      const clean = geos.map((g0) => {
+        const g1 = g0.index ? g0.toNonIndexed() : g0;
+        const g2 = new THREE.BufferGeometry();
+        g2.setAttribute('position', g1.attributes.position); g2.setAttribute('normal', g1.attributes.normal);
+        g2.setAttribute('uv', g1.attributes.uv || new THREE.Float32BufferAttribute(new Float32Array(g1.attributes.position.count * 2), 2));
+        return g2;
+      });
+      const merged = mergeVertices(mergeGeometries(clean), 1e-5);
+      const m = new THREE.Mesh(merged, mat); m.name = g.name + '_' + mat.name; node.add(m);
+    }
+  }
+  const clips = [];
+  if (anim) {
+    const tracks = [], T = ANIM_PERIOD;
+    if (c.root.userData.float) {
+      const f = c.root.userData.float, times = [0, T / 4, T / 2, (3 * T) / 4, T];
+      tracks.push(new THREE.VectorKeyframeTrack(out.name + '.position', times, [0, f, 0, 0, f + BOB, 0, 0, f, 0, 0, f + BOB, 0, 0, f, 0]));
+    }
+    if (nodes.some((n) => n.name === 'Aura')) {
+      const times = [], vals = [], q = new THREE.Quaternion();
+      for (let i = 0; i <= 4; i++) { times.push((T * i) / 4); q.setFromAxisAngle(V(0, 1, 0), (i / 4) * PI * 2); vals.push(q.x, q.y, q.z, q.w); }
+      tracks.push(new THREE.QuaternionKeyframeTrack('Aura.quaternion', times, vals));
+    }
+    if (tracks.length) clips.push(new THREE.AnimationClip('Idle', T, tracks));
+  }
+  return { out, clips };
+}
+async function exportGLB() {
+  const c = state.current;
+  const { out, clips } = exportScene(c, { combine: $('combine').checked, anim: $('anim').checked });
+  try {
+    const buf = await new GLTFExporter().parseAsync(out, { binary: true, animations: clips });
+    return { buf, out, clips };
+  } finally { out.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); }
+}
+$('downloadBtn').addEventListener('click', async () => {
+  if (state.busy) return;
+  state.busy = true; $('busy').classList.add('show'); $('busyText').textContent = 'Exporting GLB…';
+  try {
+    const { buf } = await exportGLB();
+    const name = (state.traits.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'character') + '.glb';
+    const url = URL.createObjectURL(new Blob([buf], { type: 'model/gltf-binary' }));
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    log(`Saved ${name} (${fmtBytes(buf.byteLength)})`, 'ok');
+  } catch (e) { console.error(e); log('Export failed: ' + (e.message || e), 'err'); }
+  finally { $('busy').classList.remove('show'); state.busy = false; }
+});
+
+window.__chargen = { THREE, state, ARCH, OPTIONS, rollTraits, buildCharacter, roll, rebuild, exportGLB, exportScene }; // handy for debugging in the console
+
+roll('wizard', randomSeed());
+log('Ready. Pick an archetype, press Randomize, then Download GLB.', 'ok');
+</script>
+</body>
+</html>

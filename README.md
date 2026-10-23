@@ -26,15 +26,28 @@ Works in current Chrome, Edge, Firefox and Safari.
 - A `.gltf` with external `.bin`/texture files: select or drop all of its files together.
 - Output is an uncompressed GLB; textures are re-encoded by the browser.
 
+## Mystical character generator
+`character-generator-offline.html` (offline) / `character-generator.html` (CDN) makes fantasy characters procedurally and saves them as GLB. It needs no account or API key and runs entirely in the browser.
+
+- **Archetype**: wizard, elf ranger, stone golem, demon, fairy, forest spirit, specter, celestial. Each has its own proportions, likely parts and palette.
+- **Seed / Randomize**: the same archetype + seed always gives the same character (and name). **New colors** rerolls only the palette.
+- **Body**: height in metres (top of the head), build, head size, limb length, and pose. Use **T-pose** if you want to auto-rig the model (for example in Mixamo or Blender).
+- **Parts**: outfit, hair, ears, beard, horns, headwear, wings, held item, tail, aura, glowing eyes. Any part works with any archetype.
+- **Output**: smooth or low-poly style, detail level, combine parts per material (few meshes) or keep every part as its own named mesh, and an optional idle animation (spinning aura, bobbing for floating characters).
+
+The exported GLB opens in the viewer above, so you can then smooth it, change its face count or fit it to a file size. Glow parts use emissive materials (with `KHR_materials_emissive_strength`); the glow halo in the preview is a screen effect and is not part of the file. The body is not rigged.
+
+Why procedural instead of AI text-to-3D: services such as Meshy, Tripo or Hunyuan3D give more detailed sculpted models but need an account, an API key (which would be readable inside a shared HTML file), internet and per-model credits, and take from 30 seconds to minutes per model. The procedural generator is instant, free, offline and reproducible.
+
 ## Editing / development
-`index.html` is the source. `glb-viewer-offline.html` is generated from it by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html` and `character-generator.html` are the sources. `glb-viewer-offline.html` and `character-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright
-npm run build    # regenerate glb-viewer-offline.html from index.html
-npm test         # Playwright tests (Chromium) against both index.html and the offline file
+npm run build    # regenerate both *-offline.html files
+npm test         # Playwright tests (Chromium) against the CDN pages and their offline files
 ```
 
-**After editing `index.html`, run `npm run build` and commit the regenerated `glb-viewer-offline.html` together with it.** Tests run offline: CDN requests from `index.html` are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
+**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
 
 There is intentionally no CI: build and test locally before committing.
