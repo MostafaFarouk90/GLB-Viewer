@@ -57,6 +57,9 @@ for (const [spec, url] of Object.entries(imports)) {
   else { if (!fs.existsSync(p)) fail(`${spec} -> ${p} does not exist`); exact.set(spec, p); }
 }
 
+// Longest prefix wins, as in the browser's importmap resolution.
+prefixes.sort((a, b) => b[0].length - a[0].length);
+
 const out = await esbuild.build({
   stdin: { contents: modTag[1], resolveDir: root, sourcefile: 'index.html', loader: 'js' },
   bundle: true, format: 'iife', minify: true, write: false, target: 'es2020', legalComments: 'none',

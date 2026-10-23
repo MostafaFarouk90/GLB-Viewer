@@ -87,7 +87,7 @@
     <div class="btns" style="margin-top:0">
       <button id="openBtn" class="primary">Open GLB…</button>
       <button id="sampleBtn">Load sample</button>
-      <input id="fileInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2" multiple hidden>
+      <input id="fileInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp" multiple hidden>
     </div>
 
     <h2>Stats</h2>
@@ -261,47 +261,65 @@ function disposeAll(root) { // full teardown of an original: geometries, materia
 
 // ---------- loading ----------
 const draco = new DRACOLoader().setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
-const makeLoader = (manager) => new GLTFLoader(manager).setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
+// The probe plugin runs before GLTFLoader sets up Draco, so the decoder download can be watched (and its failure
+// reported) without parsing the JSON a second time.
+let probe = {};
+const probePlugin = (parser) => {
+  if (parser.json.extensionsUsed?.includes('KHR_draco_mesh_compression'))
+    probe.decoderOk = draco.preload().decoderPending.then(() => true, () => false);
+  return { name: 'glbopt_probe' };
+};
+const makeLoader = (manager) => new GLTFLoader(manager).setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder).register(probePlugin);
 const loader = makeLoader();
 
-// The glTF JSON of a .glb or .gltf buffer (null if unreadable). Only used for error messages.
-function gltfJSON(buf) {
-  try {
-    const dv = new DataView(buf), td = new TextDecoder();
-    if (dv.getUint32(0, true) === 0x46546C67) return JSON.parse(td.decode(new Uint8Array(buf, 20, dv.getUint32(12, true))));
-    return JSON.parse(td.decode(buf));
-  } catch { return null; }
-}
+const normPath = (p) => {
+  const out = [];
+  for (const part of p.replace(/\\/g, '/').split('/')) {
+    if (part === '..') out.pop(); else if (part && part !== '.') out.push(part);
+  }
+  return out.join('/');
+};
+const decode = (u) => { try { return decodeURIComponent(u); } catch { return u; } };
 
-// `files`: optional Map of file name -> File, for a .gltf that references external .bin/texture files.
-async function loadBuffer(buf, name, files = null) {
-  const urls = new Map(), missing = new Set();
-  let ld = loader, bytes = buf.byteLength;
+// `files`: optional list of Files a .gltf may reference (.bin, textures). Matched by relative path, then by name.
+async function loadBuffer(buf, name, files = []) {
+  files = files instanceof Map ? [...files.values()] : [...(files || [])];
+  const urls = new Map(), used = new Set(), missing = new Set();
+  let ld = loader;
   if (/\.gltf$/i.test(name)) {
+    const entries = files.map((f) => [normPath(f.webkitRelativePath || f.name), f]);
+    const find = (path) => {
+      const base = path.split('/').pop();
+      return (entries.find(([k]) => k === path) || entries.find(([k]) => k.endsWith('/' + path))
+        || entries.find(([k]) => k.split('/').pop() === base) || [])[1];
+    };
     const mgr = new THREE.LoadingManager();
-    for (const [n, f] of files || []) { urls.set(n, URL.createObjectURL(f)); bytes += f.size; }
     mgr.setURLModifier((url) => {
       if (/^(data|blob):/.test(url)) return url;
-      const base = decodeURIComponent(url.split(/[?#]/)[0].split('/').pop());
-      if (urls.has(base)) return urls.get(base);
-      missing.add(base); return url;
+      const path = normPath(decode(url.split(/[?#]/)[0]));
+      const f = find(path);
+      if (!f) { missing.add(path); return url; }
+      used.add(f);
+      if (!urls.has(f)) urls.set(f, URL.createObjectURL(f));
+      return urls.get(f);
     });
     ld = makeLoader(mgr);
   }
-  const usesDraco = !!gltfJSON(buf)?.extensionsUsed?.includes('KHR_draco_mesh_compression');
-  if (usesDraco) draco.preload().decoderPending?.catch(() => {}); // failure is reported below, not as an unhandled rejection
+  probe = {};
   let gltf;
   try { gltf = await ld.parseAsync(buf, ''); }
   catch (e) {
-    if (usesDraco) {
-      draco.decoderPending = null; // allow a retry once back online
-      throw new Error(`${name} is Draco-compressed; decoding it needs internet access (the decoder downloads from gstatic.com). ${e.message || e}`);
-    }
+    const msg = e.message || e;
     if (missing.size) throw new Error(`${name} references files that were not provided: ${[...missing].join(', ')}. Select/drop them together with the .gltf, or export the model as a single .glb.`);
-    if (/\.gltf$/i.test(name)) throw new Error(`Could not load ${name} (${e.message || e}). If it uses external files, select/drop them together with it, or export as .glb.`);
+    if (probe.decoderOk && !(await probe.decoderOk)) {
+      draco.decoderPending = null; // allow a retry once back online
+      throw new Error(`${name} is Draco-compressed; decoding it needs internet access (the decoder downloads from gstatic.com). ${msg}`);
+    }
+    if (/\.gltf$/i.test(name)) throw new Error(`Could not load ${name} (${msg}). If it uses external files, select/drop them together with it, or export as .glb.`);
     throw e;
   } finally { for (const u of urls.values()) URL.revokeObjectURL(u); }
-  setOriginal(gltf.scene, gltf.animations || [], bytes, name);
+  if (missing.size) log(`${name}: these referenced files were not provided and are missing: ${[...missing].join(', ')}`, 'warn');
+  setOriginal(gltf.scene, gltf.animations || [], buf.byteLength + [...used].reduce((n, f) => n + f.size, 0), name);
 }
 
 function setOriginal(root, animations, bytes, name) {
@@ -337,7 +355,7 @@ $('fileInput').onchange = (e) => { openFiles([...e.target.files]); e.target.valu
 function openFiles(list) {
   const f = list.find((x) => /\.glb$/i.test(x.name)) || list.find((x) => /\.gltf$/i.test(x.name));
   if (!f) return log('Please choose a .glb file, or a .gltf together with its .bin/texture files.', 'warn');
-  const files = new Map(list.filter((x) => x !== f).map((x) => [x.name, x]));
+  const files = list.filter((x) => x !== f);
   busy('Loading ' + f.name + '…', async () => loadBuffer(await f.arrayBuffer(), f.name, files));
 }
 const main = $('main');
@@ -453,14 +471,18 @@ function subdivide(g, levels, type, preserveEdges) {
   return mergeVertices(out, 1e-6);
 }
 
-// Draw ranges (in index units, whole triangles): the groups clamped to the index, or everything as one range.
+// Draw ranges (in index units): the groups, or everything as one range. Null if the groups do not tile the
+// index exactly (gaps, overlaps, partial triangles): per-group processing could then drop or duplicate faces.
 function groupRanges(g) {
   const n = g.index ? g.index.count : g.attributes.position.count;
   if (!g.groups.length) return [{ start: 0, count: n - n % 3 }];
-  return g.groups.map((gr) => {
-    const s = Math.min(gr.start, n), c = Math.min(gr.count, n - s);
-    return { start: s, count: c - c % 3, materialIndex: gr.materialIndex };
-  });
+  const rs = g.groups.map((gr) => ({ start: gr.start, count: Math.min(gr.count, n - gr.start), materialIndex: gr.materialIndex }));
+  let end = 0;
+  for (const r of [...rs].sort((a, b) => a.start - b.start)) {
+    if (r.start !== end || r.count % 3 || r.start % 3) return null;
+    end += r.count;
+  }
+  return end === n ? rs : null;
 }
 
 // Rebuild a geometry keeping only the vertices referenced by `idx`.
@@ -486,9 +508,12 @@ function compact(g, idx) {
 }
 
 // Simplifies each material group separately (each gets its share of the target) and rebuilds the groups.
+// Vertices on the seam between groups (matched by position) are locked so the groups stay stitched together.
 function decimate(g, targetTris, maxErr, lockBorder) {
   g = ensureIndexed(plainGeometry(g));
-  const ranges = groupRanges(g), cur = ranges.reduce((n, r) => n + r.count, 0) / 3;
+  const ranges = groupRanges(g);
+  if (!ranges) return { geometry: g, error: 0 };
+  const cur = ranges.reduce((n, r) => n + r.count, 0) / 3;
   if (targetTris >= cur) return { geometry: g, error: 0 };
   const all = g.index.array, pos = g.attributes.position.array;
   // Several groups: simplify each index subset on its own ('Sparse'), with the error kept absolute so it stays
@@ -496,9 +521,21 @@ function decimate(g, targetTris, maxErr, lockBorder) {
   const sparse = ranges.length > 1, scale = sparse ? MeshoptSimplifier.getScale(pos, 3) || 1 : 1;
   const flags = [...(lockBorder ? ['LockBorder'] : []), ...(sparse ? ['Sparse', 'ErrorAbsolute'] : [])];
   maxErr *= scale;
-  const nrm = g.attributes.normal; let na = null;
+  let lock = null;
+  if (sparse) {
+    const { ids, count } = weld(g), owner = new Int32Array(count).fill(-1), seam = new Uint8Array(count);
+    ranges.forEach((r, k) => {
+      for (let i = r.start; i < r.start + r.count; i++) {
+        const w = ids[all[i]];
+        if (owner[w] < 0) owner[w] = k; else if (owner[w] !== k) seam[w] = 1;
+      }
+    });
+    lock = new Uint8Array(ids.length);
+    for (let i = 0; i < ids.length; i++) lock[i] = seam[ids[i]];
+  }
+  const nrm = g.attributes.normal; let na = new Float32Array(0), ns = 0, nw = [];
   if (nrm && nrm.itemSize === 3) {
-    na = new Float32Array(nrm.count * 3);
+    na = new Float32Array(nrm.count * 3); ns = 3; nw = [0.5, 0.5, 0.5];
     for (let i = 0; i < nrm.count; i++) { na[i * 3] = nrm.getX(i); na[i * 3 + 1] = nrm.getY(i); na[i * 3 + 2] = nrm.getZ(i); }
   }
   const parts = [], groups = []; let len = 0, err = 0;
@@ -506,8 +543,7 @@ function decimate(g, targetTris, maxErr, lockBorder) {
     if (r.count < 3) continue;
     const idx = Uint32Array.from(all.subarray(r.start, r.start + r.count));
     const t = Math.max(3, Math.round(r.count / 3 * targetTris / cur) * 3);
-    const [ni, e] = na ? MeshoptSimplifier.simplifyWithAttributes(idx, pos, 3, na, 3, [0.5, 0.5, 0.5], null, t, maxErr, flags)
-      : MeshoptSimplifier.simplify(idx, pos, 3, t, maxErr, flags);
+    const [ni, e] = MeshoptSimplifier.simplifyWithAttributes(idx, pos, 3, na, ns, nw, lock, t, maxErr, flags);
     if (ni.length < 3) continue;
     parts.push(ni); groups.push([len, ni.length, r.materialIndex]); len += ni.length; err = Math.max(err, e / scale);
   }
@@ -647,6 +683,8 @@ function stageA(s) {
     });
     clearCache(); state.subdivCache.set(key, geoms);
     if (lost) log(`${lost} multi-material mesh(es) were not subdivided (material groups could not be kept).`, 'warn');
+    const odd = geoms.filter((g) => !groupRanges(g)).length;
+    if (odd) log(`${odd} mesh(es) have material groups with gaps or overlaps and are left undecimated.`, 'warn');
     if (L > 0) log(`Subdivided ${L} level(s) (${s.type}) → ${fmtInt(geoms.reduce((n, g) => n + triCount(g), 0))} faces`);
     const skipped = srcMeshes.filter(isDeformable).length;
     if (L > 0 && skipped) log(`${skipped} skinned/morph mesh(es) were not subdivided (would break animation).`, 'warn');

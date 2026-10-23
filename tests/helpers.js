@@ -11,6 +11,8 @@ const CDN = 'https://cdn.jsdelivr.net/';
 
 export async function openApp(page, file) {
   const errors = [], cdnRequests = [];
+  // Tests that expect an error push regexes here; matching errors are then not counted as failures.
+  const allowed = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
   page.on('request', (r) => { if (r.url().startsWith(CDN)) cdnRequests.push(r.url()); });
@@ -33,7 +35,7 @@ export async function openApp(page, file) {
   await page.goto(pathToFileURL(path.join(ROOT, file)).href);
   await expect(page.locator('#log')).toContainText('Ready');
   await page.waitForFunction(() => !!window.__glbopt);
-  return { errors, cdnRequests };
+  return { errors, cdnRequests, allowed, unexpected: () => errors.filter((e) => !allowed.some((r) => r.test(e))) };
 }
 
 const resultCount = (page) => page.locator('#log div', { hasText: 'Result' }).count();
@@ -52,4 +54,29 @@ export async function loadSample(page) {
   await page.click('#sampleBtn');
   await expect(page.locator('#applyBtn')).toBeEnabled();
   await expect(page.locator('#sOF')).not.toHaveText('–');
+}
+
+// Splits a GLB file into its JSON and BIN chunks.
+export function parseGLB(buf) {
+  if (buf.subarray(0, 4).toString('latin1') !== 'glTF') throw new Error('not a GLB');
+  let off = 12, json = null, bin = null;
+  while (off < buf.length) {
+    const len = buf.readUInt32LE(off), type = buf.readUInt32LE(off + 4);
+    const data = buf.subarray(off + 8, off + 8 + len);
+    if (type === 0x4e4f534a) json = JSON.parse(data.toString('utf8'));
+    else if (type === 0x004e4942) bin = data;
+    off += 8 + len;
+  }
+  return { json, bin };
+}
+
+// Total triangle count of a GLB's primitives (triangle mode only).
+export function glbFaces(buf) {
+  const { json } = parseGLB(buf);
+  let n = 0;
+  for (const m of json.meshes || []) for (const p of m.primitives) {
+    const acc = json.accessors[p.indices ?? p.attributes.POSITION];
+    n += acc.count / 3;
+  }
+  return n;
 }
