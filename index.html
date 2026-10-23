@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GLB Optimizer</title>
+<title>GLB Viewer</title>
 <style>
   :root {
     --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
@@ -83,11 +83,11 @@
 <body>
 <div id="app">
   <aside>
-    <h1>GLB Optimizer</h1>
+    <h1>GLB Viewer &amp; Optimizer</h1>
     <div class="btns" style="margin-top:0">
       <button id="openBtn" class="primary">Open GLB…</button>
       <button id="sampleBtn">Load sample</button>
-      <input id="fileInput" type="file" accept=".glb,.gltf" hidden>
+      <input id="fileInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2" multiple hidden>
     </div>
 
     <h2>Stats</h2>
@@ -147,7 +147,7 @@
       <button id="fitBtn">Fit view</button>
       <span id="filename"></span>
     </div>
-    <div id="drop"><div class="box">Drop a <b>.glb</b> file here<br><span style="font-size:12px">or use “Open GLB…”</span></div></div>
+    <div id="drop"><div class="box">Drop a <b>.glb</b> file here<br><span style="font-size:12px">(or a .gltf together with its .bin/texture files) or use “Open GLB…”</span></div></div>
     <div id="busy"><div class="spinner"></div><span id="busyText">Working…</span></div>
   </main>
 </div>
@@ -207,7 +207,7 @@ renderer.setAnimationLoop(() => {
 // ---------- state ----------
 const state = {
   name: 'model', original: null, animations: [], originalBytes: 0,
-  result: null, view: 'result', subdivCache: new Map(), mixer: null, lastExport: null,
+  result: null, view: 'result', subdivCache: new Map(), mixer: null, lastExport: null, dirty: false,
 };
 
 // ---------- helpers ----------
@@ -234,20 +234,81 @@ function statsOf(root) {
 // Subdivision/smoothing would corrupt skinning weights and morph targets, so those meshes are only decimated.
 const isDeformable = (m) => m.isSkinnedMesh || Object.keys(m.geometry.morphAttributes || {}).length > 0;
 
+// ---------- memory ----------
+// Result trees share materials (and unchanged geometries) with the original, so only free geometries nobody else uses.
+const geomsOf = (root) => (root ? meshesOf(root).map((m) => m.geometry) : []);
+const cacheGeoms = () => [...state.subdivCache.values()].flat();
+function freeGeoms(list, keep) { for (const g of new Set(list)) if (g && !keep.has(g)) g.dispose(); }
+const inUse = () => new Set([...geomsOf(state.original), ...geomsOf(state.result), ...cacheGeoms()]);
+const discard = (root) => { if (root && root !== state.result) freeGeoms(geomsOf(root), inUse()); };
+function clearCache() {
+  const keep = new Set([...geomsOf(state.original), ...geomsOf(state.result)]);
+  freeGeoms(cacheGeoms(), keep); state.subdivCache.clear();
+}
+function dropResult() {
+  const old = state.result; if (!old) return;
+  scene.remove(old); state.result = null; state.lastExport = null; discard(old);
+}
+function disposeAll(root) { // full teardown of an original: geometries, materials, textures
+  const mats = new Set(), texs = new Set();
+  root.traverse((o) => {
+    if (!o.isMesh) return; o.geometry?.dispose();
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) if (m) mats.add(m);
+  });
+  for (const m of mats) { for (const v of Object.values(m)) if (v && v.isTexture) texs.add(v); m.dispose(); }
+  for (const t of texs) { t.dispose(); t.image?.close?.(); }
+}
+
 // ---------- loading ----------
 const draco = new DRACOLoader().setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
-const loader = new GLTFLoader().setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
+const makeLoader = (manager) => new GLTFLoader(manager).setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
+const loader = makeLoader();
 
-async function loadBuffer(buf, name) {
-  const gltf = await loader.parseAsync(buf, '');
-  setOriginal(gltf.scene, gltf.animations || [], buf.byteLength, name);
+// The glTF JSON of a .glb or .gltf buffer (null if unreadable). Only used for error messages.
+function gltfJSON(buf) {
+  try {
+    const dv = new DataView(buf), td = new TextDecoder();
+    if (dv.getUint32(0, true) === 0x46546C67) return JSON.parse(td.decode(new Uint8Array(buf, 20, dv.getUint32(12, true))));
+    return JSON.parse(td.decode(buf));
+  } catch { return null; }
+}
+
+// `files`: optional Map of file name -> File, for a .gltf that references external .bin/texture files.
+async function loadBuffer(buf, name, files = null) {
+  const urls = new Map(), missing = new Set();
+  let ld = loader, bytes = buf.byteLength;
+  if (/\.gltf$/i.test(name)) {
+    const mgr = new THREE.LoadingManager();
+    for (const [n, f] of files || []) { urls.set(n, URL.createObjectURL(f)); bytes += f.size; }
+    mgr.setURLModifier((url) => {
+      if (/^(data|blob):/.test(url)) return url;
+      const base = decodeURIComponent(url.split(/[?#]/)[0].split('/').pop());
+      if (urls.has(base)) return urls.get(base);
+      missing.add(base); return url;
+    });
+    ld = makeLoader(mgr);
+  }
+  const usesDraco = !!gltfJSON(buf)?.extensionsUsed?.includes('KHR_draco_mesh_compression');
+  if (usesDraco) draco.preload().decoderPending?.catch(() => {}); // failure is reported below, not as an unhandled rejection
+  let gltf;
+  try { gltf = await ld.parseAsync(buf, ''); }
+  catch (e) {
+    if (usesDraco) {
+      draco.decoderPending = null; // allow a retry once back online
+      throw new Error(`${name} is Draco-compressed; decoding it needs internet access (the decoder downloads from gstatic.com). ${e.message || e}`);
+    }
+    if (missing.size) throw new Error(`${name} references files that were not provided: ${[...missing].join(', ')}. Select/drop them together with the .gltf, or export the model as a single .glb.`);
+    if (/\.gltf$/i.test(name)) throw new Error(`Could not load ${name} (${e.message || e}). If it uses external files, select/drop them together with it, or export as .glb.`);
+    throw e;
+  } finally { for (const u of urls.values()) URL.revokeObjectURL(u); }
+  setOriginal(gltf.scene, gltf.animations || [], bytes, name);
 }
 
 function setOriginal(root, animations, bytes, name) {
-  if (state.original) scene.remove(state.original);
-  if (state.result) scene.remove(state.result);
+  dropResult(); clearCache();
+  if (state.original) { scene.remove(state.original); disposeAll(state.original); }
   state.original = root; state.animations = animations; state.originalBytes = bytes;
-  state.name = name.replace(/\.(glb|gltf)$/i, ''); state.subdivCache.clear(); state.result = null; state.lastExport = null;
+  state.name = name.replace(/\.(glb|gltf)$/i, ''); setDirty(false);
   scene.add(root);
   const s = statsOf(root);
   $('sOF').textContent = fmtInt(s.faces); $('sOV').textContent = fmtInt(s.verts);
@@ -263,6 +324,7 @@ function setOriginal(root, animations, bytes, name) {
 }
 
 function playAnim(root) {
+  if (state.mixer) { state.mixer.stopAllAction(); state.mixer.uncacheRoot(state.mixer.getRoot()); }
   state.mixer = null;
   if (!state.animations.length) return;
   state.mixer = new THREE.AnimationMixer(root);
@@ -270,17 +332,20 @@ function playAnim(root) {
 }
 
 $('openBtn').onclick = () => $('fileInput').click();
-$('fileInput').onchange = (e) => { const f = e.target.files[0]; if (f) openFile(f); e.target.value = ''; };
-function openFile(f) {
-  busy('Loading ' + f.name + '…', async () => loadBuffer(await f.arrayBuffer(), f.name));
+$('fileInput').onchange = (e) => { openFiles([...e.target.files]); e.target.value = ''; };
+// Opens the .glb/.gltf among `list`; the other files are made available to a .gltf by name.
+function openFiles(list) {
+  const f = list.find((x) => /\.glb$/i.test(x.name)) || list.find((x) => /\.gltf$/i.test(x.name));
+  if (!f) return log('Please choose a .glb file, or a .gltf together with its .bin/texture files.', 'warn');
+  const files = new Map(list.filter((x) => x !== f).map((x) => [x.name, x]));
+  busy('Loading ' + f.name + '…', async () => loadBuffer(await f.arrayBuffer(), f.name, files));
 }
 const main = $('main');
 main.addEventListener('dragover', (e) => { e.preventDefault(); main.classList.add('dragging'); });
 main.addEventListener('dragleave', (e) => { if (e.target === main || e.target.id === 'drop') main.classList.remove('dragging'); });
 main.addEventListener('drop', (e) => {
   e.preventDefault(); main.classList.remove('dragging');
-  const f = [...e.dataTransfer.files].find((x) => /\.(glb|gltf)$/i.test(x.name));
-  if (f) openFile(f); else log('Please drop a .glb or .gltf file.', 'warn');
+  openFiles([...e.dataTransfer.files]);
 });
 
 $('sampleBtn').onclick = () => busy('Building sample…', async () => {
@@ -333,10 +398,27 @@ $('ratio').oninput = () => {
   if (state.original) $('targetFaces').value = Math.max(4, Math.round(origFaces() * r / 100));
 };
 $('targetFaces').oninput = () => {
-  const f = origFaces(); if (!f) return;
-  const r = Math.round(+$('targetFaces').value / f * 100);
+  const f = origFaces(), v = +$('targetFaces').value; if (!f || !(v > 0)) return;
+  const r = Math.round(v / f * 100);
   $('ratio').value = Math.min(1600, Math.max(1, r)); $('ratioVal').textContent = r + '%';
 };
+// Normalize typed numbers: whole face count >= 4, size > 0; bad input falls back to a sane value.
+$('targetFaces').onchange = () => {
+  const v = Math.round(+$('targetFaces').value);
+  $('targetFaces').value = Number.isFinite(v) && v > 0 ? Math.max(4, v) : Math.max(4, origFaces());
+  $('targetFaces').oninput();
+};
+$('targetMB').onchange = () => { if (!(+$('targetMB').value > 0)) $('targetMB').value = Math.max(0.01, +(state.originalBytes / 1048576 / 2).toFixed(2)); };
+function setDirty(on) {
+  state.dirty = on;
+  $('downloadBtn').textContent = on ? 'Download GLB (re-runs)' : 'Download GLB';
+  $('downloadBtn').title = on ? 'Settings changed since Apply: Download will re-run with the current settings' : '';
+}
+// Any settings change after an Apply makes the shown result stale.
+for (const ev of ['input', 'change']) document.querySelector('aside').addEventListener(ev, (e) => {
+  if (!state.result || state.dirty || e.target.id === 'fileInput') return;
+  setDirty(true); log('Settings changed: press Apply to preview, or Download will re-run with the current settings.');
+});
 const bindVal = (id, suffix) => { const u = () => { $(id + 'Val').textContent = $(id).value + suffix; }; $(id).oninput = u; u(); };
 bindVal('maxError', '%'); bindVal('smoothIter', ''); bindVal('crease', '°');
 
@@ -359,12 +441,26 @@ function plainGeometry(src) {
 }
 const ensureIndexed = (g) => (g.index ? g : mergeVertices(g, 1e-6));
 
+// Returns null if the multi-material groups did not survive subdivision (caller keeps the original then).
 function subdivide(g, levels, type, preserveEdges) {
   g = plainGeometry(g); g.deleteAttribute('tangent');
   const out = LoopSubdivision.modify(g, levels, {
     split: type === 'loop', flatOnly: type === 'flat', preserveEdges, uvSmooth: false, maxTriangles: MAX_SUBDIV_FACES,
   });
+  const n = out.index ? out.index.count : out.attributes.position.count;
+  if (g.groups.length && (out.groups.length !== g.groups.length
+    || out.groups.some((gr, i) => gr.materialIndex !== g.groups[i].materialIndex || gr.count <= 0 || gr.start + gr.count > n))) return null;
   return mergeVertices(out, 1e-6);
+}
+
+// Draw ranges (in index units, whole triangles): the groups clamped to the index, or everything as one range.
+function groupRanges(g) {
+  const n = g.index ? g.index.count : g.attributes.position.count;
+  if (!g.groups.length) return [{ start: 0, count: n - n % 3 }];
+  return g.groups.map((gr) => {
+    const s = Math.min(gr.start, n), c = Math.min(gr.count, n - s);
+    return { start: s, count: c - c % 3, materialIndex: gr.materialIndex };
+  });
 }
 
 // Rebuild a geometry keeping only the vertices referenced by `idx`.
@@ -389,26 +485,38 @@ function compact(g, idx) {
   return out;
 }
 
+// Simplifies each material group separately (each gets its share of the target) and rebuilds the groups.
 function decimate(g, targetTris, maxErr, lockBorder) {
   g = ensureIndexed(plainGeometry(g));
-  const cur = triCount(g);
-  if (targetTris >= cur || g.groups.length > 1) return { geometry: g, error: 0 };
-  const idx = Uint32Array.from(g.index.array);
-  const pos = g.attributes.position.array;
-  const flags = lockBorder ? ['LockBorder'] : [];
-  let res;
-  const nrm = g.attributes.normal;
+  const ranges = groupRanges(g), cur = ranges.reduce((n, r) => n + r.count, 0) / 3;
+  if (targetTris >= cur) return { geometry: g, error: 0 };
+  const all = g.index.array, pos = g.attributes.position.array;
+  // Several groups: simplify each index subset on its own ('Sparse'), with the error kept absolute so it stays
+  // relative to the whole mesh. Without 'Sparse', coincident vertices of other groups would block collapses.
+  const sparse = ranges.length > 1, scale = sparse ? MeshoptSimplifier.getScale(pos, 3) || 1 : 1;
+  const flags = [...(lockBorder ? ['LockBorder'] : []), ...(sparse ? ['Sparse', 'ErrorAbsolute'] : [])];
+  maxErr *= scale;
+  const nrm = g.attributes.normal; let na = null;
   if (nrm && nrm.itemSize === 3) {
-    const a = new Float32Array(nrm.count * 3);
-    for (let i = 0; i < nrm.count; i++) { a[i * 3] = nrm.getX(i); a[i * 3 + 1] = nrm.getY(i); a[i * 3 + 2] = nrm.getZ(i); }
-    res = MeshoptSimplifier.simplifyWithAttributes(idx, pos, 3, a, 3, [0.5, 0.5, 0.5], null, Math.max(3, targetTris * 3), maxErr, flags);
-  } else {
-    res = MeshoptSimplifier.simplify(idx, pos, 3, Math.max(3, targetTris * 3), maxErr, flags);
+    na = new Float32Array(nrm.count * 3);
+    for (let i = 0; i < nrm.count; i++) { na[i * 3] = nrm.getX(i); na[i * 3 + 1] = nrm.getY(i); na[i * 3 + 2] = nrm.getZ(i); }
   }
-  const [newIdx, err] = res;
-  if (newIdx.length < 3) return { geometry: g, error: 0 };
-  const out = compact(g, newIdx);
+  const parts = [], groups = []; let len = 0, err = 0;
+  for (const r of ranges) {
+    if (r.count < 3) continue;
+    const idx = Uint32Array.from(all.subarray(r.start, r.start + r.count));
+    const t = Math.max(3, Math.round(r.count / 3 * targetTris / cur) * 3);
+    const [ni, e] = na ? MeshoptSimplifier.simplifyWithAttributes(idx, pos, 3, na, 3, [0.5, 0.5, 0.5], null, t, maxErr, flags)
+      : MeshoptSimplifier.simplify(idx, pos, 3, t, maxErr, flags);
+    if (ni.length < 3) continue;
+    parts.push(ni); groups.push([len, ni.length, r.materialIndex]); len += ni.length; err = Math.max(err, e / scale);
+  }
+  if (!len) return { geometry: g, error: 0 };
+  const idx = new Uint32Array(len); let o = 0;
+  for (const p of parts) { idx.set(p, o); o += p.length; }
+  const out = compact(g, idx);
   out.deleteAttribute('tangent');
+  if (g.groups.length) for (const [s, c, m] of groups) out.addGroup(s, c, m);
   return { geometry: out, error: err };
 }
 
@@ -500,12 +608,15 @@ function applyShading(g, mode, creaseDeg, positionsChanged) {
 
 // ---------- pipeline ----------
 function readSettings() {
+  const tf = +$('targetFaces').value, mb = +$('targetMB').value;
+  if (!(tf > 0)) log('Target faces is not a valid number; using the original face count.', 'warn');
+  if ($('useSize').checked && !(mb > 0)) log('Target size must be above 0 MB; size fitting skipped.', 'warn');
   return {
-    target: Math.max(4, Math.round(+$('targetFaces').value || 4)),
+    target: Math.max(4, Math.round(tf > 0 ? tf : origFaces())),
     levels: $('subdivLevels').value, type: $('subdivType').value, preserveEdges: $('preserveEdges').checked,
     maxErr: +$('maxError').value / 100, lockBorder: $('lockBorder').checked,
     smooth: +$('smoothIter').value, shading: $('shading').value, crease: +$('crease').value,
-    useSize: $('useSize').checked, targetBytes: +$('targetMB').value * 1048576,
+    useSize: $('useSize').checked && mb > 0, targetBytes: mb * 1048576,
     texSize: +$('texSize').value, texFormat: $('texFormat').value,
   };
 }
@@ -527,8 +638,15 @@ function stageA(s) {
   const L = resolveLevels(s, total, subdividable);
   const key = [L, s.type, s.preserveEdges].join('|');
   if (!state.subdivCache.has(key)) {
-    const geoms = srcMeshes.map((m) => (L > 0 && !isDeformable(m)) ? subdivide(m.geometry, L, s.type, s.preserveEdges) : m.geometry);
-    state.subdivCache.clear(); state.subdivCache.set(key, geoms);
+    let lost = 0;
+    const geoms = srcMeshes.map((m) => {
+      if (!(L > 0) || isDeformable(m)) return m.geometry;
+      const g = subdivide(m.geometry, L, s.type, s.preserveEdges);
+      if (!g) lost++;
+      return g || m.geometry;
+    });
+    clearCache(); state.subdivCache.set(key, geoms);
+    if (lost) log(`${lost} multi-material mesh(es) were not subdivided (material groups could not be kept).`, 'warn');
     if (L > 0) log(`Subdivided ${L} level(s) (${s.type}) → ${fmtInt(geoms.reduce((n, g) => n + triCount(g), 0))} faces`);
     const skipped = srcMeshes.filter(isDeformable).length;
     if (L > 0 && skipped) log(`${skipped} skinned/morph mesh(es) were not subdivided (would break animation).`, 'warn');
@@ -607,39 +725,46 @@ async function runPipeline() {
   const t0 = performance.now();
   const { geoms } = stageA(s);
   const avail = geoms.reduce((n, g) => n + triCount(g), 0);
-  let target = Math.min(s.target, avail);
-  let { root, maxErr } = stageB(s, geoms, target);
-  let buf = await exportGLB(root, state.animations, s);
+  // Candidates that get replaced are freed right away; on error the previous result stays untouched.
+  let root = null, maxErr = 0, buf = null, best = null;
+  const use = (r) => { if (root && root !== r.root) discard(root); ({ root, maxErr } = r); };
+  try {
+    use(stageB(s, geoms, Math.min(s.target, avail)));
+    buf = await exportGLB(root, state.animations, s);
 
-  if (s.useSize && buf.byteLength > s.targetBytes) {
-    // Size ≈ geometry bytes + fixed overhead (textures, JSON, animation). Binary-search the face count.
-    const overhead = buf.byteLength - geometryBytes(root);
-    if (overhead >= s.targetBytes) {
-      log(`Textures/animation alone take ${fmtBytes(overhead)}; lower the max texture size or use JPEG to reach ${fmtBytes(s.targetBytes)}.`, 'warn');
-    }
-    let lo = 4, hi = statsOf(root).faces, best = null;
-    for (let i = 0; i < 18 && hi - lo > Math.max(8, hi * 0.005); i++) {
-      const mid = Math.floor((lo + hi) / 2);
-      const r = stageB(s, geoms, mid);
-      if (geometryBytes(r.root) + overhead <= s.targetBytes) { lo = mid; best = r; } else hi = mid;
-    }
-    if (best) {
-      ({ root, maxErr } = best);
-      buf = await exportGLB(root, state.animations, s);
-      // overhead estimate can drift slightly; tighten once if still over
-      for (let k = 0; k < 3 && buf.byteLength > s.targetBytes; k++) {
-        const f = Math.floor(statsOf(root).faces * (s.targetBytes / buf.byteLength) * 0.97);
-        ({ root, maxErr } = stageB(s, geoms, Math.max(4, f)));
+    if (s.useSize && buf.byteLength > s.targetBytes) {
+      // Size ≈ geometry bytes + fixed overhead (textures, JSON, animation). Binary-search the face count.
+      const overhead = buf.byteLength - geometryBytes(root);
+      if (overhead >= s.targetBytes) {
+        log(`Textures/animation alone take ${fmtBytes(overhead)}; lower the max texture size or use JPEG to reach ${fmtBytes(s.targetBytes)}.`, 'warn');
+      }
+      let lo = 4, hi = statsOf(root).faces;
+      for (let i = 0; i < 18 && hi - lo > Math.max(8, hi * 0.005); i++) {
+        const mid = Math.floor((lo + hi) / 2);
+        const r = stageB(s, geoms, mid);
+        if (geometryBytes(r.root) + overhead <= s.targetBytes) { lo = mid; if (best) discard(best.root); best = r; }
+        else { hi = mid; discard(r.root); }
+      }
+      if (best) {
+        use(best); best = null;
+        buf = await exportGLB(root, state.animations, s);
+        // overhead estimate can drift slightly; tighten once if still over
+        for (let k = 0; k < 3 && buf.byteLength > s.targetBytes; k++) {
+          const f = Math.floor(statsOf(root).faces * (s.targetBytes / buf.byteLength) * 0.97);
+          use(stageB(s, geoms, Math.max(4, f)));
+          buf = await exportGLB(root, state.animations, s);
+        }
+      } else {
+        use(stageB(s, geoms, 4));
         buf = await exportGLB(root, state.animations, s);
       }
-    } else {
-      ({ root, maxErr } = stageB(s, geoms, 4));
-      buf = await exportGLB(root, state.animations, s);
     }
-  }
+  } catch (e) { discard(root); if (best) discard(best.root); throw e; }
 
-  if (state.result) scene.remove(state.result);
+  const old = state.result;
+  if (old) scene.remove(old);
   state.result = root; state.lastExport = buf;
+  discard(old); setDirty(false);
   scene.add(root);
   const st = statsOf(root);
   $('sRF').textContent = fmtInt(st.faces); $('sRV').textContent = fmtInt(st.verts);
@@ -656,14 +781,17 @@ async function runPipeline() {
 
 $('applyBtn').onclick = () => busy('Optimizing…', runPipeline);
 $('resetBtn').onclick = () => {
-  if (state.result) scene.remove(state.result);
-  state.result = null; state.lastExport = null; state.subdivCache.clear();
+  dropResult(); clearCache(); setDirty(false);
   for (const id of ['sRF', 'sRV', 'sRM', 'sRS']) $(id).textContent = '–';
   $('targetFaces').value = origFaces(); $('ratio').value = 100; $('ratioVal').textContent = '100%';
   setView('original'); playAnim(state.original); log('Reset to original.');
 };
 $('downloadBtn').onclick = () => busy('Exporting…', async () => {
-  if (!state.lastExport) await runPipeline();
+  if (!state.lastExport || state.dirty) {
+    try { await runPipeline(); }
+    catch (e) { console.error(e); return log('Download cancelled: optimizing failed (' + (e.message || e) + ').', 'err'); }
+  }
+  if (!state.lastExport || state.dirty) return log('Download cancelled: there is no up-to-date result to export.', 'err');
   const blob = new Blob([state.lastExport], { type: 'model/gltf-binary' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = state.name + '_optimized.glb';
@@ -672,7 +800,7 @@ $('downloadBtn').onclick = () => busy('Exporting…', async () => {
   log(`Downloaded ${a.download} (${fmtBytes(blob.size)})`, 'ok');
 });
 
-window.__glbopt = { THREE, state, runPipeline, loadBuffer, exportGLB }; // handy for debugging in the console
+window.__glbopt = { THREE, state, runPipeline, loadBuffer, exportGLB, setOriginal, decimate, subdivide, readSettings }; // handy for debugging in the console
 log('Ready. Open a .glb, drop one on the viewer, or load the sample.');
 </script>
 </body>
