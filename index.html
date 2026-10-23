@@ -208,7 +208,7 @@ renderer.setAnimationLoop(() => {
 const state = {
   name: 'model', original: null, animations: [], originalBytes: 0,
   result: null, view: 'result', subdivCache: new Map(), mixer: null, lastExport: null, dirty: false,
-  busy: false, settingsGen: 0,
+  busy: false, lastKey: null,
 };
 
 // ---------- helpers ----------
@@ -218,15 +218,16 @@ function log(msg, cls = '') {
   const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = msg;
   $('log').appendChild(d); $('log').scrollTop = 1e9;
 }
-// Runs one async job at a time; the sidebar is made inert (the overlay covers the viewer) until it ends.
+// Runs one async job at a time; the sidebar controls (not the log) are made inert, the overlay covers the viewer.
+const setInert = (on) => { for (const el of document.querySelectorAll('aside > :not(#log)')) el.inert = on; };
 async function busy(text, fn) {
   if (state.busy) return log('Still working, please wait.', 'warn');
-  state.busy = true; document.querySelector('aside').inert = true;
+  state.busy = true; setInert(true);
   $('busyText').textContent = text; $('busy').classList.add('show');
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 20)));
   try { return await fn(); }
   catch (e) { console.error(e); log('Error: ' + (e.message || e), 'err'); }
-  finally { $('busy').classList.remove('show'); document.querySelector('aside').inert = false; state.busy = false; }
+  finally { $('busy').classList.remove('show'); setInert(false); state.busy = false; }
 }
 const triCount = (g) => (g.index ? g.index.count : g.attributes.position.count) / 3 | 0;
 function meshesOf(root) { const out = []; root.traverse((o) => { if (o.isMesh && o.geometry?.attributes.position) out.push(o); }); return out; }
@@ -276,34 +277,22 @@ const makeLoader = (manager, probe) => new GLTFLoader(manager).setDRACOLoader(dr
     return { name: 'glbopt_probe' };
   });
 
-const normPath = (p) => {
-  const out = [];
-  for (const part of p.replace(/\\/g, '/').split('/')) {
-    if (part === '..') out.pop(); else if (part && part !== '.') out.push(part);
-  }
-  return out.join('/');
-};
 const decode = (u) => { try { return decodeURIComponent(u); } catch { return u; } };
 
-// `files`: optional list of Files a .gltf may reference (.bin, textures). They are matched by path (relative to
-// `baseDir`, the .gltf's folder, when the browser gives folder paths), else by file name.
-async function loadBuffer(buf, name, files = [], baseDir = '') {
+// `files`: optional list of Files a .gltf may reference (.bin, textures), matched by file name.
+async function loadBuffer(buf, name, files = []) {
   files = files instanceof Map ? [...files.values()] : [...(files || [])];
   const urls = new Map(), used = new Set(), missing = new Set(), ambiguous = new Set(), probe = {};
   let mgr;
   if (/\.gltf$/i.test(name)) {
-    const entries = files.map((f) => [normPath(f.webkitRelativePath || f.name), f]);
-    const find = (path) => {
-      const base = path.split('/').pop(), exact = entries.filter(([k]) => k === path);
-      const same = exact.length ? exact : entries.filter(([k]) => k.split('/').pop() === base);
-      if (same.length > 1) ambiguous.add(base);
-      return same[0]?.[1];
-    };
     mgr = new THREE.LoadingManager();
     mgr.setURLModifier((url) => {
       if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url; // data:, blob:, http(s): ... are left alone
-      const rel = normPath(decode(url.split(/[?#]/)[0])), f = find(normPath(baseDir + '/' + rel));
-      if (!f) { missing.add(rel); return url; }
+      const rel = decode(url.split(/[?#]/)[0]), base = rel.split(/[\\/]/).pop();
+      const same = files.filter((f) => f.name === base), f = same[0];
+      if (same.length > 1) ambiguous.add(base);
+      // never fetch an unprovided file from wherever the page is hosted: hand the loader a URL that always fails
+      if (!f) { missing.add(rel); return 'blob:null/missing/' + encodeURIComponent(base); }
       used.add(f);
       if (!urls.has(f)) urls.set(f, URL.createObjectURL(f));
       return urls.get(f);
@@ -363,8 +352,8 @@ $('fileInput').onchange = (e) => { openFiles([...e.target.files]); e.target.valu
 function openFiles(list) {
   const f = list.find((x) => /\.glb$/i.test(x.name)) || list.find((x) => /\.gltf$/i.test(x.name));
   if (!f) return log('Please choose a .glb file, or a .gltf together with its .bin/texture files.', 'warn');
-  const files = list.filter((x) => x !== f), dir = (f.webkitRelativePath || '').split('/').slice(0, -1).join('/');
-  busy('Loading ' + f.name + '…', async () => loadBuffer(await f.arrayBuffer(), f.name, files, dir));
+  const files = list.filter((x) => x !== f);
+  busy('Loading ' + f.name + '…', async () => loadBuffer(await f.arrayBuffer(), f.name, files));
 }
 const main = $('main');
 main.addEventListener('dragover', (e) => { e.preventDefault(); main.classList.add('dragging'); });
@@ -429,23 +418,22 @@ $('targetFaces').oninput = () => {
   $('ratio').value = Math.min(1600, Math.max(1, r)); $('ratioVal').textContent = r + '%';
 };
 // Normalize typed numbers: whole face count >= 4, size > 0; bad input falls back to a sane value.
-$('targetFaces').onchange = () => {
-  const v = Math.round(+$('targetFaces').value);
-  $('targetFaces').value = Number.isFinite(v) && v > 0 ? Math.max(4, v) : Math.max(4, origFaces());
-  $('targetFaces').oninput();
-};
+// Whole face count >= 4; anything unusable (empty, NaN, <= 0) falls back to the original face count.
+const validTarget = (v) => (v = +v, Number.isFinite(v) && v > 0 ? Math.max(4, Math.round(v)) : Math.max(4, origFaces()));
+$('targetFaces').onchange = () => { $('targetFaces').value = validTarget($('targetFaces').value); $('targetFaces').oninput(); };
 $('targetMB').onchange = () => { if (!(+$('targetMB').value > 0)) $('targetMB').value = Math.max(0.01, +(state.originalBytes / 1048576 / 2).toFixed(2)); };
 function setDirty(on) {
   state.dirty = on;
   $('downloadBtn').textContent = on ? 'Download GLB (re-runs)' : 'Download GLB';
   $('downloadBtn').title = on ? 'Settings changed since Apply: Download will re-run with the current settings' : '';
 }
-// Any settings change after an Apply makes the shown result stale.
+// The result is stale when the output-affecting settings differ from those of the last successful run.
+const settingsKey = (s) => JSON.stringify({ ...s, targetBytes: s.useSize ? s.targetBytes : 0 });
 for (const ev of ['input', 'change']) document.querySelector('aside').addEventListener(ev, (e) => {
-  if (e.target.id === 'fileInput') return;
-  state.settingsGen++;
-  if (!state.result || state.dirty) return;
-  setDirty(true); log('Settings changed: press Apply to preview, or Download will re-run with the current settings.');
+  if (e.target.id === 'fileInput' || !state.result) return;
+  const stale = settingsKey(readSettings()) !== state.lastKey;
+  if (stale && !state.dirty) log('Settings changed: press Apply to preview, or Download will re-run with the current settings.');
+  setDirty(stale);
 });
 const bindVal = (id, suffix) => { const u = () => { $(id + 'Val').textContent = $(id).value + suffix; }; $(id).oninput = u; u(); };
 bindVal('maxError', '%'); bindVal('smoothIter', ''); bindVal('crease', '°');
@@ -544,8 +532,10 @@ function seamLock(g, ranges) {
   return lock;
 }
 
-// Per source geometry: indexed copy, group ranges, seam locks, normals. Cached so the size search reuses them.
-const prepCache = new WeakMap();
+// Per source geometry: indexed copy, group ranges, seam locks, normals. Cached so the size search reuses them;
+// cleared after each run. The cached copies are never shown (decimate returns new geometries).
+const prepCache = new Map();
+function clearPrep() { for (const P of prepCache.values()) P.g.dispose(); prepCache.clear(); }
 function prepare(src) {
   let P = prepCache.get(src); if (P) return P;
   const g = ensureIndexed(plainGeometry(src)), ranges = groupRanges(g);
@@ -678,12 +668,12 @@ function applyShading(g, mode, creaseDeg, positionsChanged) {
 }
 
 // ---------- pipeline ----------
-function readSettings() {
-  const tf = +$('targetFaces').value, mb = +$('targetMB').value;
-  if (!(tf > 0)) log('Target faces is not a valid number; using the original face count.', 'warn');
-  if ($('useSize').checked && !(mb > 0)) log('Target size must be above 0 MB; size fitting skipped.', 'warn');
+function readSettings(warn = false) {
+  const tf = $('targetFaces').value, mb = +$('targetMB').value;
+  if (warn && !(+tf > 0)) log('Target faces is not a valid number; using the original face count.', 'warn');
+  if (warn && $('useSize').checked && !(mb > 0)) log('Target size must be above 0 MB; size fitting skipped.', 'warn');
   return {
-    target: Math.max(4, Math.round(tf > 0 ? tf : origFaces())),
+    target: validTarget(tf),
     levels: $('subdivLevels').value, type: $('subdivType').value, preserveEdges: $('preserveEdges').checked,
     maxErr: +$('maxError').value / 100, lockBorder: $('lockBorder').checked,
     smooth: +$('smoothIter').value, shading: $('shading').value, crease: +$('crease').value,
@@ -793,9 +783,8 @@ async function exportGLB(root, animations, s = null) {
 
 async function runPipeline() {
   if (!state.original) return;
-  const orig = state.original, gen = state.settingsGen;
+  const orig = state.original, s = readSettings(true);
   await MeshoptSimplifier.ready;
-  const s = readSettings();
   const t0 = performance.now();
   const { geoms } = stageA(s);
   const avail = geoms.reduce((n, g) => n + triCount(g), 0);
@@ -834,12 +823,14 @@ async function runPipeline() {
       }
     }
   } catch (e) { discard(root); if (best) discard(best.root); throw e; }
+  finally { clearPrep(); }
 
   if (state.original !== orig) { discard(root); return log('A new model was loaded meanwhile; result discarded.', 'warn'); }
   const old = state.result;
   if (old) scene.remove(old);
   state.result = root; state.lastExport = buf;
-  discard(old); setDirty(state.settingsGen !== gen); // settings changed during the run: still stale
+  state.lastKey = settingsKey(s);
+  discard(old); setDirty(settingsKey(readSettings()) !== state.lastKey); // settings changed during the run: still stale
   scene.add(root);
   const st = statsOf(root);
   $('sRF').textContent = fmtInt(st.faces); $('sRV').textContent = fmtInt(st.verts);
@@ -856,7 +847,7 @@ async function runPipeline() {
 
 $('applyBtn').onclick = () => busy('Optimizing…', runPipeline);
 $('resetBtn').onclick = () => {
-  dropResult(); clearCache(); setDirty(false);
+  dropResult(); clearCache(); clearPrep(); setDirty(false);
   for (const id of ['sRF', 'sRV', 'sRM', 'sRS']) $(id).textContent = '–';
   $('targetFaces').value = origFaces(); $('ratio').value = 100; $('ratioVal').textContent = '100%';
   setView('original'); playAnim(state.original); log('Reset to original.');
