@@ -208,6 +208,7 @@ renderer.setAnimationLoop(() => {
 const state = {
   name: 'model', original: null, animations: [], originalBytes: 0,
   result: null, view: 'result', subdivCache: new Map(), mixer: null, lastExport: null, dirty: false,
+  busy: false, settingsGen: 0,
 };
 
 // ---------- helpers ----------
@@ -217,12 +218,15 @@ function log(msg, cls = '') {
   const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = msg;
   $('log').appendChild(d); $('log').scrollTop = 1e9;
 }
+// Runs one async job at a time; the sidebar is made inert (the overlay covers the viewer) until it ends.
 async function busy(text, fn) {
+  if (state.busy) return log('Still working, please wait.', 'warn');
+  state.busy = true; document.querySelector('aside').inert = true;
   $('busyText').textContent = text; $('busy').classList.add('show');
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 20)));
   try { return await fn(); }
   catch (e) { console.error(e); log('Error: ' + (e.message || e), 'err'); }
-  finally { $('busy').classList.remove('show'); }
+  finally { $('busy').classList.remove('show'); document.querySelector('aside').inert = false; state.busy = false; }
 }
 const triCount = (g) => (g.index ? g.index.count : g.attributes.position.count) / 3 | 0;
 function meshesOf(root) { const out = []; root.traverse((o) => { if (o.isMesh && o.geometry?.attributes.position) out.push(o); }); return out; }
@@ -261,16 +265,16 @@ function disposeAll(root) { // full teardown of an original: geometries, materia
 
 // ---------- loading ----------
 const draco = new DRACOLoader().setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
-// The probe plugin runs before GLTFLoader sets up Draco, so the decoder download can be watched (and its failure
-// reported) without parsing the JSON a second time.
-let probe = {};
-const probePlugin = (parser) => {
-  if (parser.json.extensionsUsed?.includes('KHR_draco_mesh_compression'))
-    probe.decoderOk = draco.preload().decoderPending.then(() => true, () => false);
-  return { name: 'glbopt_probe' };
-};
-const makeLoader = (manager) => new GLTFLoader(manager).setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder).register(probePlugin);
-const loader = makeLoader();
+// three r170 internal: DRACOLoader keeps a failed decoder download in `decoderPending`; clear it so a later load retries.
+const resetDracoDecoder = () => { draco.decoderPending = null; };
+// `probe` (one per load) learns from a plugin, which runs before GLTFLoader sets up Draco, whether the decoder
+// download succeeded, without parsing the JSON a second time.
+const makeLoader = (manager, probe) => new GLTFLoader(manager).setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder)
+  .register((parser) => {
+    if (parser.json.extensionsUsed?.includes('KHR_draco_mesh_compression'))
+      probe.decoderOk = draco.preload().decoderPending.then(() => true, () => false);
+    return { name: 'glbopt_probe' };
+  });
 
 const normPath = (p) => {
   const out = [];
@@ -281,43 +285,47 @@ const normPath = (p) => {
 };
 const decode = (u) => { try { return decodeURIComponent(u); } catch { return u; } };
 
-// `files`: optional list of Files a .gltf may reference (.bin, textures). Matched by relative path, then by name.
-async function loadBuffer(buf, name, files = []) {
+// `files`: optional list of Files a .gltf may reference (.bin, textures). They are matched by path (relative to
+// `baseDir`, the .gltf's folder, when the browser gives folder paths), else by file name.
+async function loadBuffer(buf, name, files = [], baseDir = '') {
   files = files instanceof Map ? [...files.values()] : [...(files || [])];
-  const urls = new Map(), used = new Set(), missing = new Set();
-  let ld = loader;
+  const urls = new Map(), used = new Set(), missing = new Set(), ambiguous = new Set(), probe = {};
+  let mgr;
   if (/\.gltf$/i.test(name)) {
     const entries = files.map((f) => [normPath(f.webkitRelativePath || f.name), f]);
     const find = (path) => {
-      const base = path.split('/').pop();
-      return (entries.find(([k]) => k === path) || entries.find(([k]) => k.endsWith('/' + path))
-        || entries.find(([k]) => k.split('/').pop() === base) || [])[1];
+      const base = path.split('/').pop(), exact = entries.filter(([k]) => k === path);
+      const same = exact.length ? exact : entries.filter(([k]) => k.split('/').pop() === base);
+      if (same.length > 1) ambiguous.add(base);
+      return same[0]?.[1];
     };
-    const mgr = new THREE.LoadingManager();
+    mgr = new THREE.LoadingManager();
     mgr.setURLModifier((url) => {
-      if (/^(data|blob):/.test(url)) return url;
-      const path = normPath(decode(url.split(/[?#]/)[0]));
-      const f = find(path);
-      if (!f) { missing.add(path); return url; }
+      if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url; // data:, blob:, http(s): ... are left alone
+      const rel = normPath(decode(url.split(/[?#]/)[0])), f = find(normPath(baseDir + '/' + rel));
+      if (!f) { missing.add(rel); return url; }
       used.add(f);
       if (!urls.has(f)) urls.set(f, URL.createObjectURL(f));
       return urls.get(f);
     });
-    ld = makeLoader(mgr);
   }
-  probe = {};
+  const revoke = () => { for (const u of urls.values()) URL.revokeObjectURL(u); };
   let gltf;
-  try { gltf = await ld.parseAsync(buf, ''); }
+  try { gltf = await makeLoader(mgr, probe).parseAsync(buf, ''); }
   catch (e) {
-    const msg = e.message || e;
-    if (missing.size) throw new Error(`${name} references files that were not provided: ${[...missing].join(', ')}. Select/drop them together with the .gltf, or export the model as a single .glb.`);
+    setTimeout(revoke, 10000); // other requests of this parse may still be in flight
+    const msg = e.message || e, list = [...missing].join(', ');
     if (probe.decoderOk && !(await probe.decoderOk)) {
-      draco.decoderPending = null; // allow a retry once back online
-      throw new Error(`${name} is Draco-compressed; decoding it needs internet access (the decoder downloads from gstatic.com). ${msg}`);
+      resetDracoDecoder();
+      throw new Error(`${name} is Draco-compressed; decoding it needs internet access (the decoder downloads from gstatic.com).`
+        + (missing.size ? ` Also, these referenced files were not provided: ${list}.` : '') + ` ${msg}`);
     }
+    if (missing.size) throw new Error(`${name} references files that were not provided: ${list}. Select/drop them together with the .gltf, or export the model as a single .glb.`);
     if (/\.gltf$/i.test(name)) throw new Error(`Could not load ${name} (${msg}). If it uses external files, select/drop them together with it, or export as .glb.`);
     throw e;
-  } finally { for (const u of urls.values()) URL.revokeObjectURL(u); }
+  }
+  revoke();
+  if (ambiguous.size) log(`Several provided files are named ${[...ambiguous].join(', ')}; used the first match. Select only the files of one model.`, 'warn');
   if (missing.size) log(`${name}: these referenced files were not provided and are missing: ${[...missing].join(', ')}`, 'warn');
   setOriginal(gltf.scene, gltf.animations || [], buf.byteLength + [...used].reduce((n, f) => n + f.size, 0), name);
 }
@@ -355,8 +363,8 @@ $('fileInput').onchange = (e) => { openFiles([...e.target.files]); e.target.valu
 function openFiles(list) {
   const f = list.find((x) => /\.glb$/i.test(x.name)) || list.find((x) => /\.gltf$/i.test(x.name));
   if (!f) return log('Please choose a .glb file, or a .gltf together with its .bin/texture files.', 'warn');
-  const files = list.filter((x) => x !== f);
-  busy('Loading ' + f.name + '…', async () => loadBuffer(await f.arrayBuffer(), f.name, files));
+  const files = list.filter((x) => x !== f), dir = (f.webkitRelativePath || '').split('/').slice(0, -1).join('/');
+  busy('Loading ' + f.name + '…', async () => loadBuffer(await f.arrayBuffer(), f.name, files, dir));
 }
 const main = $('main');
 main.addEventListener('dragover', (e) => { e.preventDefault(); main.classList.add('dragging'); });
@@ -434,7 +442,9 @@ function setDirty(on) {
 }
 // Any settings change after an Apply makes the shown result stale.
 for (const ev of ['input', 'change']) document.querySelector('aside').addEventListener(ev, (e) => {
-  if (!state.result || state.dirty || e.target.id === 'fileInput') return;
+  if (e.target.id === 'fileInput') return;
+  state.settingsGen++;
+  if (!state.result || state.dirty) return;
   setDirty(true); log('Settings changed: press Apply to preview, or Download will re-run with the current settings.');
 });
 const bindVal = (id, suffix) => { const u = () => { $(id + 'Val').textContent = $(id).value + suffix; }; $(id).oninput = u; u(); };
@@ -444,7 +454,7 @@ bindVal('maxError', '%'); bindVal('smoothIter', ''); bindVal('crease', '°');
 // Plain (non-interleaved) copy of a geometry with float positions, safe to modify.
 function plainGeometry(src) {
   const g = new THREE.BufferGeometry();
-  for (const [k, a] of Object.entries(src.attributes)) g.setAttribute(k, a.isInterleavedBufferAttribute ? a.clone() : a.clone());
+  for (const [k, a] of Object.entries(src.attributes)) g.setAttribute(k, a.clone());
   for (const [k, arr] of Object.entries(src.morphAttributes || {})) g.morphAttributes[k] = arr.map((a) => a.clone());
   g.morphTargetsRelative = src.morphTargetsRelative;
   if (src.index) g.setIndex(src.index.clone());
@@ -507,47 +517,72 @@ function compact(g, idx) {
   return out;
 }
 
+// Vertices where material groups meet. A vertex is locked if a vertex of another group lies in its own or one of
+// the 26 neighbouring cells of a fine grid, so near-identical copies that round into different cells still match.
+function seamLock(g, ranges) {
+  const p = g.attributes.position.array, n = g.attributes.position.count, all = g.index.array;
+  g.computeBoundingBox();
+  const eps = Math.max(g.boundingBox.getSize(new THREE.Vector3()).length() * 1e-6, 1e-9);
+  const vg = new Int32Array(n).fill(-1); // group of each vertex, -2 if used by several
+  ranges.forEach((r, k) => { for (let i = r.start; i < r.start + r.count; i++) { const v = all[i]; vg[v] = vg[v] === -1 || vg[v] === k ? k : -2; } });
+  const c = new Int32Array(n * 3);
+  for (let i = 0; i < n * 3; i++) c[i] = Math.round(p[i] / eps);
+  const cells = new Map();
+  for (let v = 0; v < n; v++) if (vg[v] !== -1) {
+    const k = c[v * 3] + ',' + c[v * 3 + 1] + ',' + c[v * 3 + 2], o = cells.get(k);
+    cells.set(k, o === undefined || o === vg[v] ? vg[v] : -2);
+  }
+  const lock = new Uint8Array(n);
+  for (let v = 0; v < n; v++) {
+    if (vg[v] === -1) continue;
+    if (vg[v] === -2) { lock[v] = 1; continue; }
+    search: for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let d = -1; d <= 1; d++) {
+      const o = cells.get((c[v * 3] + a) + ',' + (c[v * 3 + 1] + b) + ',' + (c[v * 3 + 2] + d));
+      if (o !== undefined && o !== vg[v]) { lock[v] = 1; break search; }
+    }
+  }
+  return lock;
+}
+
+// Per source geometry: indexed copy, group ranges, seam locks, normals. Cached so the size search reuses them.
+const prepCache = new WeakMap();
+function prepare(src) {
+  let P = prepCache.get(src); if (P) return P;
+  const g = ensureIndexed(plainGeometry(src)), ranges = groupRanges(g);
+  P = { g, ranges };
+  if (ranges) {
+    // Several groups: simplify each index subset on its own ('Sparse'), with the error kept absolute so it stays
+    // relative to the whole mesh. Without 'Sparse', coincident vertices of other groups would block collapses.
+    P.cur = ranges.reduce((n, r) => n + r.count, 0) / 3;
+    P.sparse = ranges.length > 1;
+    P.scale = P.sparse ? MeshoptSimplifier.getScale(g.attributes.position.array, 3) || 1 : 1;
+    P.lock = P.sparse ? seamLock(g, ranges) : null;
+    const nrm = g.attributes.normal; P.na = new Float32Array(0); P.ns = 0; P.nw = [];
+    if (nrm && nrm.itemSize === 3) {
+      const na = P.na = new Float32Array(nrm.count * 3); P.ns = 3; P.nw = [0.5, 0.5, 0.5];
+      for (let i = 0; i < nrm.count; i++) { na[i * 3] = nrm.getX(i); na[i * 3 + 1] = nrm.getY(i); na[i * 3 + 2] = nrm.getZ(i); }
+    }
+  }
+  prepCache.set(src, P); return P;
+}
+
 // Simplifies each material group separately (each gets its share of the target) and rebuilds the groups.
-// Vertices on the seam between groups (matched by position) are locked so the groups stay stitched together.
-function decimate(g, targetTris, maxErr, lockBorder) {
-  g = ensureIndexed(plainGeometry(g));
-  const ranges = groupRanges(g);
-  if (!ranges) return { geometry: g, error: 0 };
-  const cur = ranges.reduce((n, r) => n + r.count, 0) / 3;
-  if (targetTris >= cur) return { geometry: g, error: 0 };
+// Seam vertices between groups are locked so the groups stay stitched together.
+function decimate(src, targetTris, maxErr, lockBorder) {
+  const P = prepare(src), { g, ranges, cur, scale } = P;
+  if (!ranges || targetTris >= cur) return { geometry: plainGeometry(g), error: 0 };
   const all = g.index.array, pos = g.attributes.position.array;
-  // Several groups: simplify each index subset on its own ('Sparse'), with the error kept absolute so it stays
-  // relative to the whole mesh. Without 'Sparse', coincident vertices of other groups would block collapses.
-  const sparse = ranges.length > 1, scale = sparse ? MeshoptSimplifier.getScale(pos, 3) || 1 : 1;
-  const flags = [...(lockBorder ? ['LockBorder'] : []), ...(sparse ? ['Sparse', 'ErrorAbsolute'] : [])];
-  maxErr *= scale;
-  let lock = null;
-  if (sparse) {
-    const { ids, count } = weld(g), owner = new Int32Array(count).fill(-1), seam = new Uint8Array(count);
-    ranges.forEach((r, k) => {
-      for (let i = r.start; i < r.start + r.count; i++) {
-        const w = ids[all[i]];
-        if (owner[w] < 0) owner[w] = k; else if (owner[w] !== k) seam[w] = 1;
-      }
-    });
-    lock = new Uint8Array(ids.length);
-    for (let i = 0; i < ids.length; i++) lock[i] = seam[ids[i]];
-  }
-  const nrm = g.attributes.normal; let na = new Float32Array(0), ns = 0, nw = [];
-  if (nrm && nrm.itemSize === 3) {
-    na = new Float32Array(nrm.count * 3); ns = 3; nw = [0.5, 0.5, 0.5];
-    for (let i = 0; i < nrm.count; i++) { na[i * 3] = nrm.getX(i); na[i * 3 + 1] = nrm.getY(i); na[i * 3 + 2] = nrm.getZ(i); }
-  }
+  const flags = [...(lockBorder ? ['LockBorder'] : []), ...(P.sparse ? ['Sparse', 'ErrorAbsolute'] : [])];
   const parts = [], groups = []; let len = 0, err = 0;
   for (const r of ranges) {
     if (r.count < 3) continue;
     const idx = Uint32Array.from(all.subarray(r.start, r.start + r.count));
     const t = Math.max(3, Math.round(r.count / 3 * targetTris / cur) * 3);
-    const [ni, e] = MeshoptSimplifier.simplifyWithAttributes(idx, pos, 3, na, ns, nw, lock, t, maxErr, flags);
+    const [ni, e] = MeshoptSimplifier.simplifyWithAttributes(idx, pos, 3, P.na, P.ns, P.nw, P.lock, t, maxErr * scale, flags);
     if (ni.length < 3) continue;
     parts.push(ni); groups.push([len, ni.length, r.materialIndex]); len += ni.length; err = Math.max(err, e / scale);
   }
-  if (!len) return { geometry: g, error: 0 };
+  if (!len) return { geometry: plainGeometry(g), error: 0 };
   const idx = new Uint32Array(len); let o = 0;
   for (const p of parts) { idx.set(p, o); o += p.length; }
   const out = compact(g, idx);
@@ -758,6 +793,7 @@ async function exportGLB(root, animations, s = null) {
 
 async function runPipeline() {
   if (!state.original) return;
+  const orig = state.original, gen = state.settingsGen;
   await MeshoptSimplifier.ready;
   const s = readSettings();
   const t0 = performance.now();
@@ -799,10 +835,11 @@ async function runPipeline() {
     }
   } catch (e) { discard(root); if (best) discard(best.root); throw e; }
 
+  if (state.original !== orig) { discard(root); return log('A new model was loaded meanwhile; result discarded.', 'warn'); }
   const old = state.result;
   if (old) scene.remove(old);
   state.result = root; state.lastExport = buf;
-  discard(old); setDirty(false);
+  discard(old); setDirty(state.settingsGen !== gen); // settings changed during the run: still stale
   scene.add(root);
   const st = statsOf(root);
   $('sRF').textContent = fmtInt(st.faces); $('sRV').textContent = fmtInt(st.verts);
