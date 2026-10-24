@@ -94,8 +94,32 @@ The size table is fetched live from the game repo when online; the page also car
 ### Game ids (Embers of Valdren)
 cottage-thatch-b (section B, a cottage built from the kit and fitted to the target box), wagon-wreck-a, wagon-burnt and roadside-shrine-a (section C) and mine-cart (section D) use their sizes from `targets.json`. The provisional section G stand-ins use estimated sizes until the game names them: headframe and lift-cage (Oldsmoke, `oldsmokeArt.ts`), brazier-cart, the Cinderreach shrines (shrine-weeping-bellows, shrine-hushed-anvil, shrine-forge, shrine-waystone), cinder-boarded-well, cinder-forge, cinder-smelter and oldsmoke-adit. Picking an id works as on the props page: game palette, target-box fit (driver axis exact, the others stretched by at most 1.6x), the highest detail within the triangle budget, and game-ready export to `<id>.glb`.
 
+## Texture and decal generator
+`texture-generator-offline.html` (offline) / `texture-generator.html` (CDN) makes stylised base-colour textures and ground decals procedurally, in the game palette, at 512 px by default. Like the other generators it needs no account and runs in the browser.
+
+- **Tiling textures** (repeat with no seam): thatch, wood planks, cobblestones, stone blocks, roof tiles (clay or slate), bark, grass ground, moss, dirt with pebbles, ash ground, scorched cracked earth. The Tiling line in the stats measures the seam.
+- **Decals** (alpha, transparent at the border): ash patch, scorch mark or fire-pit ring, flagstone circle (grass or open gaps), puddle, moss patch, ground cracks (optionally glowing), fallen leaves. The colour under transparent pixels is the decal's own, so the edge never filters to black.
+- **Seed / Randomize / New colors** as in the other generators. **Palette**: game field and village, game ash country, or random. **Density**, **Contrast**, **Flat bands** (toon look), **Edge softness**, per-type variant and **Ember specks**.
+- **Download image**: PNG (written by the page itself, with exact alpha), JPEG for textures, or WebP; 256, 512 or 1024 px.
+- **Download GLB**: a flat square at y 0, centred on x 0, z 0, top of the image towards −Z, roughness 1, metallic 0, base colour only. A decal uses its W × D in metres and Blend or Mask alpha; a texture gives one tile of **Tile size**.
+- **Texture pack (.zip)**: every texture and decal with the current seed and palette as PNG, plus `manifest.json` with the settings that regenerate each one, for the game or the other generators.
+- **Game id**: `ash-patch-decal` (3 × 3 m, about 60 placements on the east edge) and `waystone-flagstones` (9 m paving circle). Picking one sets the decal, the palette and the size (from the live `targets.json` once the game adds the id there, otherwise from the missing-objects list) and names the file `<id>.glb`. The props page still has a geometry version of both if the game prefers meshes.
+- **Palette atlas**: open a GLB with several materials and press **Build atlas**. Flat colours become swatches and textures whose UVs stay inside 0 to 1 are copied into one atlas image (textures that repeat use their average colour, and the log says which); UVs move onto the atlas, every material becomes one `Atlas` material (plus one per glow colour, since the game keeps emissive colours but not emissive maps), roughness 1, metallic 0. Skins and animations are kept. **Download atlas GLB** keeps the original file name.
+
+Every export keeps the type, seed, palette and settings in glTF `extras` (or in the manifest).
+
+## Vegetation generator
+`vegetation-generator-offline.html` (offline) / `vegetation-generator.html` (CDN) makes trees, bushes, hedges, grass, ferns, flowers and reeds in a chunky low-poly style (solid leaf clusters, no alpha leaf cards) and saves them as GLB.
+
+- **Type**: tree (oak, broadleaf, ash or elm, birch, poplar, willow; round, layered or open crown; big roots or flared base; optional spring blossom), bush (leafy, flowering, holly with berries), hedge module (straight piece with flat ends that join, or corner post; neat or shaggy), grass clump (tall or spreading, optional seed heads), fern (6 to 10 fronds), flower patch (daisies, tulips or bluebells, one or two colours) and reeds (with or without cattails).
+- **Seed / Randomize / New colors / Size / Seed variants** work as in the props generator. Size measures the height by default. **Palette** offers the game's summer greens and an autumn set; birch, poplar, willow and holly bring their own bark or leaf colours.
+- **LODs**: **Download LODs** saves `name.glb`, `name.lod1.glb` and `name.lod2.glb` in a zip (default 25% and 5% of the faces, so a 6,000-face oak gives about 1,500 and 300). Each LOD is the same plant rebuilt coarser (same layout, simplest leaf clusters, fewer blossoms and marks) and then simplified with meshoptimizer while leaf clusters keep their volume, so small plants can stay above the percentage. **Show** above the view previews LOD 1 and 2, and the variants zip can include LODs too. The game does not load LOD files yet; the `.lodN.glb` naming is a proposal.
+
+### Game ids (Embers of Valdren)
+The **Game id** list holds the 27 vegetation ids from the missing-objects list that were not covered yet: oak-a/b/c, birch-a/b, elm-or-ash-a, autumn-tree-a/b, poplar-a, willow-a, bush-round-a/b, bush-flowering-a/b, bush-holly-a, hedge-straight, hedge-corner, grass-clump-a/b/c, fern-a, flower-patch-yellow/white/purple/red and reeds-a/b (stumps, logs, mushrooms and boulders stay in the props generator). Picking one works as in the props generator: game palette and variants, the target box from `targets.json` (willow-a and bush-holly-a use the sizes from the list until the game adds them), the highest detail within the triangle budget (6,000 for trees, 1,500 for bushes and the hedge corner, 1,000 for grass, ferns and flowers, 4,500 otherwise) and a game-ready `<id>.glb`. Ids that share a seed still get different shapes (oak-a, oak-b and oak-c differ).
+
 ## Editing / development
-`index.html`, `character-generator.html`, `props-generator.html` and `structures-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html` and `structures-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html`, `character-generator.html`, `props-generator.html`, `texture-generator.html`, `vegetation-generator.html` and `structures-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html`, `texture-generator-offline.html`, `vegetation-generator-offline.html` and `structures-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright
@@ -103,6 +127,6 @@ npm run build    # regenerate the *-offline.html files
 npm test         # Playwright tests (Chromium) against the CDN pages and their offline files
 ```
 
-**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` too (a test checks they match). Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
+**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` (and of the two generator pages) too (a test checks they match). Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
 
 There is intentionally no CI: build and test locally before committing.
