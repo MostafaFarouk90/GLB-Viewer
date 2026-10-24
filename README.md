@@ -23,6 +23,7 @@ Works in current Chrome, Edge, Firefox and Safari.
 - **Face budget**: presets Prop 1,500, Standard 4,500, Hero tree 6,000, Character 5,000. A preset never adds faces to a model that is already under it. A face target more than 4× the model (and above 20,000), or above 1,000,000, asks before running.
 - **Transform**: pivot to base centre (base on y 0, footprint centred on x/z 0), rotate 90° about Y, Z-up → Y-up, scale to a height in metres, and bake transforms into the vertices. These change the model; press Apply again afterwards.
 - **Scale aids** (viewer toolbar): metre grid centred on the origin with a ruler, the bounding box with W × D × H, a 1.8 m figure beside the model, and a +Z arrow showing the front. They are not exported.
+- **Variant forge**: one model in, N variants out (oak-a gives oak-b, oak-c…, or type the ids). Colour for all variants (multiply tint, hue shift, saturation, brightness) plus a seeded random spread per variant (hue, saturation, brightness, size, width/depth and height stretch, per-part scale about each mesh's base, noise displacement without opening seams), mirror on X (never, every other, random, always), and parts that may be hidden. Base colour textures are recoloured on copies, the tint goes into the material colour. Variants are made from the up-to-date result (Apply runs first if needed), so the face budget and texture settings carry over. **Preview** lays them out in a row with their ids; **Export variants** downloads one `<id>.glb`, or a zip with `report.json` and `report.txt`. The same seed always gives the same files; each file records its source, seed and draw in the root node's extras. Recipes: *Subtle*, *Strong* and *Holly from bush-round-a* (the game's stand-in rule: scale 1.05, tint ×0x7fa070, hue −20, saturation 0.9). With the Embers profile, each variant is fitted to its own id's target height and base pivot (the size spread stays inside the tolerance) and checked. Skinned or animated models get colour, scale, stretch, mirror and hidden parts only.
 - **Batch**: **Batch folder…**, or drop a folder or several models at once. Every .glb/.gltf runs with the current settings (face budget from the preset, else the % slider) and a zip downloads with the results, `report.json` and `report.txt`.
 
 ## Game profile: Embers of Valdren
@@ -97,6 +98,16 @@ The size table is fetched live from the game repo when online; the page also car
 
 Every export keeps the type, seed, palette and settings in glTF `extras` (or in the manifest).
 
+## Vegetation generator
+`vegetation-generator-offline.html` (offline) / `vegetation-generator.html` (CDN) makes trees, bushes, hedges, grass, ferns, flowers and reeds in a chunky low-poly style (solid leaf clusters, no alpha leaf cards) and saves them as GLB.
+
+- **Type**: tree (oak, broadleaf, ash or elm, birch, poplar, willow; round, layered or open crown; big roots or flared base; optional spring blossom), bush (leafy, flowering, holly with berries), hedge module (straight piece with flat ends that join, or corner post; neat or shaggy), grass clump (tall or spreading, optional seed heads), fern (6 to 10 fronds), flower patch (daisies, tulips or bluebells, one or two colours) and reeds (with or without cattails).
+- **Seed / Randomize / New colors / Size / Seed variants** work as in the props generator. Size measures the height by default. **Palette** offers the game's summer greens and an autumn set; birch, poplar, willow and holly bring their own bark or leaf colours.
+- **LODs**: **Download LODs** saves `name.glb`, `name.lod1.glb` and `name.lod2.glb` in a zip (default 25% and 5% of the faces, so a 6,000-face oak gives about 1,500 and 300). Each LOD is the same plant rebuilt coarser (same layout, simplest leaf clusters, fewer blossoms and marks) and then simplified with meshoptimizer while leaf clusters keep their volume, so small plants can stay above the percentage. **Show** above the view previews LOD 1 and 2, and the variants zip can include LODs too. The game does not load LOD files yet; the `.lodN.glb` naming is a proposal.
+
+### Game ids (Embers of Valdren)
+The **Game id** list holds the 27 vegetation ids from the missing-objects list that were not covered yet: oak-a/b/c, birch-a/b, elm-or-ash-a, autumn-tree-a/b, poplar-a, willow-a, bush-round-a/b, bush-flowering-a/b, bush-holly-a, hedge-straight, hedge-corner, grass-clump-a/b/c, fern-a, flower-patch-yellow/white/purple/red and reeds-a/b (stumps, logs, mushrooms and boulders stay in the props generator). Picking one works as in the props generator: game palette and variants, the target box from `targets.json` (willow-a and bush-holly-a use the sizes from the list until the game adds them), the highest detail within the triangle budget (6,000 for trees, 1,500 for bushes and the hedge corner, 1,000 for grass, ferns and flowers, 4,500 otherwise) and a game-ready `<id>.glb`. Ids that share a seed still get different shapes (oak-a, oak-b and oak-c differ).
+
 ## Coverage dashboard
 `coverage.html` shows, for every object id the game asks for, whether it is done and how to make it. It uses no libraries, so the same file works offline: double-click it.
 
@@ -108,7 +119,7 @@ Every export keeps the type, seed, palette and settings in glTF `extras` (or in 
 - Without internet the built-in `targets.json` and list are used and *shipped* stays empty; **Load file…** (or dropping it) takes another `targets.json`, a game `manifest.json` or a newer missing-list `.md`.
 
 ## Editing / development
-`index.html`, `character-generator.html`, `props-generator.html` and `texture-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html` and `texture-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html`, `character-generator.html`, `props-generator.html`, `texture-generator.html` and `vegetation-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html`, `texture-generator-offline.html` and `vegetation-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright
@@ -116,6 +127,6 @@ npm run build    # regenerate the *-offline.html files
 npm test         # Playwright tests (Chromium) against the CDN pages and their offline files
 ```
 
-**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` too (a test checks they match). `coverage.html` has no offline build; its built-in copies of `embers/` and of each generator's `GAME_IDS` are refreshed by `npm run coverage-data` (a test fails when they are stale), so run it after changing either. Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
+**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` (and of the two generator pages) too (a test checks they match). `coverage.html` has no offline build; its built-in copies of `embers/` and of each generator's `GAME_IDS` are refreshed by `npm run coverage-data` (a test fails when they are stale), so run it after changing either. Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
 
 There is intentionally no CI: build and test locally before committing.
