@@ -108,6 +108,19 @@ Every export keeps the type, seed, palette and settings in glTF `extras` (or in 
 ### Game ids (Embers of Valdren)
 The **Game id** list holds the 27 vegetation ids from the missing-objects list that were not covered yet: oak-a/b/c, birch-a/b, elm-or-ash-a, autumn-tree-a/b, poplar-a, willow-a, bush-round-a/b, bush-flowering-a/b, bush-holly-a, hedge-straight, hedge-corner, grass-clump-a/b/c, fern-a, flower-patch-yellow/white/purple/red and reeds-a/b (stumps, logs, mushrooms and boulders stay in the props generator). Picking one works as in the props generator: game palette and variants, the target box from `targets.json` (willow-a and bush-holly-a use the sizes from the list until the game adds them), the highest detail within the triangle budget (6,000 for trees, 1,500 for bushes and the hedge corner, 1,000 for grass, ferns and flowers, 4,500 otherwise) and a game-ready `<id>.glb`. Ids that share a seed still get different shapes (oak-a, oak-b and oak-c differ).
 
+## Creature generator
+`creature-generator-offline.html` (offline) / `creature-generator.html` (CDN) makes animals and monsters procedurally and saves them as GLB, static or rigged with animation clips.
+
+- **Species**: 17 in five body plans. Four-legged: wolf, ember hound, fox, boar, goat, deer, bear, rat. Birds: hen, crow, owl. Bat. Spiders and beetles: giant spider, beetle / crawler. Lizards and wyrms: lizard, fire salamander, wyrmling.
+- Each body plan has its own **variant** dropdowns (build, ears, horns or antlers or tusks, tail, coat, ruff, beard, beak, comb, jaws, back spines, wings…); a species only makes some values more likely, so any combination can be picked. **Ember-touched** adds glowing eyes, cracks and a glowing maw or tail.
+- **Seed / Randomize / New colors / Size** work as in the props generator. Every creature stands on its base centre and faces +Z, in the KayKit low-poly style by default.
+- **Rig**: *None* exports one static mesh (what the game wants for scenery). *Jointed parts* exports one node per joint (Root, Hips, Chest, Neck, Head, Jaw, Tail1, LegFL1…), each holding its own piece, for a procedural rig like the game's quadruped. *Skeleton* exports one skinned mesh on bones with the same names, every part bound rigidly to its bone. Joints have no rest rotation, so a clip is plain joint rotations plus a Hips position track.
+- **Clips** (with a rig): four-legged Idle, Walk, Run, Bite (the names of the game's `QUADRUPED_CLIPS`); birds Idle, Walk, Fly, Peck; bats Idle (hover), Fly, Bite; spiders and beetles Idle, Walk, Bite; lizards Idle, Walk, Bite (and Fly with wings). **Play** in the toolbar previews them.
+- Every export keeps the species, seed, name and variants in the root node's glTF `extras`. **Seed variants** downloads several seeds as a .zip.
+
+### Game ids (Embers of Valdren)
+Section E of the missing-objects list (`hen-a`, `goat-a`, `crow-a`), wildlife (`wolf-a`, `boar-a`, `fox-a`, `deer-a`, `rat-a`, `bat-a`, `spider-giant-a`) and art stand-ins for the game's procedural Act 2 foes, named as its `EnemyKind` ids with the colours of their `ENEMY_DEFS` tints (`ember-hound`, `kindling-fox`, `slag-crawler`, `wyrmling`). Picking one fits the creature to the id's box (driver axis exact, the others stretched by at most 1.25x), picks the highest detail within 1,500 triangles (small animals) or 4,000, and exports `<id>.glb` with flat game materials and no rig. None of these ids is in `targets.json` yet, so their sizes are estimates until the game adds them; when it does, the live table (or **Load targets.json**) takes over. Section E says rigged is a bonus: choose *Skeleton* to add the clips.
+
 ## Coverage dashboard
 `coverage.html` shows, for every object id the game asks for, whether it is done and how to make it. It uses no libraries, so the same file works offline: double-click it.
 
@@ -119,7 +132,7 @@ The **Game id** list holds the 27 vegetation ids from the missing-objects list t
 - Without internet the built-in `targets.json` and list are used and *shipped* stays empty; **Load file…** (or dropping it) takes another `targets.json`, a game `manifest.json` or a newer missing-list `.md`.
 
 ## Editing / development
-`index.html`, `character-generator.html`, `props-generator.html`, `texture-generator.html` and `vegetation-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html`, `texture-generator-offline.html` and `vegetation-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html`, `character-generator.html`, `props-generator.html`, `texture-generator.html`, `vegetation-generator.html` and `creature-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html`, `texture-generator-offline.html`, `vegetation-generator-offline.html` and `creature-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright
