@@ -48,9 +48,14 @@ Set **Profile** to *Embers game-ready* to prepare models for the game (`embers/c
 - **Seed / Randomize**: the same archetype + seed always gives the same character (and name). **New colors** rerolls only the palette.
 - **Body**: height in metres (top of the head), build, head size, limb length, and pose. Use **T-pose** if you want to auto-rig the model (for example in Mixamo or Blender).
 - **Parts**: outfit, hair, ears, beard, horns, headwear, wings, held item, tail, aura, glowing eyes. Any part works with any archetype.
-- **Output**: smooth or low-poly style, detail level, combine parts per material (few meshes) or keep every part as its own named mesh, and an optional idle animation (spinning aura, bobbing for floating characters).
+- **KayKit chibi look** (off by default): big head and short legs like the KayKit Adventurers, with the hips, legs, shoulders, arms and neck exactly on the KayKit skeleton's rest pose. Build then only changes girth and head size only the head; limb length is locked.
+- **Output**: smooth or low-poly style, detail level (low, medium, high, or **game budget**: the most detail that stays at or under 4,000 triangles), combine parts per material (few meshes) or keep every part as its own named mesh, and an optional idle animation (spinning aura, bobbing for floating characters).
+- **KayKit skeleton (41 bones)**: rigs the body on the KayKit Adventurers bones (same names, hierarchy and rest rotations, T rest pose, facing +Z), each part rigidly skinned to one bone (torso and robe blend from hips to chest). The held item is a plain mesh under `handslot.r`, like KayKit's weapons, so a game can hide or swap it; `handslot.l` is free. With the chibi look the bone offsets are KayKit's own, so KayKit clips (which key translations on every bone) play as they are. On a realistic body the bones move onto its joints; play KayKit clips with their bone translation tracks removed (except the hips). Works with or without the chibi look.
+- **One material (palette texture)**: every colour in one small nearest-filtered texture (roughness 1, metallic 0), plus one emissive Glow material if the character glows.
 
-The exported GLB opens in the viewer above, so you can then smooth it, change its face count or fit it to a file size. Glow parts use emissive materials (with `KHR_materials_emissive_strength`); the glow halo in the preview is a screen effect and is not part of the file. The body is not rigged.
+Every export keeps the archetype, seed, name and all settings in the root node's glTF `extras`, so a character can be regenerated.
+
+The exported GLB opens in the viewer above, so you can then smooth it, change its face count or fit it to a file size. Glow parts use emissive materials (with `KHR_materials_emissive_strength`); the glow halo in the preview is a screen effect and is not part of the file. Without the KayKit skeleton option the body is not rigged.
 
 Why procedural instead of AI text-to-3D: services such as Meshy, Tripo or Hunyuan3D give more detailed sculpted models but need an account, an API key (which would be readable inside a shared HTML file), internet and per-model credits, and take from 30 seconds to minutes per model. The procedural generator is instant, free, offline and reproducible.
 
