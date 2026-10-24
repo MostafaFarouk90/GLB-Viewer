@@ -77,6 +77,7 @@
   .lbl { font: 11px/1.2 ui-monospace, Menlo, Consolas, monospace; color: #fff; background: rgba(15,17,21,.75);
     padding: 1px 4px; border-radius: 4px; white-space: nowrap; }
   .lbl.tick { background: none; color: var(--muted); }
+  .lbl.fail { color: #ff9a9a; }
   @media (max-width: 760px) {
     #app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; }
     main { grid-row: 1; height: 55vh; } aside { grid-row: 2; border-right: 0; }
@@ -180,6 +181,40 @@
       <button id="applyBtn" class="primary" disabled>Apply</button>
       <button id="resetBtn" disabled>Reset</button>
       <button id="downloadBtn" disabled>Download GLB</button>
+    </div>
+
+    <h2>Variant forge</h2>
+    <div class="hint" style="margin-top:0">One model in, N tinted and reshaped variants out as &lt;id&gt;.glb. Uses the result of the settings above (Apply runs first when needed), so the face budget and textures carry over. The same seed gives the same files.</div>
+    <div class="row"><label for="forgeRecipe">Recipe</label>
+      <select id="forgeRecipe"><option value="custom">Custom</option><option value="subtle">Subtle (same species)</option><option value="strong">Strong (new silhouette)</option><option value="holly">Holly from bush-round-a</option></select></div>
+    <div class="row"><label for="forgeCount">Variants</label><input id="forgeCount" type="number" min="1" max="26" step="1" value="3"></div>
+    <div class="row"><label for="forgeSeed">Seed</label><input id="forgeSeed" type="number" step="1" value="1"><button id="forgeSeedBtn" title="New random seed">🎲</button></div>
+    <div class="row"><label for="forgeNames">Ids</label><input id="forgeNames" class="wide" placeholder="auto: oak-b, oak-c…"></div>
+    <div class="hint">Comma-separated output ids; left empty (or for the rest), the next letters after the source id: oak-a gives oak-b, oak-c.</div>
+    <div class="row"><label for="forgeTint">Tint (multiply)</label><input id="forgeTint" type="color" value="#ffffff"><input id="forgeTintAmt" type="range" min="0" max="100" value="0" style="width:80px"><span class="val" id="forgeTintAmtVal">0%</span></div>
+    <div class="row"><label for="forgeHue">Hue shift</label><input id="forgeHue" type="range" min="-180" max="180" value="0"><span class="val" id="forgeHueVal">0°</span></div>
+    <div class="row"><label for="forgeSat">Saturation</label><input id="forgeSat" type="range" min="0" max="200" value="100"><span class="val" id="forgeSatVal">100%</span></div>
+    <div class="row"><label for="forgeLight">Brightness</label><input id="forgeLight" type="range" min="30" max="170" value="100"><span class="val" id="forgeLightVal">100%</span></div>
+    <div class="row"><label for="forgeScale">Scale</label><input id="forgeScale" type="number" min="0.1" max="10" step="0.01" value="1"></div>
+    <div class="row"><label for="forgeMirror">Mirror (X)</label>
+      <select id="forgeMirror"><option value="never">Never</option><option value="alternate">Every other</option><option value="random">Random</option><option value="always">Always</option></select></div>
+    <div class="hint">Above: the same for every variant. Below: a random spread per variant, ± around it.</div>
+    <div class="row"><label for="forgeHueVar">Hue ±</label><input id="forgeHueVar" type="range" min="0" max="90" value="0"><span class="val" id="forgeHueVarVal">0°</span></div>
+    <div class="row"><label for="forgeSatVar">Saturation ±</label><input id="forgeSatVar" type="range" min="0" max="60" value="0"><span class="val" id="forgeSatVarVal">0%</span></div>
+    <div class="row"><label for="forgeLightVar">Brightness ±</label><input id="forgeLightVar" type="range" min="0" max="40" value="0"><span class="val" id="forgeLightVarVal">0%</span></div>
+    <div class="row"><label for="forgeSizeVar">Size ±</label><input id="forgeSizeVar" type="range" min="0" max="30" value="0"><span class="val" id="forgeSizeVarVal">0%</span></div>
+    <div class="row"><label for="forgeWVar">Width/depth stretch ±</label><input id="forgeWVar" type="range" min="0" max="30" value="0"><span class="val" id="forgeWVarVal">0%</span></div>
+    <div class="row"><label for="forgeHVar">Height stretch ±</label><input id="forgeHVar" type="range" min="0" max="30" value="0"><span class="val" id="forgeHVarVal">0%</span></div>
+    <div class="row"><label for="forgePartVar">Per-part scale ±</label><input id="forgePartVar" type="range" min="0" max="40" value="0"><span class="val" id="forgePartVarVal">0%</span></div>
+    <div class="row"><label for="forgeNoise">Noise displacement</label><input id="forgeNoise" type="range" min="0" max="8" step="0.25" value="0"><span class="val" id="forgeNoiseVal">0%</span></div>
+    <div class="hint">Per-part scale grows or shrinks each mesh about its own base (a tree's crown on its trunk). Noise pushes the surface by up to this % of the model size, without opening seams.</div>
+    <div class="row"><label for="forgeHideChance">Hide parts chance</label><input id="forgeHideChance" type="range" min="0" max="100" value="50"><span class="val" id="forgeHideChanceVal">50%</span></div>
+    <div id="forgeParts" class="hint">Load a model to list its parts.</div>
+    <div class="game-only"><div class="row"><label for="forgeFit">Fit each to its id's target, base pivot</label><input id="forgeFit" type="checkbox" checked></div>
+      <div class="hint">With a target, the height comes from targets.json (Scale is ignored) and Size ± stays inside the tolerance, so every variant passes the size check. Ids without a target keep Scale.</div></div>
+    <div class="btns">
+      <button id="forgePreviewBtn" disabled>Preview</button>
+      <button id="forgeExportBtn" class="primary" disabled>Export variants</button>
     </div>
 
     <h2>Batch</h2>
@@ -791,7 +826,7 @@ function setOriginal(root, animations, bytes, name) {
   $('targetMB').value = Math.max(0.01, +(bytes / 1048576 / 2).toFixed(2));
   $('filename').textContent = name;
   $('drop').classList.add('hidden');
-  for (const id of ['applyBtn', 'resetBtn', 'downloadBtn', ...TRANSFORM_BTNS]) $(id).disabled = false;
+  for (const id of ['applyBtn', 'resetBtn', 'downloadBtn', 'forgePreviewBtn', 'forgeExportBtn', ...TRANSFORM_BTNS]) $(id).disabled = false;
   $('gameId').value = matchId(state.name) || '';
   updateHeightField(); applyPreset();
   setView('original'); fitView(); applyWire(); playAnim(root); refreshVerdict();
@@ -864,6 +899,7 @@ $('sampleBtn').onclick = () => busy('Building sample…', async () => {
 
 // ---------- view controls ----------
 function setView(v) {
+  clearForgePreview(); forgeParts();
   state.view = v;
   $('viewResult').classList.toggle('on', v === 'result'); $('viewOriginal').classList.toggle('on', v === 'original');
   if (state.original) state.original.visible = v === 'original' || !state.result;
@@ -885,6 +921,9 @@ function fitView() {
   const box = new THREE.Box3().setFromObject(root);
   if (box.isEmpty()) return;
   if (figure.parent) box.expandByObject(figure);
+  fitBox(box);
+}
+function fitBox(box) {
   const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
   const r = size.length() / 2 || 1;
   const dist = r / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.1;
@@ -943,6 +982,19 @@ function plainGeometry(src) {
     for (let i = 0; i < p.count; i++) { f[i * 3] = p.getX(i); f[i * 3 + 1] = p.getY(i); f[i * 3 + 2] = p.getZ(i); }
     g.setAttribute('position', new THREE.BufferAttribute(f, 3));
   }
+  return g;
+}
+// Reverses the triangle winding (after a mirror) so faces stay front-facing.
+function flipWinding(g) {
+  if (!g.index) g.setIndex(new THREE.BufferAttribute(Uint32Array.from({ length: g.attributes.position.count }, (_, i) => i), 1));
+  const a = g.index.array; for (let i = 0; i + 2 < a.length; i += 3) [a[i + 1], a[i + 2]] = [a[i + 2], a[i + 1]];
+}
+// Copy of a mesh's geometry with its world transform written into the vertices.
+function bakedGeometry(m) {
+  const g = plainGeometry(m.geometry); g.deleteAttribute('tangent');
+  g.applyMatrix4(m.matrixWorld);
+  if (m.matrixWorld.determinant() < 0) flipWinding(g); // mirrored: flip the winding so faces stay front-facing
+  g.computeBoundingBox(); g.computeBoundingSphere();
   return g;
 }
 const ensureIndexed = (g) => (g.index ? g : mergeVertices(g, 1e-6));
@@ -1402,7 +1454,8 @@ function matchId(name) {
   return [base, slug(base)].find((k) => Object.hasOwn(objs, k)) || null;
 }
 const currentId = () => $('gameId').value.trim() || matchId(state.name) || slug(state.name);
-const target = () => (game.cfg && Object.hasOwn(game.cfg.objects, currentId()) ? game.cfg.objects[currentId()] : null);
+const targetOf = (id) => (game.cfg && Object.hasOwn(game.cfg.objects, id) ? game.cfg.objects[id] : null);
+const target = () => targetOf(currentId());
 const knightHeight = () => game.cfg?.knightHeight || 1.8;
 
 function setTargets(cfg, source) {
@@ -1465,17 +1518,18 @@ $('gameId').oninput = () => { updateHeightField(); applyPreset(); refreshVerdict
 
 // Verdict lines. pass/fail follow the game's tools/env-pass/check-glb.mjs (its FAIL = a fail line here); warn lines
 // are what ingest would change or reject (CAP lines, decimation, textures, skins).
-function validate() {
+// `v` checks another exported model instead (the variant forge): { root, bytes, id }.
+function validate(v = null) {
   const lines = [], add = (level, text) => lines.push({ level, text });
-  const useResult = !!state.result && !state.dirty && !!state.lastExport;
-  const root = useResult ? state.result : state.original;
+  const useResult = v ? true : !!state.result && !state.dirty && !!state.lastExport;
+  const root = v ? v.root : useResult ? state.result : state.original;
   if (!root) return { lines, ok: false };
   const C = game.cfg || { tolerance: 0.15, proportionTolerance: 1.1, maxTriangles: 10000, maxFileMB: 1.5, proportion: {} };
-  const s = readSettings(), id = currentId(), T = target(), fitExact = T && Object.hasOwn(C.proportion, id);
+  const s = readSettings(), id = v ? v.id : currentId(), T = targetOf(id), fitExact = T && Object.hasOwn(C.proportion, id);
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3());
   const W = size.x, D = size.z, H = size.y, pct = (r) => (r >= 0 ? '+' : '') + Math.round(r * 100) + '%';
-  add('head', `${useResult ? 'Result' : 'Original (Apply for the result)'}: ${fmtM(W)} W × ${fmtM(D)} D × ${fmtM(H)} H, id ${id}`);
+  add('head', `${v ? 'Variant' : useResult ? 'Result' : 'Original (Apply for the result)'}: ${fmtM(W)} W × ${fmtM(D)} D × ${fmtM(H)} H, id ${id}`);
   if (!game.cfg) add('info', 'Targets are still loading.');
   else if (!T) add('fail', `"${id}" has no target in targets.json: pick the id or rename the file.`);
   if (T) {
@@ -1507,7 +1561,7 @@ function validate() {
   const faces = statsOf(root).faces;
   add(faces > C.maxTriangles ? 'fail' : faces > FACE_BUDGET ? 'warn' : 'pass',
     `${fmtInt(faces)} triangles (cap ${fmtInt(C.maxTriangles)}${faces > FACE_BUDGET && faces <= C.maxTriangles ? `; ingest simplifies to about ${fmtInt(FACE_BUDGET)}` : ''})`);
-  const bytes = useResult ? state.lastExport.byteLength : state.originalBytes, mb = bytes / 1e6;
+  const bytes = v ? v.bytes : useResult ? state.lastExport.byteLength : state.originalBytes, mb = bytes / 1e6;
   add(mb > C.maxFileMB ? 'fail' : 'pass', `${mb.toFixed(2)} MB${useResult ? '' : ' original file'} (cap ${C.maxFileMB} MB)`);
   const extra = new Set(); let maxDim = 0, nTex = 0;
   root.traverse((o) => {
@@ -1564,7 +1618,8 @@ const niceStep = (len) => { const raw = len / 10, p = 10 ** Math.floor(Math.log1
 function updateAids() {
   clearAids();
   const on = $('aids').checked, root = shownRoot();
-  grid.visible = !on;
+  grid.visible = !on || !!forge.preview;
+  if (forge.preview) return; // the variant row has its own labels
   if (!on || !root) return;
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root); if (box.isEmpty()) return;
@@ -1660,14 +1715,7 @@ function bakeTransforms() {
   root.updateMatrixWorld(true);
   const flat = new THREE.Group(); flat.name = root.name || 'Scene';
   for (const m of meshesOf(root)) {
-    const g = plainGeometry(m.geometry); g.deleteAttribute('tangent');
-    g.applyMatrix4(m.matrixWorld);
-    if (m.matrixWorld.determinant() < 0) { // mirrored: flip the winding so faces stay front-facing
-      if (!g.index) g.setIndex(new THREE.BufferAttribute(Uint32Array.from({ length: g.attributes.position.count }, (_, i) => i), 1));
-      const a = g.index.array; for (let i = 0; i + 2 < a.length; i += 3) [a[i + 1], a[i + 2]] = [a[i + 2], a[i + 1]];
-    }
-    g.computeBoundingBox(); g.computeBoundingSphere();
-    const nm = new THREE.Mesh(g, m.material); nm.name = m.name; nm.userData = { ...m.userData };
+    const nm = new THREE.Mesh(bakedGeometry(m), m.material); nm.name = m.name; nm.userData = { ...m.userData };
     flat.add(nm);
   }
   dropResult(); clearCache();
@@ -1855,12 +1903,329 @@ function runBatch(list) {
   });
 }
 
+// ---------- variant forge ----------
+// One model in, N variants out: colour (tint, hue, saturation, brightness) and shape (scale, stretch, per-part scale,
+// noise displacement, mirror, hidden parts), drawn from a seed so the same settings give the same files. Variants are
+// made from the up-to-date result, so the face budget and texture settings of the pipeline carry over.
+const forge = { preview: null, partsKey: '', made: null };
+const FORGE_RECIPES = {
+  subtle: { forgeCount: 3, forgeHueVar: 8, forgeSatVar: 10, forgeLightVar: 8, forgeSizeVar: 6, forgeWVar: 5, forgeHVar: 5,
+    forgePartVar: 8, forgeNoise: 0.5, forgeMirror: 'alternate' },
+  strong: { forgeCount: 3, forgeHueVar: 25, forgeSatVar: 25, forgeLightVar: 15, forgeSizeVar: 10, forgeWVar: 12, forgeHVar: 12,
+    forgePartVar: 20, forgeNoise: 1.5, forgeMirror: 'random' },
+  // the game's own stand-in rule (embers/environment-needs-prompts.md): bush-round-a, scale 1.05, tint mul 0x7fa070, hue -20, sat 0.9
+  holly: { forgeCount: 1, forgeNames: 'bush-holly-a', forgeTint: '#7fa070', forgeTintAmt: 100, forgeHue: -20, forgeSat: 90, forgeScale: 1.05 },
+};
+const FORGE_DEFAULTS = { forgeNames: '', forgeTint: '#ffffff', forgeTintAmt: 0, forgeHue: 0, forgeSat: 100, forgeLight: 100, forgeScale: 1,
+  forgeMirror: 'never', forgeHueVar: 0, forgeSatVar: 0, forgeLightVar: 0, forgeSizeVar: 0, forgeWVar: 0, forgeHVar: 0, forgePartVar: 0, forgeNoise: 0 };
+$('forgeRecipe').onchange = () => {
+  const r = FORGE_RECIPES[$('forgeRecipe').value]; if (!r) return;
+  for (const [id, v] of Object.entries({ ...FORGE_DEFAULTS, ...r })) { $(id).value = v; $(id).oninput?.(); }
+};
+for (const [id, suffix] of [['forgeTintAmt', '%'], ['forgeHue', '°'], ['forgeSat', '%'], ['forgeLight', '%'], ['forgeHueVar', '°'],
+  ['forgeSatVar', '%'], ['forgeLightVar', '%'], ['forgeSizeVar', '%'], ['forgeWVar', '%'], ['forgeHVar', '%'], ['forgePartVar', '%'],
+  ['forgeNoise', '%'], ['forgeHideChance', '%']]) bindVal(id, suffix);
+$('forgeSeedBtn').onclick = () => { $('forgeSeed').value = 1 + Math.floor(Math.random() * 99999); };
+
+// Part list of the loaded model, one "may hide" checkbox per mesh (ticks survive a rebuild of the same model).
+const partLabel = (m, i) => `${i + 1}. ${m.name || 'mesh'}`;
+function forgeParts() {
+  const ms = state.original ? meshesOf(state.original) : [], key = ms.map(partLabel).join('\n');
+  if (key === forge.partsKey) return;
+  const was = new Set([...$('forgeParts').querySelectorAll('input:checked')].map((c) => c.value));
+  forge.partsKey = key;
+  if (ms.length < 2) { $('forgeParts').textContent = ms.length ? 'One mesh: nothing to hide.' : 'Load a model to list its parts.'; return; }
+  const head = Object.assign(document.createElement('div'), { textContent: 'Parts that may be hidden:' });
+  $('forgeParts').replaceChildren(head, ...ms.map((m, i) => {
+    const l = document.createElement('label'); l.style.display = 'block';
+    const c = Object.assign(document.createElement('input'), { type: 'checkbox', value: partLabel(m, i), checked: was.has(partLabel(m, i)) });
+    c.dataset.index = i; l.append(c, ' ' + partLabel(m, i)); return l;
+  }));
+}
+
+function readForge() {
+  const n = (id) => +$(id).value || 0, pc = (id) => n(id) / 100;
+  return {
+    count: Math.min(26, Math.max(1, Math.round(n('forgeCount')) || 1)), seed: Math.round(n('forgeSeed')),
+    names: $('forgeNames').value.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean),
+    tint: $('forgeTint').value, tintAmt: pc('forgeTintAmt'), hue: n('forgeHue'), sat: pc('forgeSat'), light: pc('forgeLight'),
+    scale: n('forgeScale') > 0 ? n('forgeScale') : 1, mirror: $('forgeMirror').value,
+    hueVar: n('forgeHueVar'), satVar: pc('forgeSatVar'), lightVar: pc('forgeLightVar'), sizeVar: pc('forgeSizeVar'),
+    wVar: pc('forgeWVar'), hVar: pc('forgeHVar'), partVar: pc('forgePartVar'), noise: pc('forgeNoise'),
+    hide: [...$('forgeParts').querySelectorAll('input:checked')].map((c) => +c.dataset.index), hideChance: pc('forgeHideChance'),
+    fit: isGame() && $('forgeFit').checked,
+  };
+}
+
+// oak-a -> oak-b, oak-c...; an id without a letter suffix gets -b, -c... Typed ids come first.
+function variantIds(base, f) {
+  const out = [...f.names.slice(0, f.count)], taken = new Set([base, ...out]);
+  const m = base.match(/^(.*)-([a-z])$/), stem = m ? m[1] : base;
+  let code = m ? m[2].charCodeAt(0) + 1 : 98;
+  while (out.length < f.count) {
+    const id = code <= 122 ? `${stem}-${String.fromCharCode(code)}` : `${stem}-${code - 122 + 1}`;
+    code++; if (!taken.has(id)) { taken.add(id); out.push(id); }
+  }
+  return out;
+}
+
+const mulberry32 = (a) => () => {
+  a = a + 0x6d2b79f5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296;
+};
+// Everything random about variant i, drawn in a fixed order so a seed always gives the same variant.
+function drawVariant(f, i, nMeshes) {
+  const r = mulberry32(Math.imul(f.seed, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b)), sym = (k) => (r() * 2 - 1) * k;
+  const d = {
+    hue: f.hue + sym(f.hueVar), sat: Math.max(0, f.sat + sym(f.satVar)), light: Math.max(0.05, f.light + sym(f.lightVar)),
+    size: sym(f.sizeVar), w: 1 + sym(f.wVar), h: 1 + sym(f.hVar),
+    mirror: f.mirror === 'always' || (f.mirror === 'alternate' && i % 2 === 1) || (f.mirror === 'random' && r() < 0.5),
+    noiseSeed: Math.floor(r() * 2 ** 31), parts: Array.from({ length: nMeshes }, () => 1 + sym(f.partVar)),
+    hidden: f.hide.filter(() => r() < f.hideChance),
+  };
+  if (d.hidden.length >= nMeshes) d.hidden.pop(); // never hide everything
+  return d;
+}
+
+// HSL shift (degrees, saturation and brightness factors) of an sRGB colour in 0..1, in place on `c` = [r, g, b].
+function shiftRGB(c, hue, sat, light) {
+  let [r, g, b] = c; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+  let h = 0, s = 0;
+  if (mx !== mn) {
+    const dd = mx - mn; s = l > 0.5 ? dd / (2 - mx - mn) : dd / (mx + mn);
+    h = mx === r ? (g - b) / dd + (g < b ? 6 : 0) : mx === g ? (b - r) / dd + 2 : (r - g) / dd + 4; h /= 6;
+  }
+  h = ((h + hue / 360) % 1 + 1) % 1; s = Math.min(1, s * sat);
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  const ch = (t) => { t = (t % 1 + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  [r, g, b] = s ? [ch(h + 1 / 3), ch(h), ch(h - 1 / 3)] : [l, l, l];
+  c[0] = Math.min(1, r * light); c[1] = Math.min(1, g * light); c[2] = Math.min(1, b * light);
+  return c;
+}
+const recolours = (d) => Math.abs(d.hue) > 0.01 || Math.abs(d.sat - 1) > 1e-3 || Math.abs(d.light - 1) > 1e-3;
+function recolourTexture(tex, d) {
+  const img = tex.image, w = img?.width, h = img?.height;
+  if (!(w > 0 && h > 0)) return tex;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d', { willReadFrequently: true }); ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, w, h), px = data.data, c = [0, 0, 0];
+  for (let i = 0; i < px.length; i += 4) {
+    c[0] = px[i] / 255; c[1] = px[i + 1] / 255; c[2] = px[i + 2] / 255; shiftRGB(c, d.hue, d.sat, d.light);
+    px[i] = c[0] * 255 + 0.5; px[i + 1] = c[1] * 255 + 0.5; px[i + 2] = c[2] * 255 + 0.5;
+  }
+  ctx.putImageData(data, 0, 0);
+  const t = tex.clone(); t.source = new THREE.Source(cv); t.needsUpdate = true; // a new Source: the original keeps its image
+  return t;
+}
+function shiftColor(col, d) {
+  const o = col.getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace), c = shiftRGB([o.r, o.g, o.b], d.hue, d.sat, d.light);
+  col.setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
+}
+// Variant copies of a mesh's materials: tint multiplies the base colour factor (as the game's own tint does); hue,
+// saturation and brightness go into the base colour texture when there is one, else into the colour.
+function variantMaterials(mesh, d, cache, made) {
+  const one = (m) => {
+    if (!m) return m;
+    if (cache.has(m)) return cache.get(m);
+    const c = m.clone(); made.mats.add(c);
+    if (c.map && recolours(d)) {
+      if (!cache.has(m.map)) { const t = recolourTexture(m.map, d); if (t !== m.map) made.texs.add(t); cache.set(m.map, t); }
+      c.map = cache.get(m.map);
+    } else if (c.color && recolours(d)) shiftColor(c.color, d);
+    if (c.color) c.color.multiply(d.tint);
+    cache.set(m, c); return c;
+  };
+  return Array.isArray(mesh.material) ? mesh.material.map(one) : one(mesh.material);
+}
+function recolourVertices(g, d) {
+  const col = g.attributes.color; if (!col || !recolours(d)) return;
+  const c = new THREE.Color(), a = col.clone(); g.setAttribute('color', a);
+  for (let i = 0; i < a.count; i++) { c.setRGB(a.getX(i), a.getY(i), a.getZ(i)); shiftColor(c, d); a.setXYZ(i, c.r, c.g, c.b); }
+}
+
+// Smooth 3D value noise in -1..1. Displacement is a function of position only, so split vertices move together.
+function valueNoise(seed) {
+  const hash = (x, y, z) => {
+    let n = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1440662683) ^ seed;
+    n = Math.imul(n ^ n >>> 13, 1274126177); return ((n ^ n >>> 16) >>> 0) / 2147483648 - 1;
+  };
+  const sm = (t) => t * t * (3 - 2 * t), lerp = (a, b, t) => a + (b - a) * t;
+  return (x, y, z) => {
+    const X = Math.floor(x), Y = Math.floor(y), Z = Math.floor(z), u = sm(x - X), v = sm(y - Y), w = sm(z - Z);
+    const c = (i, j, k) => hash(X + i, Y + j, Z + k);
+    return lerp(lerp(lerp(c(0, 0, 0), c(1, 0, 0), u), lerp(c(0, 1, 0), c(1, 1, 0), u), v),
+      lerp(lerp(c(0, 0, 1), c(1, 0, 1), u), lerp(c(0, 1, 1), c(1, 1, 1), u), v), w);
+  };
+}
+function displace(geoms, amount, size, seed) {
+  const nx = valueNoise(seed), ny = valueNoise(seed ^ 0x5bd1e995), nz = valueNoise(seed ^ 0x27d4eb2f);
+  const fq = 3 / size, amp = amount * size;
+  for (const g of geoms) {
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), X = x * fq, Y = y * fq, Z = z * fq;
+      p.setXYZ(i, x + nx(X, Y, Z) * amp, y + ny(X, Y, Z) * amp, z + nz(X, Y, Z) * amp);
+    }
+    p.needsUpdate = true;
+    if (g.attributes.normal) g.computeVertexNormals();
+  }
+}
+const baseCentre = (box) => new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2);
+const aboutPoint = (m, c) => new THREE.Matrix4().makeTranslation(c.x, c.y, c.z).multiply(m).multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+
+// Builds variant `d` of `src` (a scene root). Static models are baked into world-space copies and reshaped per vertex;
+// skinned, morph or animated models keep their hierarchy and only get colour, scale, stretch, mirror and hidden parts.
+function buildVariant(src, d, f, id, made) {
+  src.updateMatrixWorld(true);
+  const srcBox = new THREE.Box3().setFromObject(src), c0 = baseCentre(srcBox);
+  const size = Math.max(...srcBox.getSize(new THREE.Vector3()).toArray()) || 1;
+  const deform = state.animations.length > 0 || meshesOf(src).some(isDeformable);
+  const cache = new Map(), hidden = new Set(d.hidden), T = f.fit ? targetOf(id) : null;
+  const k = T ? 1 : f.scale * (1 + d.size); // with a target the fit below sets the size
+  let root;
+  if (!deform) {
+    root = new THREE.Group();
+    meshesOf(src).forEach((m, i) => {
+      if (hidden.has(i)) return;
+      const g = bakedGeometry(m); made.geoms.add(g);
+      if (Math.abs(d.parts[i] - 1) > 1e-4) {
+        g.computeBoundingBox();
+        g.applyMatrix4(aboutPoint(new THREE.Matrix4().makeScale(d.parts[i], d.parts[i], d.parts[i]), baseCentre(g.boundingBox)));
+      }
+      recolourVertices(g, d);
+      const nm = new THREE.Mesh(g, variantMaterials(m, d, cache, made)); nm.name = m.name; nm.userData = { ...m.userData };
+      root.add(nm);
+    });
+    const geoms = meshesOf(root).map((m) => m.geometry);
+    if (f.noise > 0) displace(geoms, f.noise, size, d.noiseSeed);
+    const M = aboutPoint(new THREE.Matrix4().makeScale(k * d.w * (d.mirror ? -1 : 1), k * d.h, k * d.w), c0);
+    for (const g of geoms) { g.applyMatrix4(M); if (d.mirror) flipWinding(g); }
+  } else {
+    const inner = SkeletonUtils.clone(src); inner.visible = true;
+    meshesOf(inner).forEach((m, i) => {
+      if (hidden.has(i)) { m.visible = false; return; } // the exporter skips hidden nodes
+      if (m.geometry.attributes.color && recolours(d)) { m.geometry = m.geometry.clone(); made.geoms.add(m.geometry); recolourVertices(m.geometry, d); }
+      m.material = variantMaterials(m, d, cache, made);
+    });
+    inner.applyMatrix4(new THREE.Matrix4().makeTranslation(-c0.x, -c0.y, -c0.z));
+    root = new THREE.Group(); root.add(inner);
+    root.scale.set(k * d.w * (d.mirror ? -1 : 1), k * d.h, k * d.w); root.position.copy(c0);
+  }
+  root.name = id;
+  // fit to the id's target height (size spread kept inside the tolerance) and move the pivot to the base centre
+  if (f.fit) {
+    root.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(root), H = b.max.y - b.min.y, tol = (game.cfg?.tolerance || 0.15) * 0.8;
+    const kf = T && H > 0 ? T.h * (1 + Math.max(-tol, Math.min(tol, d.size))) / H : 1, c = baseCentre(b);
+    const M = new THREE.Matrix4().makeScale(kf, kf, kf).multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+    if (deform) root.applyMatrix4(M); else for (const m of meshesOf(root)) m.geometry.applyMatrix4(M);
+  }
+  for (const m of meshesOf(root)) { m.geometry.computeBoundingBox(); m.geometry.computeBoundingSphere(); }
+  const r2 = (x) => Math.round(x * 1000) / 1000;
+  root.userData = { variantOf: forge.sourceId, variantSeed: f.seed, variantIndex: d.index,
+    variant: { hue: r2(d.hue), saturation: r2(d.sat), brightness: r2(d.light), tint: f.tintAmt > 0 ? f.tint : undefined, tintAmount: f.tintAmt || undefined,
+      scale: T ? undefined : r2(k), stretch: { w: r2(d.w), h: r2(d.h) }, mirror: d.mirror || undefined,
+      hidden: d.hidden.length ? d.hidden.map((i) => forge.partNames[i]) : undefined, fitTo: T ? id : undefined } };
+  return { root, deform, noTarget: f.fit && !T };
+}
+
+function freeMade(made) {
+  if (!made) return;
+  for (const g of made.geoms) g.dispose();
+  for (const m of made.mats) m.dispose();
+  for (const t of made.texs) t.dispose();
+}
+function clearForgePreview() {
+  const p = forge.preview; if (!p) return;
+  const lbls = []; p.traverse((o) => { if (o.isCSS2DObject) lbls.push(o); });
+  for (const o of lbls) o.parent.remove(o); // a removed CSS2DObject takes its element out of the page
+  scene.remove(p); forge.preview = null; freeMade(forge.made); forge.made = null;
+  if (state.original) state.original.visible = state.view === 'original' || !state.result;
+  if (state.result) state.result.visible = state.view === 'result';
+}
+// Lays the variants out in a row along X, each labelled with its id, and frames them.
+function showForgePreview(items, made) {
+  clearForgePreview(); forge.made = made;
+  const row = new THREE.Group(); row.name = 'VariantPreview';
+  const boxes = items.map((it) => { it.root.updateMatrixWorld(true); return new THREE.Box3().setFromObject(it.root); });
+  const gap = Math.max(...boxes.map((b) => b.max.x - b.min.x), 0.1) * 0.25;
+  let x = 0;
+  items.forEach((it, i) => {
+    const b = boxes[i], slot = new THREE.Group(); slot.add(it.root);
+    slot.position.x = x - b.min.x; x += b.max.x - b.min.x + gap;
+    const el = document.createElement('div'); el.className = 'lbl' + (it.ok === false ? ' fail' : ''); el.textContent = it.id + (it.ok === false ? ' ✗' : '');
+    const lbl = new CSS2DObject(el); lbl.position.set((b.min.x + b.max.x) / 2, b.max.y + (b.max.y - b.min.y) * 0.08, b.max.z); slot.add(lbl);
+    row.add(slot);
+  });
+  row.position.x = -(x - gap) / 2;
+  if (state.original) state.original.visible = false;
+  if (state.result) state.result.visible = false;
+  scene.add(row); forge.preview = row; applyWireTo(row); updateAids();
+  fitBox(new THREE.Box3().setFromObject(row));
+}
+const applyWireTo = (root) => root.traverse((o) => {
+  if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m) m.wireframe = $('wire').checked; });
+});
+
+// Makes (and with `save`, downloads) the variants: one <id>.glb, or a zip of them plus report.json and report.txt.
+async function forgeVariants(save) {
+  if (!state.original) return;
+  if (!state.result || state.dirty || !state.lastExport) await runPipeline();
+  if (!state.result) return log('Variant forge: no result to make variants from.', 'err');
+  const f = readForge(), s = readSettings(), src = state.result, srcMeshes = meshesOf(src);
+  forge.sourceId = isGame() ? currentId() : slug(state.name);
+  forge.partNames = srcMeshes.map((m, i) => m.name || 'mesh ' + (i + 1));
+  const ids = variantIds(forge.sourceId, f), made = { geoms: new Set(), mats: new Set(), texs: new Set() };
+  f.tintColor = new THREE.Color(1, 1, 1).lerp(new THREE.Color(f.tint), f.tintAmt);
+  const items = [];
+  let noted = false;
+  try {
+    for (const [i, id] of ids.entries()) {
+      $('busyText').textContent = `Forging ${id} (${i + 1}/${ids.length})…`;
+      await new Promise((r) => setTimeout(r, 0));
+      const d = drawVariant(f, i, srcMeshes.length); d.index = i; d.tint = f.tintColor;
+      const { root, deform, noTarget } = buildVariant(src, d, f, id, made);
+      if (deform && !noted && (f.partVar > 0 || f.noise > 0)) { noted = true; log('Skinned, morph or animated model: per-part scale and noise are skipped (they would break the rig).', 'warn'); }
+      if (noTarget) log(`${id} has no target in targets.json: sized by Scale instead.`, 'warn');
+      const buf = await exportGLB(root, state.animations, s);
+      const it = { id, root, bytes: buf.byteLength, buf, faces: statsOf(root).faces, draw: root.userData.variant };
+      if (isGame()) { const v = validate({ root, bytes: buf.byteLength, id }); it.ok = v.ok; it.checks = v.lines.filter((l) => l.level !== 'head'); }
+      items.push(it);
+    }
+  } catch (e) { freeMade(made); throw e; }
+  showForgePreview(items, made);
+  const bad = items.filter((it) => it.ok === false).length;
+  log(`Forged ${items.length} variant(s) of ${forge.sourceId}: ${items.map((it) => it.id).join(', ')}` + (bad ? ` (${bad} fail the game check)` : ''), bad ? 'warn' : 'ok');
+  if (!save) return items;
+  if (items.length === 1) {
+    saveBlob(new Blob([items[0].buf], { type: 'model/gltf-binary' }), items[0].id + '.glb');
+    log(`Downloaded ${items[0].id}.glb (${fmtBytes(items[0].bytes)})`, 'ok');
+    return items;
+  }
+  const zip = items.map((it) => ({ name: it.id + '.glb', data: new Uint8Array(it.buf) }));
+  const sz = (root) => { const v = worldBox(root).getSize(new THREE.Vector3()); return { w: +v.x.toFixed(3), d: +v.z.toFixed(3), h: +v.y.toFixed(3) }; };
+  const files = items.map((it) => ({ output: it.id + '.glb', faces: it.faces, bytes: it.bytes, size: sz(it.root), variant: it.draw, ok: it.ok, checks: it.checks }));
+  const { count, names, tintColor, ...settings } = f;
+  zip.push({ name: 'report.json', data: JSON.stringify({ date: new Date().toISOString(), source: forge.sourceId, profile: $('profile').value,
+    targets: isGame() ? game.source : undefined, forge: settings, export: s, files }, null, 1) });
+  zip.push({ name: 'report.txt', data: files.map((r) => [
+    `${r.ok === false ? 'FAIL' : r.ok ? 'ok  ' : '    '} ${r.output}  ${r.size.w} x ${r.size.d} x ${r.size.h} m  ${fmtInt(r.faces)} triangles  ${fmtBytes(r.bytes)}  (variant of ${forge.sourceId}, seed ${f.seed})`,
+    ...(r.checks || []).filter((c) => c.level !== 'info').map((c) => `       ${c.level.padEnd(4)} ${c.text}`),
+  ].join('\n')).join('\n') + '\n' });
+  const zipName = `${forge.sourceId}-variants-${items.length}.zip`;
+  saveBlob(makeZip(zip), zipName);
+  log(`Downloaded ${zipName}`, 'ok');
+  return items;
+}
+$('forgePreviewBtn').onclick = () => busy('Forging variants…', () => forgeVariants(false));
+$('forgeExportBtn').onclick = () => busy('Forging variants…', () => forgeVariants(true));
+
 try { if (localStorage.getItem('glbopt.profile') === 'embers') $('profile').value = 'embers'; } catch {}
 profileChanged();
 
 // Scripting / debugging hooks (also used by the tests).
 window.__glbopt = { THREE, state, runPipeline, loadBuffer, exportGLB, setOriginal, decimate, subdivide, readSettings,
-  setTargets, validate, pivotBaseCentre, rotateY, zUpToYUp, scaleToHeight, bakeTransforms, makeGameReady, runBatch, makeZip, rewriteGLB, game };
+  setTargets, validate, forgeVariants, readForge, variantIds, pivotBaseCentre, rotateY, zUpToYUp, scaleToHeight, bakeTransforms, makeGameReady, runBatch, makeZip, rewriteGLB, game };
 log('Ready. Open a .glb, drop one on the viewer, or load the sample.');
 </script>
 </body>
