@@ -94,6 +94,11 @@
   }
 }
 </script>
+<!-- Code the toolkit pages share (shared/kit.js explains why these are classic scripts). -->
+<script src="shared/kit.js"></script>
+<script src="shared/files.js"></script>
+<script src="shared/scale-figure.js"></script>
+<script src="shared/export.js"></script>
 </head>
 <body>
 <div id="app">
@@ -220,6 +225,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+const kit = EmbersKit.use({ THREE, GLTFExporter });
 
 const $ = (id) => document.getElementById(id);
 const PI = Math.PI;
@@ -413,7 +419,7 @@ function buildDemoProp() {
 async function demoBuffer(kind) {
   const root = kind === 'prop' ? buildDemoProp() : buildDemoRig(DEMOS[kind]);
   root.updateMatrixWorld(true);
-  return new GLTFExporter().parseAsync(root, { binary: true, trs: true });
+  return kit.writeGLB(root, { trs: true });
 }
 
 // ---------- rig analysis ----------
@@ -776,13 +782,7 @@ scene.add(sun, sun.target, new THREE.HemisphereLight(0xc8d4ff, 0x302820, 1.1));
 const ground = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshStandardMaterial({ color: 0x3d4a32, roughness: 1 }));
 ground.rotation.x = -PI / 2; scene.add(ground);
 const grid = new THREE.GridHelper(2, 2, 0x56607a, 0x343a48); grid.position.y = 0.001; scene.add(grid);
-const figure = new THREE.Group(); figure.visible = false; scene.add(figure);
-{
-  const m = new THREE.MeshStandardMaterial({ color: 0x5a6070, roughness: 0.9 });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.95, 4, 12), m); body.position.y = 0.725; body.scale.z = 0.7;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), m); head.position.y = 1.63;
-  figure.add(body, head);
-}
+const figure = kit.scaleFigure(); scene.add(figure); // 1.8 m
 const holder = new THREE.Group(); scene.add(holder);
 let skelHelper = null;
 
@@ -836,11 +836,7 @@ async function busy(text, fn) {
   try { await fn(); } catch (e) { console.error(e); log('Failed: ' + (e.message || e), 'err'); }
   finally { $('busy').classList.remove('show'); state.busy = false; }
 }
-function saveBlob(blob, name) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
+const { saveBlob } = kit;
 const restorePose = (m) => { for (const [o, r] of m.rest) { o.position.copy(r.p); o.quaternion.copy(r.q); o.scale.copy(r.s); } };
 const procOpts = () => ({ plan: currentPlan(), k: Number($('strength').value), down: $('armsDown').checked });
 const libOpts = () => ({ tr: $('trMode').value, rot: state.lib ? state.lib.rotUsed : 'asis', inPlace: $('inPlace').checked });
@@ -1087,7 +1083,7 @@ async function bake() {
     name: e.name.trim(), from: e.group === 'lib' ? `${state.lib.name}:${e.srcName}` : e.group === 'proc' ? `procedural:${e.srcName}` : `file:${e.srcName}`,
     ...(e.start > 0 || e.end < e.base.duration - 1e-6 ? { trim: [+e.start.toFixed(3), +e.end.toFixed(3)] } : {}) })) } };
   let buf;
-  try { buf = await new GLTFExporter().parseAsync(m.root, { binary: true, trs: true, animations: clips }); }
+  try { buf = await kit.writeGLB(m.root, { trs: true, animations: clips }); }
   finally { m.root.userData = saved; if (sel) select(sel); }
   buf = editGlbJson(buf, restoreNames);
   const name = (($('fileName').value.trim().replace(/\.glb$/i, '').replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-|-$/g, '')) || 'model') + '.glb';

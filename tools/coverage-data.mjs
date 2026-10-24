@@ -1,7 +1,7 @@
 // Refreshes the data built into coverage.html, so the dashboard works offline and without a build step:
-//  - embersTargets: a copy of embers/targets.json (the page loads the live file from the game repo when it can),
 //  - missingList: a copy of embers/environment-needs-prompts.md,
 //  - generatorIds: for each generator page, the ids in its GAME_IDS table and their fallback box (if any).
+// (The offline targets.json copy is shared/targets-data.js, which npm run build writes.)
 // Run it after changing a generator's GAME_IDS or the embers/ files:  npm run coverage-data
 // tests/coverage.spec.js fails when coverage.html is out of date.
 import fs from 'node:fs';
@@ -40,7 +40,6 @@ export function coverageData() {
     gens[key] = { title, page, ids: gameIds(fs.readFileSync(f, 'utf8'), src) };
   }
   return {
-    targets: fs.readFileSync(path.join(root, 'embers/targets.json'), 'utf8').trim(),
     list: fs.readFileSync(path.join(root, 'embers/environment-needs-prompts.md'), 'utf8').trim(),
     gens: JSON.stringify(gens, null, 1),
   };
@@ -57,7 +56,6 @@ export function setBlock(html, id, text) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const file = path.join(root, 'coverage.html'), d = coverageData();
   let html = fs.readFileSync(file, 'utf8');
-  html = setBlock(html, 'embersTargets', d.targets);
   html = setBlock(html, 'missingList', d.list);
   html = setBlock(html, 'generatorIds', d.gens);
   fs.writeFileSync(file, html);

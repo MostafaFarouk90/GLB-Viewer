@@ -64,7 +64,6 @@ test.describe('coverage dashboard', () => {
   test('built-in data matches embers/ and the generator pages', async () => {
     const html = fs.readFileSync(path.join(ROOT, 'coverage.html'), 'utf8'), d = coverageData();
     const block = (id) => html.match(new RegExp(`<script[^>]*id="${id}"[^>]*>\\n([\\s\\S]*?)\\n</script>`))[1];
-    expect(block('embersTargets'), 'run npm run coverage-data').toBe(d.targets);
     expect(block('missingList'), 'run npm run coverage-data').toBe(d.list);
     expect(block('generatorIds'), 'run npm run coverage-data').toBe(d.gens);
   });

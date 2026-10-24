@@ -4,7 +4,7 @@ A single-page tool to view a `.glb` / `.gltf` model and change its face count, s
 
 ## Run it
 1. Double-click **`glb-viewer-offline.html`**. It works with no internet because every library is inside the file.
-   - `index.html` is the same app in readable form. It loads three.js and the other libraries from the jsDelivr CDN, so it needs internet.
+   - `index.html` is the same app in readable form. It loads three.js and the other libraries from the jsDelivr CDN, so it needs internet, and the `shared/` folder next to it.
 2. Click **Open GLB…** (or drag a file onto the viewer). **Load sample** gives a test model.
 3. Change the settings, press **Apply**, compare with the **Original / Result** toggle, then **Download GLB**.
 
@@ -159,7 +159,7 @@ cottage-thatch-b (section B, a cottage built from the kit and fitted to the targ
 The **Game id** list has the rock ids in `targets.json` (boulder-large-a/b, rock-cluster-a, ember-rock-a/b, basalt-columns-a, also made by the props page) and new ids for the pieces the missing-objects list says are missing entirely (cliffs, ledges, scree, cave mouths, arches, crags, Act 2 basalt fields, ember crags, obsidian), plus golem-rock-chunks and poi-cave-mouth from section G. The new ids and their sizes are provisional until the game names them; **Load targets.json** (or the live file) overrides them as soon as the game adds them. Picking an id fits the exact target box, picks the highest detail within the triangle budget and sets the game-ready export (`<id>.glb`, roughness 1, metallic 0, emissive kept). Every file keeps its type, seed, options and size in the root node's glTF `extras` (cliff modules also their tiling length).
 
 ## Coverage dashboard
-`coverage.html` shows, for every object id the game asks for, whether it is done and how to make it. It uses no libraries, so the same file works offline: double-click it.
+`coverage.html` shows, for every object id the game asks for, whether it is done and how to make it. It uses no libraries, so the same file works offline: double-click it (it loads the `shared/` folder next to it).
 
 - **Ids**: everything in `targets.json` plus the missing-objects list (`-b` shorthands expanded, the section E animals, the section G stand-ins) and the stand-in ids the generators invent (cliffs, wildlife, Oldsmoke pieces). Ids that are not in `targets.json` show their size from the list or the generator's estimate, marked *est.*
 - **Game**: *shipped* when the game's `public/assets/env/manifest.json` (loaded live from the game repo) has the id, with its triangles and MB after ingest.
@@ -167,6 +167,36 @@ The **Game id** list has the rock ids in `targets.json` (boulder-large-a/b, rock
 - **Generators**: links to the generator pages whose Game id list has the id. Tiles count shipped, passing, failing and *still needed* ids (not shipped and no passing file), split by whether a generator can make them; click a tile to filter.
 - **Download report.csv** (one line per id, for the game thread) and **Download failing files (.zip)** (the failing files as they are, with `failing.txt` and `report.csv`, ready for the viewer's batch in game mode).
 - Without internet the built-in `targets.json` and list are used and *shipped* stays empty; **Load file…** (or dropping it) takes another `targets.json`, a game `manifest.json` or a newer missing-list `.md`.
+
+## Batch export of game ids (command line)
+`tools/export-ids.mjs` makes every game id of the generator pages without opening a browser window, exactly as each page's Download button saves it (byte for byte), and writes a report. It needs `npm install` once (it drives the headless Chromium that Playwright installs).
+
+```sh
+node tools/export-ids.mjs                                   # every page, every game id, into export/
+node tools/export-ids.mjs props vegetation --lods           # only these pages; vegetation also writes .lod1/.lod2
+node tools/export-ids.mjs props --ids stump-a,cairn-a --seed v2 --out ~/embers-export
+node tools/export-ids.mjs --list                            # the pages and their ids
+node tools/export-ids.mjs --help                            # every option
+```
+
+- Files go to `<out>/<page>/<id>.glb` (a folder per page, since props and texture both make `ash-patch-decal` and `waystone-flagstones`).
+- The seed is the id itself unless `--seed` is given, so a run is repeatable.
+- `--targets live` (default) uses the game repo's `targets.json`, falling back to the built-in copy offline; `--targets builtin` uses the copy from `embers/targets.json`; `--targets path/to/targets.json` uses that file.
+- `report.json` / `report.txt` list each file's triangles, size (w × h × d, after node transforms), bytes and target box, with warnings for what the game's check would flag: driver axis more than the tolerance off its target, base not on y 0, triangles or file size over the cap. Run the files through the viewer's game mode (or the game's `check-glb.mjs`) for the full verdict.
+
+## Shared code (`shared/`)
+Code that several pages use lives in `shared/` and is loaded by each source page with a plain `<script src="shared/….js">` tag; the offline build copies it into the page, so the `*-offline.html` files stay single files. These are classic scripts on a `window.EmbersKit` object rather than ES modules because browsers refuse module imports from `file://` pages, and the source pages must keep opening by double-click.
+
+- `kit.js`: the `EmbersKit` object, `EmbersKit.use({ THREE, … })` (the page hands over its three.js) and the generator registry that `tools/export-ids.mjs` calls.
+- `random.js`: seeded random numbers (`makeRng`, `hashSeed`, `randomSeed`).
+- `files.js`: `saveBlob`, the zip writer and variant file names.
+- `targets.js` and `targets-data.js`: the live `targets.json` URL and fetch, the built-in copy (written from `embers/targets.json` by `npm run build`), the driver axis and fit-to-box rules.
+- `palette.js`: the game's palette swatches from `embers/conventions.md`.
+- `scale-figure.js`: the 1.8 m figure and the target-box outline.
+- `export.js`: GLB writing, game materials, merging parts per material and freeing export copies.
+- `geometry.js`: tapered tubes and position hash noise used by several generators.
+
+A generator with game ids registers itself with `kit.registerGenerator('<name>', { ids, files, targets })`, where `<name>` is its file name without `-generator.html`; that is all `tools/export-ids.mjs` needs to export a new page's ids.
 
 ## Editing / development
 `index.html`, `character-generator.html`, `props-generator.html`, `texture-generator.html`, `vegetation-generator.html`, `creature-generator.html`, `animation-preview.html`, `structures-generator.html` and `rocks-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html`, `texture-generator-offline.html`, `vegetation-generator-offline.html` `creature-generator-offline.html`, `animation-preview-offline.html`, `structures-generator-offline.html` and `rocks-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
@@ -177,6 +207,8 @@ npm run build    # regenerate the *-offline.html files
 npm test         # Playwright tests (Chromium) against the CDN pages and their offline files
 ```
 
-**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` (and of the generator pages that carry a copy) too (a test checks they match). `coverage.html` has no offline build; its built-in copies of `embers/` and of each generator's `GAME_IDS` are refreshed by `npm run coverage-data` (a test fails when they are stale), so run it after changing either. Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
+**After editing a source page or a `shared/` file, run `npm run build` and commit the regenerated offline files together with it.** When `embers/targets.json` changes, `npm run build` also rewrites `shared/targets-data.js`, the pages' offline copy (a test checks they match). `coverage.html` has no offline build; its built-in copies of the missing-objects list and of each generator's `GAME_IDS` are refreshed by `npm run coverage-data` (a test fails when they are stale), so run it after changing either. Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
+
+**After editing a source page or a `shared/` file, run `npm run build` and commit the regenerated offline files together with it.** When `embers/targets.json` changes, `npm run build` also rewrites `shared/targets-data.js`, the pages' offline copy (a test checks they match). Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
 
 There is intentionally no CI: build and test locally before committing.

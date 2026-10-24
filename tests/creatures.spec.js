@@ -59,7 +59,7 @@ for (const file of CREATURE_VARIANTS) {
     });
 
     test('the embedded size table matches embers/targets.json', async ({ page }) => {
-      const embedded = await page.evaluate(() => JSON.parse(document.getElementById('embersTargets').textContent));
+      const embedded = await page.evaluate(() => window.EmbersKit.embeddedTargets());
       expect(embedded).toEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'embers/targets.json'), 'utf8')));
     });
 

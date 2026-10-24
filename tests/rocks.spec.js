@@ -303,8 +303,3 @@ for (const file of ROCKS_VARIANTS) {
   });
 }
 
-test('the built-in size table matches embers/targets.json', () => {
-  const html = fs.readFileSync(path.join(ROOT, 'rocks-generator.html'), 'utf8');
-  const m = html.match(/<script type="application\/json" id="embersTargets">([\s\S]*?)<\/script>/);
-  expect(JSON.parse(m[1])).toEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'embers/targets.json'), 'utf8')));
-});
