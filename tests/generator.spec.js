@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
-import { GENERATOR_VARIANTS, openApp, apply, num, parseGLB, glbFaces } from './helpers.js';
+import { GENERATOR_VARIANTS, openApp, apply, num, parseGLB, glbFaces, readZip } from './helpers.js';
 
 const setSeed = async (page, archetype, seed) => {
   await page.selectOption('#archetype', archetype);
@@ -46,7 +46,7 @@ for (const file of GENERATOR_VARIANTS) {
     });
 
     test('every part option builds', async ({ page }) => {
-      test.setTimeout(300_000); // ~40 rebuilds per archetype in software WebGL
+      test.setTimeout(600_000); // ~70 rebuilds per archetype in software WebGL
       await page.uncheck('#bloom');
       await page.uncheck('#rotate');
       const options = await page.evaluate(() => window.__chargen.OPTIONS);
@@ -191,10 +191,79 @@ for (const file of GENERATOR_VARIANTS) {
       expect(glbFaces(buf)).toBe(await num(page, 'sF'));
     });
 
+    test('townsfolk archetypes roll everyday clothing; older archetypes are unchanged', async ({ page }) => {
+      const r = await page.evaluate(() => {
+        const g = window.__chargen, town = Object.keys(g.ARCH).filter((a) => g.ARCH[a].group === 'Townsfolk');
+        return { town, guard: g.rollTraits('guard', 'g1'), wizard: g.rollTraits('wizard', 'w1'), survivors: [1, 2, 3, 4, 5, 6].map((i) => g.rollTraits('survivor', 's' + i).ash) };
+      });
+      expect(r.town.sort()).toEqual(['blacksmith', 'farmer', 'guard', 'merchant', 'miner', 'priest', 'survivor', 'villager']);
+      expect(r.guard).toMatchObject({ outfit: 'armor', headwear: 'helmet', shoulders: 'pauldrons', boots: 'boots', ash: false });
+      expect(r.guard.colors.leather).toMatch(/^#[0-9a-f]{6}$/);
+      expect(r.survivors.filter(Boolean).length).toBeGreaterThan(2); // mostly ash-covered
+      // archetypes from before the townsfolk keep their rolls: the new slots are 'none' and draw nothing from the seed
+      expect(r.wizard).toMatchObject({ offhand: 'none', cloak: 'none', back: 'none', shoulders: 'none', apron: 'none', boots: 'none', ash: false });
+      // the archetype list groups them
+      await expect(page.locator('#archetype optgroup')).toHaveCount(2);
+      await setSeed(page, 'survivor', 'ash');
+      await page.check('#ash');
+      await expect.poll(() => page.evaluate(() => window.__chargen.state.traits.ash)).toBe(true);
+      const ashy = await page.evaluate(() => window.__chargen.state.current.materials.cloth.color.getHexString());
+      await page.uncheck('#ash');
+      await expect.poll(() => page.evaluate(() => window.__chargen.state.current.materials.cloth.color.getHexString())).not.toBe(ashy);
+    });
+
+    test('gear hangs on KayKit bones and downloads as a kit', async ({ page }, info) => {
+      await page.uncheck('#bloom');
+      await page.check('#chibi');
+      await setSeed(page, 'guard', 'gear');
+      for (const [slot, v] of [['headwear', 'helmet'], ['item', 'spear'], ['offhand', 'shield'], ['cloak', 'cape'], ['back', 'backpack'], ['shoulders', 'pauldrons'], ['apron', 'leather']]) {
+        await page.selectOption('#' + slot, v);
+        await expect.poll(() => page.evaluate((k) => window.__chargen.state.traits[k], slot)).toBe(v);
+      }
+      // kit first, with the preview not rigged: the kit rigs a copy in the T rest pose
+      const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#gearBtn')]);
+      expect(dl.suggestedFilename()).toMatch(/-gear\.zip$/);
+      const zip = readZip(fs.readFileSync(await dl.path()));
+      const manifest = JSON.parse(zip['gear.json'].toString('utf8'));
+      expect(manifest.units).toBe('KayKit units (bone space)');
+      const bones = Object.fromEntries(manifest.gear.map((g) => [g.slot + ':' + g.kind, g.bone]));
+      expect(bones).toEqual({ 'headwear:helmet': 'head', 'item:spear': 'handslot.r', 'offhand:shield': 'handslot.l', 'cloak:cape': 'chest',
+        'back:backpack': 'chest', 'shoulders:pauldrons-l': 'upperarm.l', 'shoulders:pauldrons-r': 'upperarm.r' });
+      expect(Object.keys(zip).sort()).toEqual([manifest.body, 'gear.json', ...manifest.gear.map((g) => g.file)].sort());
+      let kitFaces = 0;
+      for (const g of manifest.gear) {
+        const { json } = parseGLB(zip[g.file]);
+        const root = json.nodes[json.scenes[0].nodes[0]];
+        expect(root.extras, g.file).toMatchObject({ bone: g.bone, slot: g.slot, kind: g.kind });
+        expect(root.translation ?? [0, 0, 0]).toEqual([0, 0, 0]);
+        expect(json.skins ?? []).toEqual([]);
+        kitFaces += glbFaces(zip[g.file]);
+      }
+      const body = parseGLB(zip[manifest.body]).json;
+      expect(body.skins[0].joints.length).toBe(41);
+      expect(body.nodes.filter((n) => /^(Gear_|Item$|Offhand$)/.test(n.name))).toEqual([]);
+      kitFaces += glbFaces(zip[manifest.body]);
+      expect(kitFaces).toBe(await num(page, 'sF')); // body + gear is the whole character
+
+      // the rigged download keeps the gear, as plain meshes in a group under each bone
+      await page.check('#rig');
+      await expect.poll(() => page.evaluate(() => window.__chargen.state.traits.rig)).toBe(true);
+      const { json } = parseGLB(await download(page, info));
+      const childOf = (bone) => json.nodes.find((n) => n.name === bone).children.map((c) => json.nodes[c].name);
+      expect(childOf('head')).toContain('Gear_Headwear');
+      expect(childOf('chest')).toEqual(expect.arrayContaining(['Gear_Cloak', 'Gear_Back']));
+      expect(childOf('upperarm.l')).toContain('Gear_Shoulders_L');
+      expect(childOf('handslot.r')).toContain('Item');
+      expect(childOf('handslot.l')).toContain('Offhand');
+      const gearNode = json.nodes.find((n) => n.name === 'Gear_Headwear');
+      expect(gearNode.extras).toMatchObject({ bone: 'head', slot: 'headwear', kind: 'helmet' });
+      for (const c of gearNode.children) expect(json.nodes[c].skin).toBeUndefined();
+    });
+
     test('game budget stays at or under 4,000 triangles', async ({ page }) => {
       await page.uncheck('#bloom');
       await page.selectOption('#detail', 'game');
-      for (const a of ['wizard', 'golem', 'demon', 'fairy']) {
+      for (const a of ['wizard', 'golem', 'demon', 'fairy', 'guard', 'miner']) {
         await setSeed(page, a, 'budget');
         const f = await num(page, 'sF');
         expect(f, a).toBeLessThanOrEqual(4000);

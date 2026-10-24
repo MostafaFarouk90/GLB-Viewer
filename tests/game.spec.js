@@ -2,24 +2,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { ROOT, VARIANTS, TARGETS_URL, openApp, apply, num, loadSample, parseGLB, glbFaces } from './helpers.js';
+import { ROOT, VARIANTS, TARGETS_URL, openApp, apply, num, loadSample, parseGLB, glbFaces, readZip } from './helpers.js';
 
 const sphere = fs.readFileSync(path.join(ROOT, 'tests/fixtures/sphere.glb'));
 const asFile = (name, buffer = sphere) => ({ name, mimeType: 'model/gltf-binary', buffer });
 const fromPage = async (page, expr) => Buffer.from(await page.evaluate(expr));
 const verdict = (page) => page.locator('#verdict li');
-
-// Reads a stored (uncompressed) zip, as the batch writes it.
-function readZip(buf) {
-  const out = {}; let off = 0;
-  while (buf.readUInt32LE(off) === 0x04034b50) {
-    const size = buf.readUInt32LE(off + 18), nameLen = buf.readUInt16LE(off + 26), extra = buf.readUInt16LE(off + 28);
-    const name = buf.subarray(off + 30, off + 30 + nameLen).toString('utf8');
-    out[name] = buf.subarray(off + 30 + nameLen + extra, off + 30 + nameLen + extra + size);
-    off += 30 + nameLen + extra + size;
-  }
-  return out;
-}
 
 // World box of the shown original, as { min, max } arrays.
 const boxOf = (page) => page.evaluate(() => {

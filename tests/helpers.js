@@ -1,4 +1,4 @@
-// Shared setup: open either a CDN page (index.html, character-generator.html, props-generator.html, with jsDelivr served from
+// Shared setup: open either a CDN page (index.html or one of the generator pages, with jsDelivr served from
 // node_modules so it works offline) or its offline build (*-offline.html, with jsDelivr blocked).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,6 +9,8 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 export const VARIANTS = ['index.html', 'glb-viewer-offline.html'];
 export const GENERATOR_VARIANTS = ['character-generator.html', 'character-generator-offline.html'];
 export const PROPS_VARIANTS = ['props-generator.html', 'props-generator-offline.html'];
+export const TEXTURE_VARIANTS = ['texture-generator.html', 'texture-generator-offline.html'];
+export const VEG_VARIANTS = ['vegetation-generator.html', 'vegetation-generator-offline.html'];
 const CDN = 'https://cdn.jsdelivr.net/';
 // The viewer's game profile fetches the live targets.json from the game repo; tests serve the repo copy instead.
 export const TARGETS_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/src/env/targets.json';
@@ -89,4 +91,16 @@ export function glbFaces(buf) {
     n += acc.count / 3;
   }
   return n;
+}
+
+// Reads a stored (uncompressed) zip, as the batch writes it.
+export function readZip(buf) {
+  const out = {}; let off = 0;
+  while (buf.readUInt32LE(off) === 0x04034b50) {
+    const size = buf.readUInt32LE(off + 18), nameLen = buf.readUInt16LE(off + 26), extra = buf.readUInt16LE(off + 28);
+    const name = buf.subarray(off + 30, off + 30 + nameLen).toString('utf8');
+    out[name] = buf.subarray(off + 30 + nameLen + extra, off + 30 + nameLen + extra + size);
+    off += 30 + nameLen + extra + size;
+  }
+  return out;
 }
