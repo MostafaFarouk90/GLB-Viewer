@@ -1,5 +1,5 @@
-// Shared setup: open either the CDN version (index.html, with jsDelivr served from node_modules
-// so it works offline) or the offline build (glb-viewer-offline.html, with jsDelivr blocked).
+// Shared setup: open either a CDN page (index.html, character-generator.html, with jsDelivr served from
+// node_modules so it works offline) or its offline build (*-offline.html, with jsDelivr blocked).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -7,9 +7,11 @@ import { expect } from '@playwright/test';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const VARIANTS = ['index.html', 'glb-viewer-offline.html'];
+export const GENERATOR_VARIANTS = ['character-generator.html', 'character-generator-offline.html'];
 const CDN = 'https://cdn.jsdelivr.net/';
 
-export async function openApp(page, file) {
+// `ready` is the debugging global the page sets once it has started.
+export async function openApp(page, file, ready = '__glbopt') {
   const errors = [], cdnRequests = [];
   // Tests that expect an error push regexes here; matching errors are then not counted as failures.
   const allowed = [];
@@ -17,7 +19,7 @@ export async function openApp(page, file) {
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
   page.on('request', (r) => { if (r.url().startsWith(CDN)) cdnRequests.push(r.url()); });
 
-  if (file === 'index.html') {
+  if (!file.includes('offline')) {
     // https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<file> -> node_modules/<pkg>/<file>
     await page.route(CDN + '**', async (route) => {
       const m = route.request().url().match(/\/npm\/((?:@[^/]+\/)?[^@/]+)@[^/]+\/([^?#]*)/);
@@ -34,7 +36,7 @@ export async function openApp(page, file) {
 
   await page.goto(pathToFileURL(path.join(ROOT, file)).href);
   await expect(page.locator('#log')).toContainText('Ready');
-  await page.waitForFunction(() => !!window.__glbopt);
+  await page.waitForFunction((g) => !!window[g], ready);
   return { errors, cdnRequests, allowed, unexpected: () => errors.filter((e) => !allowed.some((r) => r.test(e))) };
 }
 
