@@ -21,7 +21,7 @@
   .row label { flex: 1; color: var(--text); }
   .row .val { min-width: 54px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
   .hint { color: var(--muted); font-size: 11.5px; margin: 2px 0 6px; }
-  input[type=number], select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  input[type=number], input.wide, select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
     border-radius: 6px; padding: 5px 7px; width: 120px; font: inherit; }
   input[type=range] { width: 130px; accent-color: var(--accent); }
   input[type=checkbox] { accent-color: var(--accent); }
@@ -62,6 +62,21 @@
   .spinner { width: 22px; height: 22px; border: 3px solid var(--line); border-top-color: var(--accent);
     border-radius: 50%; animation: spin .8s linear infinite; margin-right: 10px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  #verdict { list-style: none; padding: 0; margin: 6px 0; font-size: 12px; }
+  #verdict li { padding: 3px 0 3px 20px; position: relative; border-bottom: 1px solid var(--line); }
+  #verdict li::before { position: absolute; left: 2px; top: 3px; font-weight: 700; }
+  #verdict li.pass::before { content: '✓'; color: var(--ok); }
+  #verdict li.warn::before { content: '!'; color: var(--warn); left: 5px; }
+  #verdict li.fail::before { content: '✗'; color: var(--err); }
+  #verdict li.info::before { content: 'i'; color: var(--muted); left: 5px; font-style: italic; }
+  #verdict li.head { color: var(--muted); padding-left: 0; }
+  #verdict li.head::before { content: none; }
+  .game-only { display: none; } body.game .game-only { display: block; }
+  input.wide { width: 150px; }
+  #labels { position: absolute; inset: 0; pointer-events: none; }
+  .lbl { font: 11px/1.2 ui-monospace, Menlo, Consolas, monospace; color: #fff; background: rgba(15,17,21,.75);
+    padding: 1px 4px; border-radius: 4px; white-space: nowrap; }
+  .lbl.tick { background: none; color: var(--muted); }
   @media (max-width: 760px) {
     #app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; }
     main { grid-row: 1; height: 55vh; } aside { grid-row: 2; border-right: 0; }
@@ -102,7 +117,35 @@
       </tbody>
     </table>
 
+    <h2>Game profile</h2>
+    <div class="row"><label for="profile">Profile</label>
+      <select id="profile"><option value="off">Off</option><option value="embers">Embers game-ready</option></select></div>
+    <div class="game-only">
+      <div class="btns" style="margin-top:2px">
+        <button id="targetsBtn">Load targets.json…</button>
+        <input id="targetsInput" type="file" accept=".json,application/json" hidden>
+        <button id="gameReadyBtn" class="primary" disabled>Make game-ready</button>
+      </div>
+      <div class="hint" id="targetsInfo">Target sizes load from the game repo. Load or drop a targets.json to use another copy.</div>
+      <div class="row"><label for="gameId">Id (saves as &lt;id&gt;.glb)</label><input id="gameId" class="wide" list="gameIds" placeholder="from file name"><datalist id="gameIds"></datalist></div>
+      <div class="hint">"Make game-ready" scales to the id's target height, moves the pivot to the base centre, uses the face budget and 512 WebP base-colour textures, then applies.</div>
+      <ul id="verdict"></ul>
+    </div>
+
+    <h2>Transform</h2>
+    <div class="btns" style="margin-top:0">
+      <button id="pivotBtn" disabled title="Base on y 0, footprint centre on x/z 0">Pivot to base centre</button>
+      <button id="rotLBtn" disabled title="Rotate 90° about the vertical axis">⟲ 90°</button>
+      <button id="rotRBtn" disabled title="Rotate -90° about the vertical axis">⟳ 90°</button>
+      <button id="zupBtn" disabled title="The model was made Z-up (lies on its back): stand it up">Z-up → Y-up</button>
+    </div>
+    <div class="row"><label for="heightM">Height (m)</label><input id="heightM" type="number" min="0.001" step="0.1"><button id="scaleBtn" disabled>Scale</button></div>
+    <div class="btns" style="margin-top:0"><button id="bakeBtn" disabled title="Write all node transforms into the vertices and leave every node at identity">Bake transforms</button></div>
+    <div class="hint">1 unit = 1 metre. These change the model itself; the result is cleared, press Apply again.</div>
+
     <h2>Resolution (faces)</h2>
+    <div class="row"><label for="facePreset">Face budget</label>
+      <select id="facePreset"><option value="0">Custom</option><option value="1500">Prop (1,500)</option><option value="4500">Standard (4,500)</option><option value="6000">Hero tree (6,000)</option><option value="5000">Character (5,000)</option></select></div>
     <div class="row"><label for="targetFaces">Target faces</label><input id="targetFaces" type="number" min="4" step="1"></div>
     <div class="row"><input id="ratio" type="range" min="1" max="1600" value="100" style="flex:1;width:auto"><span class="val" id="ratioVal">100%</span></div>
     <div class="hint">Below 100% decimates (removes faces). Above 100% subdivides first, then trims to the exact target.</div>
@@ -129,30 +172,420 @@
     <div class="row"><label for="texSize">Max texture size</label>
       <select id="texSize"><option value="0">Original</option><option>4096</option><option>2048</option><option>1024</option><option>512</option><option>256</option></select></div>
     <div class="row"><label for="texFormat">Texture format</label>
-      <select id="texFormat"><option value="keep">Keep</option><option value="jpeg">JPEG (smaller)</option><option value="png">PNG (lossless)</option></select></div>
+      <select id="texFormat"><option value="keep">Keep</option><option value="jpeg">JPEG (smaller)</option><option value="png">PNG (lossless)</option><option value="webp">WebP (smallest)</option></select></div>
+    <div class="row"><label for="baseOnly">Base colour only</label><input id="baseOnly" type="checkbox"></div>
+    <div class="hint">Drops normal, roughness, metal, AO and emissive maps on export (flat roughness 1, metal 0), as the game's ingest does. "Keep" writes the original image bytes when no resize is needed.</div>
 
     <div class="btns">
       <button id="applyBtn" class="primary" disabled>Apply</button>
       <button id="resetBtn" disabled>Reset</button>
       <button id="downloadBtn" disabled>Download GLB</button>
     </div>
+
+    <h2>Batch</h2>
+    <div class="btns" style="margin-top:0">
+      <button id="batchBtn">Batch folder…</button>
+      <input id="batchInput" type="file" webkitdirectory multiple hidden>
+    </div>
+    <div class="row"><label for="batchFit">Fit height + base pivot per file</label><input id="batchFit" type="checkbox"></div>
+    <div class="hint">Runs every .glb/.gltf in a folder (or several dropped at once) with the current settings and downloads a zip of the results plus report.json and report.txt. Face budget per file: the preset above, else the % slider. Never adds faces unless the slider is above 100%.</div>
     <div id="log"></div>
   </aside>
 
   <main id="main">
     <div id="viewport"></div>
+    <div id="labels"></div>
     <div id="toolbar">
       <div class="seg"><button id="viewResult" class="on">Result</button><button id="viewOriginal">Original</button></div>
       <label class="chk"><input id="wire" type="checkbox"> Wireframe</label>
       <label class="chk"><input id="rotate" type="checkbox"> Auto-rotate</label>
+      <label class="chk" title="Metre grid and ruler, W × D × H box, 1.8 m figure, +Z arrow"><input id="aids" type="checkbox" checked> Scale aids</label>
       <button id="fitBtn">Fit view</button>
       <span id="filename"></span>
     </div>
-    <div id="drop"><div class="box">Drop a <b>.glb</b> file here<br><span style="font-size:12px">(or a .gltf together with its .bin/texture files) or use “Open GLB…”</span></div></div>
+    <div id="drop"><div class="box">Drop a <b>.glb</b> file here<br><span style="font-size:12px">(or a .gltf together with its .bin/texture files, a folder or several models to batch, or targets.json) or use “Open GLB…”</span></div></div>
     <div id="busy"><div class="spinner"></div><span id="busyText">Working…</span></div>
   </main>
 </div>
 
+<!-- Offline fallback for the Embers game profile: a copy of embers/targets.json (the live file is fetched from the game repo). -->
+<script type="application/json" id="embersTargets">
+{
+ "$comment": "Target sizes in metres (width x, depth z, height y) for environment objects, from assets/environment-needs-prompts.md. Used by src/env/scaleTable.ts and tools/env-pass/check-glb.mjs.",
+ "tolerance": 0.15,
+ "knightHeight": 1.8,
+ "proportion": {
+  "$comment": "Ids ingested with an exact fit to the target size (tools/env-pass/ingest.mjs): uniform scale to the height, optional tile = repeat the model n times along x, then width/depth scaled to the target without the 15% cap. For artist models whose shape is far from the table (batch 2).",
+  "stonewall-low": { "tile": 2 },
+  "wattle-fence": { "tile": 2 },
+  "picket-fence": { "tile": 2 },
+  "garden-bed-a": { "tile": 2 },
+  "signpost-a": {},
+  "washing-line": {},
+  "barn-a": {}
+},
+  "objects": {
+  "oak-a": {
+   "w": 10.5,
+   "d": 10.5,
+   "h": 13
+  },
+  "oak-b": {
+   "w": 10.5,
+   "d": 10.5,
+   "h": 13
+  },
+  "oak-c": {
+   "w": 10.5,
+   "d": 10.5,
+   "h": 13
+  },
+  "birch-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "poplar-a": {
+   "w": 2.5,
+   "d": 2.5,
+   "h": 14.0
+  },
+  "cairn-a": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 1.3
+  },
+  "birch-b": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "elm-or-ash-a": {
+   "w": 6.0,
+   "d": 6.0,
+   "h": 10.0
+  },
+  "autumn-tree-a": {
+   "w": 6.0,
+   "d": 6.0,
+   "h": 9.0
+  },
+  "autumn-tree-b": {
+   "w": 6.0,
+   "d": 6.0,
+   "h": 9.0
+  },
+  "bush-round-a": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.1
+  },
+  "bush-round-b": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.1
+  },
+  "bush-flowering-a": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.2
+  },
+  "bush-flowering-b": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.2
+  },
+  "hedge-straight": {
+   "w": 3.4,
+   "d": 0.9,
+   "h": 1.6
+  },
+  "hedge-corner": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 1.6
+  },
+  "grass-clump-a": {
+   "w": 0.6,
+   "d": 0.6,
+   "h": 0.5
+  },
+  "grass-clump-b": {
+   "w": 0.6,
+   "d": 0.6,
+   "h": 0.5
+  },
+  "grass-clump-c": {
+   "w": 0.6,
+   "d": 0.6,
+   "h": 0.5
+  },
+  "fern-a": {
+   "w": 0.9,
+   "d": 0.9,
+   "h": 0.7
+  },
+  "flower-patch-yellow": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "flower-patch-white": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "flower-patch-purple": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "flower-patch-red": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "reeds-a": {
+   "w": 0.8,
+   "d": 0.8,
+   "h": 1.8
+  },
+  "reeds-b": {
+   "w": 0.8,
+   "d": 0.8,
+   "h": 1.8
+  },
+  "stump-a": {
+   "w": 0.9,
+   "d": 0.9,
+   "h": 0.6
+  },
+  "stump-b": {
+   "w": 0.9,
+   "d": 0.9,
+   "h": 0.6
+  },
+  "log-fallen-a": {
+   "w": 3.0,
+   "d": 0.8,
+   "h": 0.7
+  },
+  "mushrooms-a": {
+   "w": 0.5,
+   "d": 0.5,
+   "h": 0.3
+  },
+  "boulder-large-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 2.4
+  },
+  "boulder-large-b": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 2.4
+  },
+  "rock-cluster-a": {
+   "w": 2.5,
+   "d": 2.0,
+   "h": 1.0
+  },
+  "haystack-round": {
+   "w": 2.4,
+   "d": 2.4,
+   "h": 2.6
+  },
+  "haybale-a": {
+   "w": 1.2,
+   "d": 0.8,
+   "h": 0.7
+  },
+  "haycart-a": {
+   "w": 3.2,
+   "d": 1.6,
+   "h": 1.8
+  },
+  "woodpile-chop": {
+   "w": 2.0,
+   "d": 1.2,
+   "h": 1.3
+  },
+  "trough-a": {
+   "w": 2.0,
+   "d": 0.7,
+   "h": 0.7
+  },
+  "garden-bed-a": {
+   "w": 2.0,
+   "d": 1.4,
+   "h": 0.5
+  },
+  "garden-bed-b": {
+   "w": 2.0,
+   "d": 1.4,
+   "h": 0.5
+  },
+  "beehive-skep": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.8
+  },
+  "washing-line": {
+   "w": 4.0,
+   "d": 0.3,
+   "h": 2.2
+  },
+  "signpost-a": {
+   "w": 1.2,
+   "d": 0.4,
+   "h": 2.4
+  },
+  "milestone-a": {
+   "w": 0.6,
+   "d": 0.4,
+   "h": 1.1
+  },
+  "picket-fence": {
+   "w": 3.4,
+   "d": 0.2,
+   "h": 1.1
+  },
+  "wattle-fence": {
+   "w": 3.4,
+   "d": 0.3,
+   "h": 1.2
+  },
+  "stonewall-low": {
+   "w": 3.4,
+   "d": 0.7,
+   "h": 1.0
+  },
+  "market-stall-a": {
+   "w": 3.0,
+   "d": 2.4,
+   "h": 2.8
+  },
+  "market-stall-b": {
+   "w": 3.0,
+   "d": 2.4,
+   "h": 2.8
+  },
+  "well-bucket-rope": {
+   "w": 0.4,
+   "d": 0.4,
+   "h": 0.5
+  },
+  "barn-a": {
+   "w": 8.0,
+   "d": 12.0,
+   "h": 7.0
+  },
+  "stable-a": {
+   "w": 7.0,
+   "d": 5.0,
+   "h": 4.0
+  },
+  "cottage-thatch-a": {
+   "w": 4.6,
+   "d": 5.0,
+   "h": 5.0
+  },
+  "cottage-thatch-b": {
+   "w": 4.6,
+   "d": 5.0,
+   "h": 5.0
+  },
+  "wagon-wreck-a": {
+   "w": 4.0,
+   "d": 2.0,
+   "h": 2.2
+  },
+  "wagon-burnt": {
+   "w": 4.0,
+   "d": 2.0,
+   "h": 2.0
+  },
+  "roadside-shrine-a": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 2.2
+  },
+  "gibbet-post": {
+   "w": 1.0,
+   "d": 1.0,
+   "h": 3.6
+  },
+  "campfire-ring": {
+   "w": 1.6,
+   "d": 1.6,
+   "h": 0.6
+  },
+  "crow-perch-post": {
+   "w": 0.4,
+   "d": 0.4,
+   "h": 1.6
+  },
+  "ash-tree-dead-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "ash-tree-dead-b": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "charred-stump": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 0.8
+  },
+  "basalt-columns-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 4.0
+  },
+  "ember-rock-a": {
+   "w": 2.5,
+   "d": 2.5,
+   "h": 2.0
+  },
+  "ember-rock-b": {
+   "w": 2.5,
+   "d": 2.5,
+   "h": 2.0
+  },
+  "slag-heap": {
+   "w": 5.0,
+   "d": 5.0,
+   "h": 2.5
+  },
+  "mine-cart": {
+   "w": 1.8,
+   "d": 1.0,
+   "h": 1.0
+  },
+  "ore-pile": {
+   "w": 2.0,
+   "d": 2.0,
+   "h": 1.0
+  },
+  "scorched-fence": {
+   "w": 3.4,
+   "d": 0.3,
+   "h": 1.6
+  },
+  "smelter-chimney": {
+   "w": 2.0,
+   "d": 2.0,
+   "h": 9.0
+  }
+ },
+ "maxTriangles": 10000,
+ "maxFileMB": 1.5,
+ "proportionTolerance": 1.1
+}
+</script>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -160,6 +593,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { mergeVertices, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { MeshoptSimplifier } from 'meshoptimizer/simplifier';
@@ -185,11 +619,13 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 const grid = new THREE.GridHelper(10, 20, 0x3a404d, 0x272b34);
 scene.add(grid);
+const labelRenderer = new CSS2DRenderer({ element: $('labels') });
 
 function resize() {
   const el = $('viewport');
   renderer.setSize(el.clientWidth, el.clientHeight, false);
   renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%';
+  labelRenderer.setSize(el.clientWidth, el.clientHeight);
   camera.aspect = el.clientWidth / Math.max(1, el.clientHeight);
   camera.updateProjectionMatrix();
 }
@@ -203,6 +639,7 @@ renderer.setAnimationLoop(() => {
   controls.autoRotate = $('rotate').checked;
   controls.update();
   renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
 });
 
 // ---------- state ----------
@@ -280,6 +717,25 @@ const makeLoader = (manager, probe) => new GLTFLoader(manager).setDRACOLoader(dr
 
 const decode = (u) => { try { return decodeURIComponent(u); } catch { return u; } };
 
+// Original encoded bytes of each loaded image (keyed by the decoded image), so export can write them back
+// unchanged instead of re-encoding them through a canvas.
+const srcImages = new WeakMap();
+const sniffMime = (u8) => u8[0] === 0x89 && u8[1] === 0x50 ? 'image/png' : u8[0] === 0xff && u8[1] === 0xd8 ? 'image/jpeg'
+  : u8[0] === 0x52 && u8[1] === 0x49 && u8[8] === 0x57 && u8[9] === 0x45 ? 'image/webp' : null;
+async function captureImages(parser) {
+  const json = parser.json;
+  for (let i = 0; i < (json.textures || []).length; i++) {
+    const td = json.textures[i], img = json.images?.[td.extensions?.EXT_texture_webp?.source ?? td.source];
+    if (!img || (img.bufferView === undefined && !/^data:/.test(img.uri || ''))) continue;
+    let tex; try { tex = await parser.getDependency('texture', i); } catch { continue; }
+    if (!tex?.image || srcImages.has(tex.image)) continue;
+    const bytes = img.bufferView !== undefined ? new Uint8Array(await parser.getDependency('bufferView', img.bufferView))
+      : new Uint8Array(await (await fetch(img.uri)).arrayBuffer());
+    const mime = sniffMime(bytes);
+    if (mime) srcImages.set(tex.image, { bytes: bytes.slice(), mime });
+  }
+}
+
 // `files`: optional list of Files a .gltf may reference (.bin, textures), matched by file name.
 async function loadBuffer(buf, name, files = []) {
   files = files instanceof Map ? [...files.values()] : [...(files || [])];
@@ -315,6 +771,7 @@ async function loadBuffer(buf, name, files = []) {
     throw e;
   }
   revoke();
+  await captureImages(gltf.parser).catch((e) => console.warn('could not read original image bytes', e));
   if (ambiguous.size) log(`Several provided files are named ${[...ambiguous].join(', ')}; used the first match. Select only the files of one model.`, 'warn');
   if (missing.size) log(`${name}: these referenced files were not provided and are missing: ${[...missing].join(', ')}`, 'warn');
   setOriginal(gltf.scene, gltf.animations || [], buf.byteLength + [...used].reduce((n, f) => n + f.size, 0), name);
@@ -334,8 +791,10 @@ function setOriginal(root, animations, bytes, name) {
   $('targetMB').value = Math.max(0.01, +(bytes / 1048576 / 2).toFixed(2));
   $('filename').textContent = name;
   $('drop').classList.add('hidden');
-  for (const id of ['applyBtn', 'resetBtn', 'downloadBtn']) $(id).disabled = false;
-  setView('original'); fitView(); applyWire(); playAnim(root);
+  for (const id of ['applyBtn', 'resetBtn', 'downloadBtn', ...TRANSFORM_BTNS]) $(id).disabled = false;
+  $('gameId').value = matchId(state.name) || '';
+  updateHeightField(); applyPreset();
+  setView('original'); fitView(); applyWire(); playAnim(root); refreshVerdict();
   log(`Loaded ${name}: ${fmtInt(s.faces)} faces, ${s.meshes} meshes, ${fmtBytes(bytes)}`, 'ok');
 }
 
@@ -348,20 +807,47 @@ function playAnim(root) {
 }
 
 $('openBtn').onclick = () => $('fileInput').click();
-$('fileInput').onchange = (e) => { openFiles([...e.target.files]); e.target.value = ''; };
-// Opens the .glb/.gltf among `list`; the other files are made available to a .gltf by name.
-function openFiles(list) {
-  const f = list.find((x) => /\.glb$/i.test(x.name)) || list.find((x) => /\.gltf$/i.test(x.name));
-  if (!f) return log('Please choose a .glb file, or a .gltf together with its .bin/texture files.', 'warn');
-  const files = list.filter((x) => x !== f);
-  busy('Loading ' + f.name + '…', async () => loadBuffer(await f.arrayBuffer(), f.name, files));
+const asEntries = (files) => [...files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name }));
+$('fileInput').onchange = (e) => { openFiles(asEntries(e.target.files)); e.target.value = ''; };
+const MODEL_RE = /\.(glb|gltf)$/i;
+// `list`: [{ file, path }]. A .json is loaded as targets.json; several models (or a folder) run as a batch;
+// otherwise the .glb/.gltf is opened and the other files are made available to a .gltf by name.
+async function openFiles(list, folder = false) {
+  const json = list.find((x) => /\.json$/i.test(x.file.name));
+  const models = list.filter((x) => MODEL_RE.test(x.file.name));
+  if (json && (!folder || !models.length)) await loadTargetsFile(json.file);
+  if (folder || models.length > 1) return runBatch(list);
+  const f = (models.find((x) => /\.glb$/i.test(x.file.name)) || models[0])?.file;
+  if (!f) return json ? undefined : log('Please choose a .glb file, or a .gltf together with its .bin/texture files.', 'warn');
+  const files = list.map((x) => x.file).filter((x) => x !== f);
+  return busy('Loading ' + f.name + '…', async () => loadBuffer(await f.arrayBuffer(), f.name, files));
+}
+// Dropped files, walking into dropped folders. Entries must be taken synchronously, before the first await.
+async function droppedFiles(dt) {
+  const entries = [...(dt.items || [])].map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
+  if (!entries.some((e) => e.isDirectory)) return { list: asEntries(dt.files), folder: false };
+  const out = [];
+  const walk = async (entry, dir) => {
+    if (entry.isFile) out.push({ file: await new Promise((res, rej) => entry.file(res, rej)), path: dir + entry.name });
+    else if (entry.isDirectory) {
+      const reader = entry.createReader(); let batch;
+      do {
+        batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+        for (const e of batch) await walk(e, dir + entry.name + '/');
+      } while (batch.length);
+    }
+  };
+  for (const e of entries) await walk(e, '');
+  return { list: out, folder: true };
 }
 const main = $('main');
 main.addEventListener('dragover', (e) => { e.preventDefault(); main.classList.add('dragging'); });
 main.addEventListener('dragleave', (e) => { if (e.target === main || e.target.id === 'drop') main.classList.remove('dragging'); });
-main.addEventListener('drop', (e) => {
+main.addEventListener('drop', async (e) => {
   e.preventDefault(); main.classList.remove('dragging');
-  openFiles([...e.dataTransfer.files]);
+  if (state.busy) return log('Still working, please wait.', 'warn');
+  const { list, folder } = await droppedFiles(e.dataTransfer);
+  openFiles(list, folder);
 });
 
 $('sampleBtn').onclick = () => busy('Building sample…', async () => {
@@ -382,6 +868,7 @@ function setView(v) {
   $('viewResult').classList.toggle('on', v === 'result'); $('viewOriginal').classList.toggle('on', v === 'original');
   if (state.original) state.original.visible = v === 'original' || !state.result;
   if (state.result) state.result.visible = v === 'result';
+  updateAids();
 }
 $('viewResult').onclick = () => setView('result');
 $('viewOriginal').onclick = () => setView('original');
@@ -394,8 +881,10 @@ function applyWire() {
 $('wire').onchange = applyWire;
 function fitView() {
   const root = state.original; if (!root) return;
+  updateAids();
   const box = new THREE.Box3().setFromObject(root);
   if (box.isEmpty()) return;
+  if (figure.parent) box.expandByObject(figure);
   const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
   const r = size.length() / 2 || 1;
   const dist = r / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.1;
@@ -679,7 +1168,7 @@ function readSettings(warn = false) {
     maxErr: +$('maxError').value / 100, lockBorder: $('lockBorder').checked,
     smooth: +$('smoothIter').value, shading: $('shading').value, crease: +$('crease').value,
     useSize: $('useSize').checked && mb > 0, targetBytes: mb * 1048576,
-    texSize: +$('texSize').value, texFormat: $('texFormat').value,
+    texSize: +$('texSize').value, texFormat: $('texFormat').value, baseOnly: $('baseOnly').checked,
   };
 }
 
@@ -759,27 +1248,54 @@ function geometryBytes(root) {
   return b;
 }
 
+const TEX_MIME = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 async function exportGLB(root, animations, s = null) {
-  const restore = [];
-  if (s && s.texFormat !== 'keep') {
-    root.traverse((o) => {
-      if (!o.isMesh) return;
-      for (const mat of (Array.isArray(o.material) ? o.material : [o.material])) {
-        for (const [k, tex] of Object.entries(mat)) {
-          if (!tex || !tex.isTexture) continue;
-          // keep alpha-carrying base color textures as PNG
-          const alpha = k === 'map' && (mat.transparent || mat.alphaTest > 0);
-          const fmt = s.texFormat === 'jpeg' && !alpha ? 'image/jpeg' : 'image/png';
-          restore.push([tex, tex.userData.mimeType]); tex.userData.mimeType = fmt;
+  const restore = [], swapped = [], clones = new Map(), texWant = new Map(), plan = new Map();
+  const maxSize = s && s.texSize ? s.texSize : Infinity;
+  if (s) root.traverse((o) => {
+    if (!o.isMesh) return;
+    let mats = Array.isArray(o.material) ? o.material : [o.material];
+    if (s.baseOnly) {
+      // export-only material copies without the extra maps, so the shown model and the original keep theirs
+      mats = mats.map((m) => {
+        if (!m) return m;
+        if (!clones.has(m)) {
+          const c = m.clone();
+          for (const [k, v] of Object.entries(c)) if (v && v.isTexture && k !== 'map') c[k] = null;
+          if (m.emissiveMap && c.emissive) c.emissive.setRGB(0, 0, 0);
+          if ('roughness' in c) c.roughness = 1;
+          if ('metalness' in c) c.metalness = 0;
+          clones.set(m, c);
         }
-      }
-    });
-  }
+        return clones.get(m);
+      });
+      swapped.push([o, o.material]); o.material = Array.isArray(o.material) ? mats : mats[0];
+    }
+    for (const mat of mats) if (mat) for (const [k, tex] of Object.entries(mat)) {
+      if (!tex || !tex.isTexture || texWant.has(tex)) continue;
+      // keep alpha-carrying base color textures out of JPEG
+      const alpha = k === 'map' && (mat.transparent || mat.alphaTest > 0);
+      const want = s.texFormat === 'keep' ? srcImages.get(tex.image)?.mime || tex.userData.mimeType || 'image/png'
+        : s.texFormat === 'jpeg' && alpha ? 'image/png' : TEX_MIME[s.texFormat];
+      texWant.set(tex, want);
+      restore.push([tex, tex.userData.mimeType]);
+      tex.userData.mimeType = want === 'image/webp' ? 'image/png' : want; // the exporter writes no WebP: PNG now, WebP after
+    }
+  });
+  const exporter = new GLTFExporter();
+  if (s) exporter.register(() => ({
+    writeTexture(map, def) {
+      if (!plan.has(def.source)) plan.set(def.source, { image: map.image, want: texWant.get(map) || map.userData.mimeType || 'image/png' });
+    },
+  }));
   try {
-    return await new GLTFExporter().parseAsync(root, {
-      binary: true, animations, maxTextureSize: s && s.texSize ? s.texSize : Infinity,
-    });
-  } finally { for (const [tex, mt] of restore) tex.userData.mimeType = mt; }
+    const buf = await exporter.parseAsync(root, { binary: true, animations, maxTextureSize: maxSize });
+    return plan.size ? await finishImages(buf, plan, maxSize) : buf;
+  } finally {
+    for (const [tex, mt] of restore) tex.userData.mimeType = mt;
+    for (const [o, m] of swapped) o.material = m;
+    for (const c of clones.values()) c.dispose();
+  }
 }
 
 async function runPipeline() {
@@ -836,7 +1352,7 @@ async function runPipeline() {
   const st = statsOf(root);
   $('sRF').textContent = fmtInt(st.faces); $('sRV').textContent = fmtInt(st.verts);
   $('sRM').textContent = st.meshes; $('sRS').textContent = fmtBytes(buf.byteLength);
-  setView('result'); applyWire(); playAnim(root);
+  setView('result'); applyWire(); playAnim(root); refreshVerdict();
   const dt = ((performance.now() - t0) / 1000).toFixed(1);
   log(`Result: ${fmtInt(st.faces)} faces, ${fmtBytes(buf.byteLength)} (${dt}s)`, 'ok');
   if (!s.useSize && st.faces > s.target * 1.02 && s.target < avail)
@@ -846,28 +1362,505 @@ async function runPipeline() {
   if (maxErr > 0) log(`Max decimation deviation: ${(maxErr * 100).toFixed(2)}% of model size`);
 }
 
-$('applyBtn').onclick = () => busy('Optimizing…', runPipeline);
+$('applyBtn').onclick = () => {
+  if (!confirmBigTarget()) return log('Apply cancelled: lower the face target.', 'warn');
+  busy('Optimizing…', runPipeline);
+};
 $('resetBtn').onclick = () => {
   dropResult(); clearCache(); clearPrep(); setDirty(false);
   for (const id of ['sRF', 'sRV', 'sRM', 'sRS']) $(id).textContent = '–';
   $('targetFaces').value = origFaces(); $('ratio').value = 100; $('ratioVal').textContent = '100%';
-  setView('original'); playAnim(state.original); log('Reset to original.');
+  setView('original'); playAnim(state.original); refreshVerdict(); log('Reset to original.');
 };
-$('downloadBtn').onclick = () => busy('Exporting…', async () => {
+$('downloadBtn').onclick = () => {
+  if ((!state.lastExport || state.dirty) && !confirmBigTarget()) return log('Download cancelled: lower the face target.', 'warn');
+  busy('Exporting…', download);
+};
+async function download() {
   if (!state.lastExport || state.dirty) {
     try { await runPipeline(); }
     catch (e) { console.error(e); return log('Download cancelled: optimizing failed (' + (e.message || e) + ').', 'err'); }
   }
   if (!state.lastExport || state.dirty) return log('Download cancelled: there is no up-to-date result to export.', 'err');
-  const blob = new Blob([state.lastExport], { type: 'model/gltf-binary' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = state.name + '_optimized.glb';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  log(`Downloaded ${a.download} (${fmtBytes(blob.size)})`, 'ok');
+  const blob = new Blob([state.lastExport], { type: 'model/gltf-binary' }), name = outputName();
+  saveBlob(blob, name);
+  log(`Downloaded ${name} (${fmtBytes(blob.size)})`, 'ok');
+}
+
+// ---------- game profile (Embers of Valdren) ----------
+// targets.json: objects.<id> = { w, d, h } in metres (w along X, d along Z, h along Y), plus tolerance,
+// proportionTolerance, maxTriangles, maxFileMB, knightHeight and proportion.<id> = { tile? } (see embers/conventions.md).
+// Loaded live from the game repo; the copy embedded in this page (embers/targets.json) is the offline fallback.
+const TARGETS_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/src/env/targets.json';
+const FACE_BUDGET = 4500; // the ingest simplifies to about this many triangles
+const game = { cfg: null, source: '' };
+const isGame = () => $('profile').value === 'embers';
+const slug = (n) => n.replace(/\.(glb|gltf)$/i, '').replace(/_optimized$/i, '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+function matchId(name) {
+  const objs = game.cfg?.objects; if (!objs) return null;
+  const base = name.replace(/\.(glb|gltf)$/i, '').replace(/_optimized$/i, '');
+  return [base, slug(base)].find((k) => Object.hasOwn(objs, k)) || null;
+}
+const currentId = () => $('gameId').value.trim() || matchId(state.name) || slug(state.name);
+const target = () => (game.cfg && Object.hasOwn(game.cfg.objects, currentId()) ? game.cfg.objects[currentId()] : null);
+const knightHeight = () => game.cfg?.knightHeight || 1.8;
+
+function setTargets(cfg, source) {
+  if (!cfg || typeof cfg !== 'object' || !cfg.objects || typeof cfg.objects !== 'object')
+    throw new Error('not a targets.json: it has no "objects" table of { w, d, h } sizes');
+  const objects = {};
+  for (const [id, t] of Object.entries(cfg.objects)) if (t && +t.h > 0) objects[id] = { w: +t.w || 0, d: +t.d || 0, h: +t.h };
+  game.cfg = {
+    objects, proportion: cfg.proportion && typeof cfg.proportion === 'object' ? cfg.proportion : {},
+    tolerance: +cfg.tolerance || 0.15, proportionTolerance: +cfg.proportionTolerance || 1.1,
+    maxTriangles: +cfg.maxTriangles || 10000, maxFileMB: +cfg.maxFileMB || 1.5, knightHeight: +cfg.knightHeight || 1.8,
+  };
+  game.source = source;
+  const ids = Object.keys(objects).sort();
+  $('gameIds').replaceChildren(...ids.map((id) => Object.assign(document.createElement('option'), { value: id })));
+  $('targetsInfo').textContent = `${ids.length} target sizes from ${source}.`;
+  if (state.original && !$('gameId').value) $('gameId').value = matchId(state.name) || '';
+  updateHeightField(); applyPreset(); updateAids(); refreshVerdict();
+}
+const embeddedTargets = () => JSON.parse($('embersTargets').textContent);
+let liveTried = false;
+async function loadLiveTargets() {
+  if (liveTried) return; liveTried = true;
+  if (!game.cfg) setTargets(embeddedTargets(), 'the copy built into this page');
+  try {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 8000);
+    const res = await fetch(TARGETS_URL, { signal: ctl.signal, cache: 'no-cache' }); clearTimeout(t);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (game.source.startsWith('the copy')) { // a file the user loaded meanwhile wins
+      setTargets(await res.json(), 'the game repo (live)');
+      log('Loaded the live targets.json from the game repo.', 'ok');
+    }
+  } catch (e) {
+    log(`Could not load the live targets.json (${e.name === 'AbortError' ? 'timeout' : e.message || e}); using the copy built into this page.`, 'warn');
+  }
+}
+async function loadTargetsFile(file) {
+  try { setTargets(JSON.parse(await file.text()), file.name); log(`Loaded ${file.name}: ${Object.keys(game.cfg.objects).length} target sizes.`, 'ok'); }
+  catch (e) { return log(`${file.name}: ${e.message || e}`, 'err'); }
+  if (!isGame()) { $('profile').value = 'embers'; profileChanged(); }
+}
+$('targetsBtn').onclick = () => $('targetsInput').click();
+$('targetsInput').onchange = (e) => { if (e.target.files[0]) loadTargetsFile(e.target.files[0]); e.target.value = ''; };
+
+// Switching the profile on sets the export to the game's rules (also remembered for next time).
+function profileChanged() {
+  const on = isGame();
+  document.body.classList.toggle('game', on);
+  try { localStorage.setItem('glbopt.profile', $('profile').value); } catch {}
+  if (on) {
+    $('texSize').value = '512'; $('texFormat').value = 'webp'; $('baseOnly').checked = true; $('batchFit').checked = true;
+    if (+$('facePreset').value === 0) $('facePreset').value = String(FACE_BUDGET);
+    applyPreset();
+  }
+  if (on) loadLiveTargets();
+  updateHeightField(); updateAids(); refreshVerdict();
+}
+$('profile').onchange = () => profileChanged();
+$('gameId').oninput = () => { updateHeightField(); applyPreset(); refreshVerdict(); };
+
+// Verdict lines. pass/fail follow the game's tools/env-pass/check-glb.mjs (its FAIL = a fail line here); warn lines
+// are what ingest would change or reject (CAP lines, decimation, textures, skins).
+function validate() {
+  const lines = [], add = (level, text) => lines.push({ level, text });
+  const useResult = !!state.result && !state.dirty && !!state.lastExport;
+  const root = useResult ? state.result : state.original;
+  if (!root) return { lines, ok: false };
+  const C = game.cfg || { tolerance: 0.15, proportionTolerance: 1.1, maxTriangles: 10000, maxFileMB: 1.5, proportion: {} };
+  const s = readSettings(), id = currentId(), T = target(), fitExact = T && Object.hasOwn(C.proportion, id);
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3());
+  const W = size.x, D = size.z, H = size.y, pct = (r) => (r >= 0 ? '+' : '') + Math.round(r * 100) + '%';
+  add('head', `${useResult ? 'Result' : 'Original (Apply for the result)'}: ${fmtM(W)} W × ${fmtM(D)} D × ${fmtM(H)} H, id ${id}`);
+  if (!game.cfg) add('info', 'Targets are still loading.');
+  else if (!T) add('fail', `"${id}" has no target in targets.json: pick the id or rename the file.`);
+  if (T) {
+    const wide = Math.max(T.w, T.d) > 1.8 * T.h;
+    if (wide) {
+      const got = Math.max(W, D), tgt = Math.max(T.w, T.d), dev = (got - tgt) / tgt;
+      add(Math.abs(dev) <= C.tolerance ? 'pass' : 'fail', `Longest side ${fmtM(got)}, target ${fmtM(tgt)} (${pct(dev)}, limit ±${Math.round(C.tolerance * 100)}%)`);
+    }
+    const k = H > 0 ? T.h / H : 1; // ingest scales uniformly to the target height
+    for (const [name, got, tgt, driver] of [['Height', H, T.h, !wide], ['Width', W, T.w, false], ['Depth', D, T.d, false]]) {
+      if (!(tgt > 0)) continue;
+      const dev = (got - tgt) / tgt, tol = driver ? C.tolerance : C.proportionTolerance;
+      if (fitExact && name !== 'Height') {
+        const tile = C.proportion[id]?.tile;
+        add('info', `${name} ${fmtM(got)}: ingest fits ${id} exactly to ${fmtM(tgt)}${tile && name === 'Width' ? ` (model repeated ${tile}× along X first)` : ''}`);
+        continue;
+      }
+      add(Math.abs(dev) <= tol ? 'pass' : 'fail', `${name} ${fmtM(got)}, target ${fmtM(tgt)} (${pct(dev)}, limit ±${Math.round(tol * 100)}%)`);
+      // proportions: after the uniform scale to the target height, ingest stretches width/depth by 15% at most
+      if (!driver && name !== 'Height' && !fitExact && H > 0) {
+        const after = got * k, r = (after - tgt) / tgt;
+        if (Math.abs(r) > 0.15) add('warn', `${name} at the target height would be ${fmtM(after)} (${pct(r)}): ingest stretches 15% at most, so this becomes a CAP line`);
+      }
+    }
+  }
+  add(Math.abs(box.min.y) <= 0.05 ? 'pass' : 'fail', `Base at y ${fmtM(box.min.y)}` + (Math.abs(box.min.y) > 0.05 ? ' (want 0: "Pivot to base centre")' : ''));
+  const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2, off = Math.hypot(cx, cz) > 0.1 * Math.max(W, D);
+  add(off ? 'fail' : 'pass', `Footprint centre at x ${fmtM(cx)}, z ${fmtM(cz)}` + (off ? ' (want about 0, 0)' : ''));
+  const faces = statsOf(root).faces;
+  add(faces > C.maxTriangles ? 'fail' : faces > FACE_BUDGET ? 'warn' : 'pass',
+    `${fmtInt(faces)} triangles (cap ${fmtInt(C.maxTriangles)}${faces > FACE_BUDGET && faces <= C.maxTriangles ? `; ingest simplifies to about ${fmtInt(FACE_BUDGET)}` : ''})`);
+  const bytes = useResult ? state.lastExport.byteLength : state.originalBytes, mb = bytes / 1e6;
+  add(mb > C.maxFileMB ? 'fail' : 'pass', `${mb.toFixed(2)} MB${useResult ? '' : ' original file'} (cap ${C.maxFileMB} MB)`);
+  const extra = new Set(); let maxDim = 0, nTex = 0;
+  root.traverse((o) => {
+    if (o.isMesh) for (const m of (Array.isArray(o.material) ? o.material : [o.material])) if (m) for (const [k, v] of Object.entries(m)) {
+      if (!v || !v.isTexture) continue;
+      if (k !== 'map') { extra.add(k); if (s.baseOnly) continue; }
+      nTex++; maxDim = Math.max(maxDim, v.image?.width || 0, v.image?.height || 0);
+    }
+  });
+  if (nTex) {
+    const dim = s.texSize ? Math.min(maxDim, s.texSize) : maxDim, more = s.baseOnly ? [] : [...extra];
+    add(more.length || dim > 512 ? 'warn' : 'pass', `Textures ${more.length ? 'include ' + more.join(', ') + ' (dropped by ingest)' : 'base colour only'}, up to ${dim} px`
+      + (dim > 512 ? ' (ingest resizes to 512)' : ''));
+  }
+  if (meshesOf(root).some(isDeformable) || state.animations.length) add('warn', 'Skinned, morph or animated: scenery must be static');
+  add('info', 'Facing: the front must point along the blue +Z arrow (turn with ⟲ / ⟳ 90°).');
+  return { lines, ok: !lines.some((l) => l.level === 'fail') };
+}
+function refreshVerdict() {
+  if (!isGame()) return;
+  $('gameReadyBtn').disabled = !state.original;
+  $('verdict').replaceChildren(...validate().lines.map((l) => Object.assign(document.createElement('li'), { className: l.level, textContent: l.text })));
+}
+for (const ev of ['input', 'change']) document.querySelector('aside').addEventListener(ev, (e) => {
+  if (e.target.id !== 'fileInput' && state.original) refreshVerdict();
 });
 
-window.__glbopt = { THREE, state, runPipeline, loadBuffer, exportGLB, setOriginal, decimate, subdivide, readSettings }; // handy for debugging in the console
+// ---------- scale aids (metre grid and ruler, W x D x H box, 1.8 m figure, +Z arrow) ----------
+const fmtM = (m) => (Math.abs(m) >= 100 ? m.toFixed(0) : Math.abs(m) >= 10 ? m.toFixed(1) : m.toFixed(2)) + ' m';
+const aids = new THREE.Group(); aids.name = 'ScaleAids'; scene.add(aids);
+const figure = (() => {
+  const mat = new THREE.MeshBasicMaterial({ color: 0xe05a5a, transparent: true, opacity: 0.55, depthWrite: false });
+  const f = new THREE.Group(); f.name = 'Figure';
+  const part = (geo, x, y) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, 0); f.add(m); };
+  const leg = new THREE.CapsuleGeometry(0.075, 0.74, 4, 10), arm = new THREE.CapsuleGeometry(0.055, 0.56, 4, 8);
+  part(leg, -0.1, 0.445); part(leg, 0.1, 0.445); // 0 to 0.89
+  part(new THREE.CapsuleGeometry(0.17, 0.36, 4, 12), 0, 1.24); // torso 0.89 to 1.59
+  part(arm, -0.25, 1.22); part(arm, 0.25, 1.22);
+  part(new THREE.SphereGeometry(0.105, 16, 12), 0, 1.695); // head, top at 1.80
+  return f;
+})();
+const shownRoot = () => (state.view === 'result' && state.result ? state.result : state.original);
+function clearAids() {
+  for (const o of [...aids.children]) {
+    aids.remove(o); // a removed CSS2DObject takes its element out of the page
+    if (o !== figure) o.traverse((x) => { x.geometry?.dispose(); x.material?.dispose?.(); });
+  }
+}
+function label(text, pos, cls = 'lbl') {
+  const el = document.createElement('div'); el.className = cls; el.textContent = text;
+  const o = new CSS2DObject(el); o.position.copy(pos); aids.add(o); return o;
+}
+const niceStep = (len) => { const raw = len / 10, p = 10 ** Math.floor(Math.log10(raw)); return [1, 2, 5, 10].map((k) => k * p).find((v) => v >= raw); };
+function updateAids() {
+  clearAids();
+  const on = $('aids').checked, root = shownRoot();
+  grid.visible = !on;
+  if (!on || !root) return;
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root); if (box.isEmpty()) return;
+  const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3()), V = THREE.Vector3;
+  // figure beside the model, standing on y 0 (the game's ground)
+  const kh = knightHeight();
+  figure.scale.setScalar(kh / 1.8);
+  figure.position.set(box.max.x + Math.max(0.3, size.x * 0.1) + 0.3, 0, c.z);
+  aids.add(figure); label(`${kh} m`, new V(figure.position.x, kh + 0.08, c.z));
+  // metre grid centred on the origin, so the pivot shows
+  const ext = Math.max(Math.abs(box.min.x), Math.abs(figure.position.x) + 0.4, Math.abs(box.min.z), Math.abs(box.max.z), 1);
+  const step = niceStep(Math.max(size.x, size.z, size.y, kh)), half = Math.ceil(ext * 1.15 / step) * step;
+  const g = new THREE.GridHelper(half * 2, Math.round(half * 2 / step), 0x6a7690, 0x2c313c); aids.add(g);
+  // ruler along X in front of the model with a label every step
+  const z = Math.max(box.max.z, 0) + step * 0.6, x0 = Math.floor(Math.min(box.min.x, 0) / step) * step;
+  const x1 = Math.ceil((figure.position.x + 0.3) / step) * step, pts = [x0, 0, z, x1, 0, z];
+  const every = (x1 - x0) / step > 10 ? 2 : 1; // label every other tick on long rulers
+  for (let x = x0, i = 0; x <= x1 + step / 2 && i < 60; x += step, i++) {
+    pts.push(x, 0, z, x, 0, z + step * (i % every ? 0.15 : 0.25));
+    if (i % every === 0) label(`${+x.toFixed(3)}${i ? '' : ' m'}`, new V(x, 0, z + step * 0.45), 'lbl tick');
+  }
+  const rg = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  aids.add(new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0xa8b0c0 })));
+  // bounding box with its sizes
+  aids.add(new THREE.Box3Helper(box.clone(), 0xe0a83a));
+  label(`W ${fmtM(size.x)}`, new V(c.x, box.min.y, box.max.z));
+  label(`D ${fmtM(size.z)}`, new V(box.max.x, box.min.y, c.z));
+  label(`H ${fmtM(size.y)}`, new V(box.min.x, c.y, box.max.z));
+  // facing: +Z is the front
+  const len = Math.max(0.4, Math.max(size.x, size.z) * 0.35);
+  aids.add(new THREE.ArrowHelper(new V(0, 0, 1), new V(c.x, 0.01, box.max.z), len, 0x4f8cff, len * 0.25, len * 0.15));
+  label('+Z front', new V(c.x, 0.01, box.max.z + len * 1.1));
+}
+$('aids').onchange = updateAids;
+
+// ---------- transforms ----------
+const TRANSFORM_BTNS = ['pivotBtn', 'rotLBtn', 'rotRBtn', 'zupBtn', 'scaleBtn', 'bakeBtn'];
+const worldBox = (root) => { root.updateMatrixWorld(true); return new THREE.Box3().setFromObject(root); };
+function updateHeightField() {
+  const T = target();
+  if (isGame() && T) $('heightM').value = T.h;
+  else if (state.original) $('heightM').value = +worldBox(state.original).getSize(new THREE.Vector3()).y.toFixed(3);
+}
+// The original changed shape or place: the result no longer matches it.
+function modelChanged(what, quiet = false) {
+  dropResult(); setDirty(false);
+  for (const id of ['sRF', 'sRV', 'sRM', 'sRS']) $(id).textContent = '–';
+  setView('original');
+  if (!quiet) { fitView(); updateHeightField(); log(what); }
+  refreshVerdict();
+}
+// Applies `m` in world space about point `p` (the root sits directly in the scene, so its matrix is its world matrix).
+function transformRoot(m, p) {
+  const root = state.original;
+  root.applyMatrix4(new THREE.Matrix4().makeTranslation(-p.x, -p.y, -p.z));
+  root.applyMatrix4(m);
+  root.applyMatrix4(new THREE.Matrix4().makeTranslation(p.x, p.y, p.z));
+  root.updateMatrixWorld(true);
+}
+function pivotBaseCentre(quiet = false) {
+  if (!state.original) return;
+  const b = worldBox(state.original), c = b.getCenter(new THREE.Vector3());
+  state.original.position.sub(new THREE.Vector3(c.x, b.min.y, c.z));
+  modelChanged('Pivot moved to the base centre (base at y 0, footprint centred on x/z 0).', quiet);
+}
+function rotateY(deg) {
+  if (!state.original) return;
+  const c = worldBox(state.original).getCenter(new THREE.Vector3());
+  transformRoot(new THREE.Matrix4().makeRotationY(THREE.MathUtils.degToRad(deg)), c);
+  modelChanged(`Rotated ${deg}° about Y.`);
+}
+function zUpToYUp() {
+  if (!state.original) return;
+  const b = worldBox(state.original), c = b.getCenter(new THREE.Vector3()), minY = b.min.y;
+  transformRoot(new THREE.Matrix4().makeRotationX(-Math.PI / 2), c); // +Z (old up) becomes +Y
+  state.original.position.y += minY - worldBox(state.original).min.y; // keep the base where it was
+  modelChanged('Turned Z-up into Y-up (rotated -90° about X).');
+}
+function scaleToHeight(h, quiet = false) {
+  if (!state.original || !(h > 0)) return log('Enter a height above 0 m.', 'warn');
+  const b = worldBox(state.original), cur = b.max.y - b.min.y;
+  if (!(cur > 0)) return log('The model has no height to scale.', 'warn');
+  const k = h / cur, c = b.getCenter(new THREE.Vector3());
+  transformRoot(new THREE.Matrix4().makeScale(k, k, k), new THREE.Vector3(c.x, b.min.y, c.z));
+  modelChanged(`Scaled ×${k.toFixed(4)} to ${fmtM(h)} high.`, quiet);
+}
+// Writes every node transform into the vertices; the hierarchy becomes one group of meshes at identity.
+function bakeTransforms() {
+  const root = state.original; if (!root) return;
+  if (state.animations.length || meshesOf(root).some(isDeformable))
+    return log('Bake skipped: skinned, morph or animated models keep their node transforms.', 'warn');
+  const lost = []; root.traverse((o) => { if ((o.isLine || o.isPoints) && !o.isMesh) lost.push(o); });
+  root.updateMatrixWorld(true);
+  const flat = new THREE.Group(); flat.name = root.name || 'Scene';
+  for (const m of meshesOf(root)) {
+    const g = plainGeometry(m.geometry); g.deleteAttribute('tangent');
+    g.applyMatrix4(m.matrixWorld);
+    if (m.matrixWorld.determinant() < 0) { // mirrored: flip the winding so faces stay front-facing
+      if (!g.index) g.setIndex(new THREE.BufferAttribute(Uint32Array.from({ length: g.attributes.position.count }, (_, i) => i), 1));
+      const a = g.index.array; for (let i = 0; i + 2 < a.length; i += 3) [a[i + 1], a[i + 2]] = [a[i + 2], a[i + 1]];
+    }
+    g.computeBoundingBox(); g.computeBoundingSphere();
+    const nm = new THREE.Mesh(g, m.material); nm.name = m.name; nm.userData = { ...m.userData };
+    flat.add(nm);
+  }
+  dropResult(); clearCache();
+  scene.remove(root); for (const m of meshesOf(root)) m.geometry.dispose();
+  state.original = flat; flat.visible = true; scene.add(flat); applyWire();
+  if (lost.length) log(`${lost.length} line/point object(s) were dropped by the bake.`, 'warn');
+  modelChanged('Baked node transforms into the vertices.');
+}
+$('pivotBtn').onclick = () => pivotBaseCentre();
+$('rotLBtn').onclick = () => rotateY(90);
+$('rotRBtn').onclick = () => rotateY(-90);
+$('zupBtn').onclick = zUpToYUp;
+$('scaleBtn').onclick = () => scaleToHeight(+$('heightM').value);
+$('bakeBtn').onclick = bakeTransforms;
+
+// ---------- face budget presets ----------
+const presetBudget = () => +$('facePreset').value;
+// Sets the target to the preset (never above the model's own count, so a preset never subdivides).
+function applyPreset() {
+  const b = presetBudget(); if (!b || !state.original) return;
+  $('targetFaces').value = Math.min(origFaces(), b); $('targetFaces').oninput();
+}
+$('facePreset').onchange = applyPreset;
+for (const id of ['targetFaces', 'ratio']) $(id).addEventListener('input', () => { $('facePreset').value = '0'; });
+
+// A typo like 45000 instead of 4500 subdivides into millions of faces: ask first.
+function confirmBigTarget() {
+  if (!state.original) return true;
+  const t = validTarget($('targetFaces').value), f = origFaces();
+  if (t > 1_000_000 || (t > 20_000 && t > 4 * f))
+    return confirm(`Target is ${fmtInt(t)} faces, ${Math.round(t / f)}× the model's ${fmtInt(f)}. Subdividing that far is slow and makes a big file. Continue?`);
+  return true;
+}
+
+// One click: fit to the id's target height, base-centre pivot, game face budget and textures, then Apply.
+async function makeGameReady() {
+  if (!state.original) return;
+  const T = target();
+  if (T) scaleToHeight(T.h, true); else log(`No target size for "${currentId()}": size left as is.`, 'warn');
+  pivotBaseCentre(true);
+  if (!presetBudget()) $('facePreset').value = String(FACE_BUDGET);
+  applyPreset();
+  $('texSize').value = '512'; $('texFormat').value = 'webp'; $('baseOnly').checked = true;
+  if (+$('maxError').value < 25) { $('maxError').value = 25; $('maxError').oninput(); }
+  fitView(); updateHeightField();
+  await runPipeline();
+  refreshVerdict();
+}
+$('gameReadyBtn').onclick = () => busy('Making game-ready…', makeGameReady);
+
+// ---------- export post-processing ----------
+// Rebuilds a GLB after `edit(json, views)` may replace bufferView contents (views[i] is a Uint8Array).
+async function rewriteGLB(buf, edit) {
+  const dv = new DataView(buf); let off = 12, json = null, bin = new Uint8Array(0);
+  while (off + 8 <= buf.byteLength) {
+    const len = dv.getUint32(off, true), type = dv.getUint32(off + 4, true), data = new Uint8Array(buf, off + 8, len);
+    if (type === 0x4e4f534a) json = JSON.parse(new TextDecoder().decode(data)); else if (type === 0x004e4942) bin = data;
+    off += 8 + len;
+  }
+  const views = (json.bufferViews || []).map((v) => bin.subarray(v.byteOffset || 0, (v.byteOffset || 0) + v.byteLength));
+  await edit(json, views);
+  let len = 0; const offs = views.map((v) => { const o = len; len = (len + v.length + 3) & ~3; return o; });
+  const out = new Uint8Array(len);
+  views.forEach((v, i) => { out.set(v, offs[i]); json.bufferViews[i].byteOffset = offs[i]; json.bufferViews[i].byteLength = v.length; });
+  if (json.buffers?.[0]) json.buffers[0].byteLength = len;
+  const jb = new TextEncoder().encode(JSON.stringify(json)), jl = (jb.length + 3) & ~3;
+  const total = 20 + jl + (len ? 8 + len : 0), res = new Uint8Array(total), w = new DataView(res.buffer);
+  w.setUint32(0, 0x46546c67, true); w.setUint32(4, 2, true); w.setUint32(8, total, true);
+  w.setUint32(12, jl, true); w.setUint32(16, 0x4e4f534a, true); res.set(jb, 20); res.fill(0x20, 20 + jb.length, 20 + jl);
+  if (len) { w.setUint32(20 + jl, len, true); w.setUint32(24 + jl, 0x004e4942, true); res.set(out, 28 + jl); }
+  return res.buffer;
+}
+async function reencode(bytes, mime) {
+  const bmp = await createImageBitmap(new Blob([bytes]));
+  const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height;
+  cv.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
+  const blob = await new Promise((r) => cv.toBlob(r, mime, 0.85));
+  return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+}
+let warnedWebp = false;
+// `plan`: image index -> { image, want }. Writes original bytes back when the format matches and no resize was
+// needed, re-encodes to WebP where wanted, and declares EXT_texture_webp for WebP images (required by glTF).
+function finishImages(buf, plan, maxSize) {
+  return rewriteGLB(buf, async (json, views) => {
+    for (const [i, img] of (json.images || []).entries()) {
+      const p = plan.get(i); if (!p || img.bufferView === undefined) continue;
+      let bytes = views[img.bufferView];
+      const orig = srcImages.get(p.image);
+      if (orig && orig.mime === p.want && p.image.width <= maxSize && p.image.height <= maxSize) bytes = orig.bytes;
+      else if (sniffMime(bytes) !== p.want) bytes = (await reencode(bytes, p.want)) || bytes;
+      views[img.bufferView] = bytes;
+      img.mimeType = sniffMime(bytes) || img.mimeType;
+      if (p.want === 'image/webp' && img.mimeType !== 'image/webp' && !warnedWebp) {
+        warnedWebp = true; log('This browser cannot write WebP; textures were saved as PNG instead.', 'warn');
+      }
+    }
+    let webp = false;
+    for (const t of json.textures || []) {
+      if (json.images?.[t.source]?.mimeType !== 'image/webp') continue;
+      t.extensions = { ...t.extensions, EXT_texture_webp: { source: t.source } }; delete t.source; webp = true;
+    }
+    if (webp) for (const k of ['extensionsUsed', 'extensionsRequired']) json[k] = [...new Set([...(json[k] || []), 'EXT_texture_webp'])];
+  });
+}
+
+// ---------- batch ----------
+const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
+const crc32 = (u8) => { let c = ~0; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 255] ^ (c >>> 8); return ~c >>> 0; };
+// Minimal ZIP writer, stored (no compression): GLB geometry and WebP/JPEG textures barely compress.
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  const d = new Date(), time = d.getHours() << 11 | d.getMinutes() << 5 | d.getSeconds() >> 1;
+  const date = (d.getFullYear() - 1980) << 9 | (d.getMonth() + 1) << 5 | d.getDate();
+  for (const f of files) {
+    const name = enc.encode(f.name), data = typeof f.data === 'string' ? enc.encode(f.data) : f.data, crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30)), c = new DataView(new ArrayBuffer(46));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true);
+    h.setUint16(10, time, true); h.setUint16(12, date, true); h.setUint32(14, crc, true);
+    h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true);
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+    c.setUint16(12, time, true); c.setUint16(14, date, true); c.setUint32(16, crc, true);
+    c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+    parts.push(new Uint8Array(h.buffer), name, data); central.push(new Uint8Array(c.buffer), name);
+    off += 30 + name.length + data.length;
+  }
+  const e = new DataView(new ArrayBuffer(22)), cd = central.reduce((n, a) => n + a.length, 0);
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+  e.setUint32(12, cd, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...central, new Uint8Array(e.buffer)], { type: 'application/zip' });
+}
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+const outputName = () => (isGame() ? currentId() : state.name + '_optimized') + '.glb';
+$('batchBtn').onclick = () => $('batchInput').click();
+$('batchInput').onchange = (e) => { const l = asEntries(e.target.files); e.target.value = ''; runBatch(l); };
+
+// `list`: [{ file, path }]. Each .glb/.gltf (a .gltf gets the other files of its folder) is loaded, optionally fitted
+// to its target height with a base-centre pivot, optimized with the current settings and added to a zip.
+function runBatch(list) {
+  const models = list.filter((x) => MODEL_RE.test(x.file.name));
+  if (!models.length) return log('No .glb/.gltf files found for the batch.', 'warn');
+  return busy(`Batch: ${models.length} files…`, async () => {
+    const ratio = +$('ratio').value, fit = $('batchFit').checked, gameOn = isGame();
+    const dirOf = (p) => p.slice(0, p.lastIndexOf('/') + 1), zip = [], report = [], names = new Set();
+    for (const [n, m] of models.entries()) {
+      $('busyText').textContent = `Batch ${n + 1}/${models.length}: ${m.path}`;
+      await new Promise((r) => setTimeout(r, 0));
+      const rec = { source: m.path };
+      try {
+        const sib = /\.gltf$/i.test(m.file.name) ? list.filter((x) => x !== m && dirOf(x.path) === dirOf(m.path)).map((x) => x.file) : [];
+        await loadBuffer(await m.file.arrayBuffer(), m.file.name, sib);
+        const before = statsOf(state.original);
+        Object.assign(rec, { id: currentId(), facesBefore: before.faces, bytesBefore: state.originalBytes });
+        if (fit) { const T = gameOn && target(); if (T) scaleToHeight(T.h, true); pivotBaseCentre(true); }
+        const b = presetBudget();
+        $('targetFaces').value = b ? Math.min(before.faces, b) : Math.max(4, Math.round(before.faces * ratio / 100));
+        await runPipeline();
+        if (!state.lastExport) throw new Error('no result');
+        let out = outputName();
+        for (let k = 2; names.has(out); k++) out = outputName().replace(/\.glb$/, `-${k}.glb`);
+        names.add(out); zip.push({ name: out, data: new Uint8Array(state.lastExport) });
+        const sz = worldBox(state.result).getSize(new THREE.Vector3());
+        Object.assign(rec, { output: out, faces: statsOf(state.result).faces, bytes: state.lastExport.byteLength,
+          size: { w: +sz.x.toFixed(3), d: +sz.z.toFixed(3), h: +sz.y.toFixed(3) } });
+        if (gameOn) { const v = validate(); rec.ok = v.ok; rec.checks = v.lines.filter((l) => l.level !== 'head'); }
+      } catch (e) { console.error(e); rec.error = e.message || String(e); log(`${m.path}: ${rec.error}`, 'err'); }
+      report.push(rec);
+    }
+    const txt = report.map((r) => r.error ? `ERROR ${r.source}: ${r.error}` : [
+      `${r.ok === false ? 'FAIL' : r.ok ? 'ok  ' : '    '} ${r.output}  ${r.size.w} x ${r.size.d} x ${r.size.h} m  ${fmtInt(r.facesBefore)} -> ${fmtInt(r.faces)} triangles  ${fmtBytes(r.bytesBefore)} -> ${fmtBytes(r.bytes)}  (from ${r.source})`,
+      ...(r.checks || []).filter((c) => c.level !== 'info').map((c) => `       ${c.level.padEnd(4)} ${c.text}`),
+    ].join('\n')).join('\n') + '\n';
+    const settings = readSettings();
+    zip.push({ name: 'report.json', data: JSON.stringify({ date: new Date().toISOString(), profile: $('profile').value,
+      targets: gameOn ? game.source : undefined, settings, files: report }, null, 1) });
+    zip.push({ name: 'report.txt', data: txt });
+    const zipName = (gameOn ? 'game-ready' : 'optimized') + `-${models.length}-files.zip`;
+    saveBlob(makeZip(zip), zipName);
+    const failed = report.filter((r) => r.error).length, bad = report.filter((r) => r.ok === false).length;
+    log(`Batch done: ${zip.length - 2} of ${models.length} files in ${zipName}` + (failed ? `, ${failed} failed` : '') + (bad ? `, ${bad} fail the game check (see report.txt)` : ''), failed || bad ? 'warn' : 'ok');
+  });
+}
+
+try { if (localStorage.getItem('glbopt.profile') === 'embers') $('profile').value = 'embers'; } catch {}
+profileChanged();
+
+// Scripting / debugging hooks (also used by the tests).
+window.__glbopt = { THREE, state, runPipeline, loadBuffer, exportGLB, setOriginal, decimate, subdivide, readSettings,
+  setTargets, validate, pivotBaseCentre, rotateY, zUpToYUp, scaleToHeight, bakeTransforms, makeGameReady, runBatch, makeZip, rewriteGLB, game };
 log('Ready. Open a .glb, drop one on the viewer, or load the sample.');
 </script>
 </body>

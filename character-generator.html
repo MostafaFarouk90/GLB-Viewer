@@ -93,6 +93,8 @@
     <div class="row"><label for="bulk">Build</label><input id="bulk" type="range" min="0.6" max="1.8" step="0.01"><span class="val" id="bulkVal"></span></div>
     <div class="row"><label for="head">Head size</label><input id="head" type="range" min="0.7" max="1.8" step="0.01"><span class="val" id="headVal"></span></div>
     <div class="row"><label for="limbs">Limb length</label><input id="limbs" type="range" min="0.75" max="1.3" step="0.01"><span class="val" id="limbsVal"></span></div>
+    <div class="row"><label for="chibi">KayKit chibi look</label><input id="chibi" type="checkbox"></div>
+    <div class="hint">Big head and short legs like the KayKit Adventurers, with the joints exactly where their skeleton has them, so KayKit animations fit. Off: realistic proportions.</div>
     <div class="row"><label for="pose">Pose</label>
       <select id="pose"><option value="a">A-pose (idle)</option><option value="t">T-pose (for rigging)</option><option value="cast">Casting</option></select></div>
 
@@ -116,11 +118,15 @@
     <div class="row"><label for="style">Style</label>
       <select id="style"><option value="smooth">Smooth</option><option value="lowpoly">Low-poly (faceted)</option></select></div>
     <div class="row"><label for="detail">Detail</label>
-      <select id="detail"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+      <select id="detail"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="game">Game budget (~4k triangles)</option></select></div>
     <div class="row"><label for="combine">Combine parts per material</label><input id="combine" type="checkbox" checked></div>
     <div class="hint">On: a few meshes (best for games and the optimizer). Off: every part is its own named mesh (easier to edit in Blender).</div>
+    <div class="row"><label for="rig">KayKit skeleton (41 bones)</label><input id="rig" type="checkbox"></div>
+    <div class="hint">Rigs the body on the KayKit Adventurers bones (same names and rest rotations), each part on one bone, in their T rest pose. The held item hangs on handslot.r.</div>
+    <div class="row"><label for="atlas">One material (palette texture)</label><input id="atlas" type="checkbox"></div>
+    <div class="hint">All colours in one small texture, plus one Glow material if the character glows. Fewest draw calls; drops metal shine and transparency.</div>
     <div class="row"><label for="anim">Include idle animation</label><input id="anim" type="checkbox" checked></div>
-    <div class="hint">Spins the aura and bobs floating characters. The body itself is not rigged.</div>
+    <div class="hint">Spins the aura and bobs floating characters (the body itself only moves with the KayKit skeleton and its clips).</div>
     <table class="stats">
       <tbody>
         <tr><td>Faces</td><td id="sF">–</td></tr>
@@ -422,11 +428,70 @@ function makeMaterials(t) {
   return m;
 }
 
+// ---------- KayKit skeleton ----------
+// Rest pose of the KayKit Adventurers rig (CC0, Kay Lousberg), read from Knight.glb (Mage.glb is identical):
+// [bone, parent, translation, rotation quaternion], in KayKit units (the Knight is about 2.3 tall without helmet).
+// The rest pose is a T-pose facing +Z; ".l" is the character's left, at +X.
+const KK_BONES = [
+  ['root', null, [0, 0, 0], [0, 0, 0, 1]],
+  ['hips', 'root', [0, 0.4057, 0], [0, 0, 0, 1]],
+  ['spine', 'hips', [0, 0.192, 0], [0, 0, 0, 1]],
+  ['chest', 'spine', [0, 0.375, 0], [0, 0, 0, 1]],
+  ['upperarm.l', 'chest', [0.212, 0.1341, 0], [-0.51412, -0.48547, -0.48547, 0.51412]],
+  ['lowerarm.l', 'upperarm.l', [0, 0.2419, 0], [0, 0, -0.05529, 0.99847]],
+  ['wrist.l', 'lowerarm.l', [0, 0.26, 0], [0, 0, 0.02666, 0.99964]],
+  ['hand.l', 'wrist.l', [0, 0.0738, 0], [0, 0, -0.00001, 1]],
+  ['handslot.l', 'hand.l', [0, 0.0961, -0.0575], [0, 0, -0.70711, 0.70711]],
+  ['upperarm.r', 'chest', [-0.212, 0.1341, 0], [-0.51412, 0.48547, 0.48547, 0.51412]],
+  ['lowerarm.r', 'upperarm.r', [0, 0.2419, 0], [0, 0, 0.05529, 0.99847]],
+  ['wrist.r', 'lowerarm.r', [0, 0.26, 0], [0, 0, -0.02666, 0.99964]],
+  ['hand.r', 'wrist.r', [0, 0.0738, 0], [0, 0, 0.00001, 1]],
+  ['handslot.r', 'hand.r', [0, 0.0961, -0.0575], [0, 0, 0.70711, 0.70711]],
+  ['head', 'chest', [0, 0.2688, 0], [0, 0, 0, 1]],
+  ['upperleg.l', 'hips', [0.1709, 0.1136, 0], [0.99985, 0, 0, 0.01737]],
+  ['lowerleg.l', 'upperleg.l', [0, 0.2271, 0], [0.10623, 0, 0, 0.99434]],
+  ['foot.l', 'lowerleg.l', [0, 0.1494, 0], [-0.45524, 0, 0, 0.89037]],
+  ['toes.l', 'foot.l', [0, 0.1657, 0], [0, 0.92035, -0.39108, 0]],
+  ['upperleg.r', 'hips', [-0.1709, 0.1136, 0], [0.99985, 0, 0, 0.01737]],
+  ['lowerleg.r', 'upperleg.r', [0, 0.2271, 0], [0.10623, 0, 0, 0.99434]],
+  ['foot.r', 'lowerleg.r', [0, 0.1494, 0], [-0.45524, 0, 0, 0.89037]],
+  ['toes.r', 'foot.r', [0, 0.1657, 0], [0, -0.92035, 0.39108, 0]],
+  ['kneeIK.l', 'root', [0.1709, 0.2923, 0.5758], [0.70711, 0, 0, 0.70711]],
+  ['control-toe-roll.l', 'root', [0.1709, 0.026, 0.2458], [-0.70711, 0, 0, 0.70711]],
+  ['control-heel-roll.l', 'control-toe-roll.l', [0, 0.3628, 0], [0, 0, -1, 0]],
+  ['control-foot-roll.l', 'control-heel-roll.l', [0, 0.2134, 0], [0, -0.39108, -0.92035, 0]],
+  ['heelIK.l', 'control-foot-roll.l', [0, 0.1657, 0], [-0.39108, 0, 0, 0.92035]],
+  ['IK-foot.l', 'control-foot-roll.l', [0, 0.1657, 0], [-1, 0, 0, 0]],
+  ['IK-toe.l', 'control-heel-roll.l', [0, 0, 0], [0, 0, 0, 1]],
+  ['kneeIK.r', 'root', [-0.1709, 0.2923, 0.5758], [0.70711, 0, 0, 0.70711]],
+  ['control-toe-roll.r', 'root', [-0.1709, 0.026, 0.2458], [-0.70711, 0, 0, 0.70711]],
+  ['control-heel-roll.r', 'control-toe-roll.r', [0, 0.3628, 0], [0, 0, -1, 0]],
+  ['control-foot-roll.r', 'control-heel-roll.r', [0, 0.2134, 0], [0, -0.39108, -0.92035, 0]],
+  ['heelIK.r', 'control-foot-roll.r', [0, 0.1657, 0], [-0.39108, 0, 0, 0.92035]],
+  ['IK-foot.r', 'control-foot-roll.r', [0, 0.1657, 0], [1, 0, 0, 0]],
+  ['IK-toe.r', 'control-heel-roll.r', [0, 0, 0], [0, 0, 0, 1]],
+  ['elbowIK.l', 'root', [0.4535, 1.1068, -0.5889], [-0.70711, 0, 0, 0.70711]],
+  ['handIK.l', 'root', [0.7132, 1.1068, 0], [-0.5, -0.5, -0.5, 0.5]],
+  ['elbowIK.r', 'root', [-0.4535, 1.1068, -0.5889], [-0.70711, 0, 0, 0.70711]],
+  ['handIK.r', 'root', [-0.7132, 1.1068, 0], [-0.5, 0.5, 0.5, 0.5]]
+];
+// World rest position and rotation of every KayKit bone.
+const KK = (() => {
+  const objs = {}, world = {}, wq = {};
+  for (const [name, parent, tr, q] of KK_BONES) {
+    const o = new THREE.Object3D(); o.position.fromArray(tr); o.quaternion.fromArray(q).normalize();
+    objs[name] = o; if (parent) objs[parent].add(o);
+  }
+  objs.root.updateMatrixWorld(true);
+  for (const [name] of KK_BONES) { world[name] = objs[name].getWorldPosition(new THREE.Vector3()); wq[name] = objs[name].getWorldQuaternion(new THREE.Quaternion()); }
+  return { world, wq };
+})();
+
 // ---------- character builder ----------
 // Built in "design units" (about 1.8 tall, feet at y=0, facing +Z), then scaled so the top of the head is at t.height metres.
 function buildCharacter(t) {
   const A = ARCH[t.archetype], r = makeRng(t.archetype + '|' + t.seed + '|shape');
-  const D = { low: 0.5, medium: 1, high: 1.8 }[t.detail];
+  const D = t.detail === 'game' ? (t.detailScale || 0.5) : { low: 0.5, medium: 1, high: 1.8 }[t.detail];
   const seg = (n) => Math.max(3, Math.round(n * D));
   const M = makeMaterials(t);
   const form = A.form, rocky = form === 'rock', ghost = form === 'ghost';
@@ -449,11 +514,18 @@ function buildCharacter(t) {
   const sides = [[1, 'L'], [-1, 'R']];
 
   // proportions
-  const b = t.bulk, hr = 0.115 * t.head, lim = t.limbs;
-  const legL = 0.82 * lim, footH = 0.05, hipY = legL + footH;
-  const torsoL = 0.5 + 0.05 * (b - 1), shY = hipY + torsoL, waistY = hipY + 0.2;
-  const headY = rocky ? shY + 0.1 * b : shY + 0.05 + hr * 0.9, headTop = headY + hr * (rocky ? 1.1 : 1);
-  const sw = (rocky ? 0.25 : 0.19) * b;
+  // Chibi: design units are KayKit units and the hip, shoulder, elbow, wrist and neck joints sit exactly on the KayKit
+  // rest pose; build only changes girth, head size only the head.
+  const chibi = !!t.chibi, KW = KK.world;
+  const b = chibi ? 1.6 + 0.6 * (t.bulk - 1) : t.bulk, hr = (chibi ? 0.46 : 0.115) * t.head, lim = chibi ? 1 : t.limbs;
+  const footH = 0.05, hipY = chibi ? KW['upperleg.l'].y : 0.82 * lim + footH, legL = hipY - footH;
+  const armY = chibi ? KW['upperarm.l'].y : 0;
+  const torsoL = chibi ? armY + 0.05 - hipY : 0.5 + 0.05 * (b - 1), shY = hipY + torsoL, waistY = hipY + 0.2;
+  const neckY = chibi ? KW.head.y : 0;
+  const headY = chibi ? neckY + hr * 0.95 : rocky ? shY + 0.1 * b : shY + 0.05 + hr * 0.9, headTop = headY + hr * (rocky ? 1.1 : 1);
+  const sw = chibi ? KW['upperarm.l'].x : (rocky ? 0.25 : 0.19) * b;
+  const legX = chibi ? KW['upperleg.l'].x : (rocky ? 0.115 : 0.085) * b;
+  const armR = chibi ? 1.5 : 1, legR = chibi ? 1.2 : 1; // chunkier chibi limbs
   const robed = !rocky && (t.outfit === 'robe' || ghost);
   const sleeves = !rocky && ['robe', 'tunic', 'armor'].includes(t.outfit);
   const armMat = sleeves ? M.cloth : M.skin;
@@ -468,10 +540,11 @@ function buildCharacter(t) {
     ro('Pelvis', 0.13 * b, [0, hipY, 0], [1.2, 0.8, 0.9]);
     add(body, 'Core', new THREE.OctahedronGeometry(0.05 * b, 0), M.glow, [0, shY - 0.12, 0.16 * b * 0.8], [0, 0, 0], [1, 1.4, 0.5]);
     for (const [s, n] of sides) {
-      ro('Thigh_' + n, 0.12 * b, [s * 0.11 * b, hipY - legL * 0.28, 0]);
-      ro('Knee_' + n, 0.1 * b, [s * 0.115 * b, hipY - legL * 0.5, 0.02]);
-      ro('Shin_' + n, 0.11 * b, [s * 0.12 * b, hipY - legL * 0.72, 0]);
-      ro('Foot_' + n, 0.11 * b, [s * 0.12 * b, 0.05, 0.04], [1, 0.55, 1.3]);
+      const x = (f) => s * (chibi ? legX : f * b);
+      ro('Thigh_' + n, 0.12 * b, [x(0.11), hipY - legL * 0.28, 0]);
+      ro('Knee_' + n, 0.1 * b, [x(0.115), hipY - legL * 0.5, 0.02]);
+      ro('Shin_' + n, 0.11 * b, [x(0.12), hipY - legL * 0.72, 0]);
+      ro('Foot_' + n, 0.11 * b, [x(0.12), 0.05, 0.04], [1, 0.55, 1.3]);
     }
     if (r.chance(0.6)) for (let i = 0; i < 4; i++) {
       const s = r.chance(0.5) ? 1 : -1;
@@ -504,9 +577,9 @@ function buildCharacter(t) {
       [0.17 * b, torsoL - 0.07], [0.12 * b, torsoL - 0.01], [0.05, torsoL + 0.03], [0, torsoL + 0.035]], seg(28));
     add(body, 'Torso', torso, t.outfit === 'none' ? M.skin : M.cloth, [0, hipY - 0.04, 0], [0, 0, 0], [1, 1, 0.72]);
     for (const [s, n] of sides) {
-      const leg = group(body, 'Leg_' + n, [s * 0.085 * b, hipY, 0], [0, 0, s * 0.04]);
-      add(leg, 'Thigh_' + n, capsule(0.062 * b, legL * 0.5 - 0.1 * b), legMat, [0, -legL * 0.25, 0]);
-      add(leg, 'Shin_' + n, capsule(0.05 * b, legL * 0.5 - 0.08 * b), legMat, [0, -legL * 0.72, 0]);
+      const leg = group(body, 'Leg_' + n, [s * legX, hipY, 0], [0, 0, chibi ? 0 : s * 0.04]);
+      add(leg, 'Thigh_' + n, capsule(0.062 * b * legR, Math.max(0.01, legL * 0.5 - 0.1 * b * legR)), legMat, [0, -legL * 0.25, 0]);
+      add(leg, 'Shin_' + n, capsule(0.05 * b * legR, Math.max(0.01, legL * 0.5 - 0.08 * b * legR)), legMat, [0, -legL * 0.72, 0]);
       const hoof = t.archetype === 'demon' && t.outfit === 'none';
       add(leg, 'Foot_' + n, sphere(0.058, 14, 10), hoof ? M.horn : M.cloth2, [0, -legL - 0.02, 0.04], [0, 0, 0], [1, 0.55, hoof ? 1.2 : 1.9]);
     }
@@ -527,12 +600,14 @@ function buildCharacter(t) {
 
   // ---- arms ----
   const POSES = { a: [[0.32, 0, 0.25], [0.32, 0, 0.25]], t: [[PI / 2 - 0.05, 0, 0.05], [PI / 2 - 0.05, 0, 0.05]],
-    cast: [[0.3, -0.6, 0.55], [0.45, -1.9, 0.4]] }; // [abduction, forward swing, elbow bend] for [left, right]
+    cast: [[0.3, -0.6, 0.55], [0.45, -1.9, 0.4]], rig: [[PI / 2, 0, 0], [PI / 2, 0, 0]] }; // [abduction, forward swing, elbow bend] for [left, right]
+  const pose = t.rig ? 'rig' : t.pose; // the KayKit skeleton binds in its own T rest pose
   let itemHand = null, itemArmUp = false;
+  const arms = {};
   for (const [s, n] of sides) {
-    const [abd, fwd, bend] = POSES[t.pose][s === 1 ? 0 : 1];
-    const ua = 0.29 * lim, fa = 0.26 * lim;
-    const sh = group(body, 'Arm_' + n, [s * sw, shY - 0.05, 0], [fwd, 0, s * abd]);
+    const [abd, fwd, bend] = POSES[pose][s === 1 ? 0 : 1];
+    const ua = chibi ? KW['lowerarm.l'].distanceTo(KW['upperarm.l']) : 0.29 * lim, fa = chibi ? KW['wrist.l'].distanceTo(KW['lowerarm.l']) : 0.26 * lim;
+    const sh = group(body, 'Arm_' + n, [s * sw, chibi ? armY : shY - 0.05, 0], [fwd, 0, s * abd]);
     const elbow = group(sh, 'Elbow_' + n, [0, -ua, 0], [-bend, 0, 0]);
     const hand = group(elbow, 'Hand_' + n, [0, -fa, 0]);
     if (rocky) {
@@ -543,14 +618,15 @@ function buildCharacter(t) {
       ro(elbow, 'Forearm_' + n, 0.105 * b, [0, -fa * 0.5, 0]);
       ro(hand, 'Fist_' + n, 0.1 * b, [0, -0.05, 0]);
     } else {
-      add(sh, 'Shoulder_' + n, sphere(0.06 * b, 16, 12), t.outfit === 'armor' ? M.trim : armMat, [0, 0, 0], [0, 0, 0], t.outfit === 'armor' ? [1.5, 1, 1.4] : [1, 1, 1]);
-      add(sh, 'UpperArm_' + n, capsule(0.045 * b, ua - 0.06), armMat, [0, -ua / 2, 0]);
-      if (robed) add(elbow, 'Sleeve_' + n, lathe([[0.1 * b, -fa - 0.01], [0.07 * b, -fa * 0.6], [0.046 * b, 0]], seg(18)), M.cloth);
-      else add(elbow, 'Forearm_' + n, capsule(0.04 * b, fa - 0.05), armMat, [0, -fa / 2, 0]);
+      add(sh, 'Shoulder_' + n, sphere(0.06 * b * armR, 16, 12), t.outfit === 'armor' ? M.trim : armMat, [0, 0, 0], [0, 0, 0], t.outfit === 'armor' ? [1.5, 1, 1.4] : [1, 1, 1]);
+      add(sh, 'UpperArm_' + n, capsule(0.045 * b * armR, ua - 0.06), armMat, [0, -ua / 2, 0]);
+      if (robed) add(elbow, 'Sleeve_' + n, lathe([[0.1 * b * armR, -fa - 0.01], [0.07 * b * armR, -fa * 0.6], [0.046 * b * armR, 0]], seg(18)), M.cloth);
+      else add(elbow, 'Forearm_' + n, capsule(0.04 * b * armR, fa - 0.05), armMat, [0, -fa / 2, 0]);
       if (t.outfit === 'armor' || (t.outfit === 'tunic' && r.chance(0.5)))
-        add(elbow, 'Bracer_' + n, new THREE.CylinderGeometry(0.047 * b, 0.05 * b, fa * 0.35, seg(14)), M.trim, [0, -fa * 0.72, 0]);
-      add(hand, 'Hand_' + n, sphere(0.045 * b, 14, 10), M.skin, [0, -0.035, 0], [0, 0, 0], [0.9, 1.2, 0.75]);
+        add(elbow, 'Bracer_' + n, new THREE.CylinderGeometry(0.047 * b * armR, 0.05 * b * armR, fa * 0.35, seg(14)), M.trim, [0, -fa * 0.72, 0]);
+      add(hand, 'Hand_' + n, sphere(0.045 * b * armR, 14, 10), M.skin, [0, -0.035 * armR, 0], [0, 0, 0], [0.9, 1.2, 0.75]);
     }
+    arms[n] = { sh, elbow, hand };
     if (s === -1) { itemHand = hand; itemArmUp = fwd < -1; }
   }
 
@@ -698,14 +774,26 @@ function buildCharacter(t) {
   body.scale.setScalar(k); aura.scale.setScalar(k);
   root.updateMatrixWorld(true);
 
+  // joint positions in body units, where the KayKit skeleton's deforming bones go on a non-chibi body
+  const at = (o) => body.worldToLocal(o.getWorldPosition(V(0, 0, 0)));
+  const joints = { root: V(0, 0, 0), hips: V(0, hipY - 0.19 * torsoL, 0), spine: V(0, hipY + 0.13 * torsoL, 0),
+    chest: V(0, hipY + 0.77 * torsoL, 0), head: V(0, chibi ? neckY : headY - hr * 0.95, 0) };
+  for (const [s, n] of sides) {
+    const l = '.' + n.toLowerCase();
+    Object.assign(joints, { ['upperarm' + l]: at(arms[n].sh), ['lowerarm' + l]: at(arms[n].elbow), ['wrist' + l]: at(arms[n].hand),
+      ['upperleg' + l]: V(s * legX, hipY, 0), ['lowerleg' + l]: V(s * legX, hipY - legL * 0.5, 0), ['foot' + l]: V(s * legX, footH + 0.06, 0) });
+  }
+
   // ---- held item ----
   if (t.item !== 'none' && itemHand) {
     const hp = body.worldToLocal(itemHand.localToWorld(V(0, -0.04, 0)));
-    const it = group(body, 'Item', hp.toArray());
+    // on the KayKit skeleton the item points along handslot.r's +Y, which is forward (+Z) in the rest pose
+    const it = group(body, 'Item', hp.toArray(), [t.rig ? PI / 2 : 0, 0, 0]);
+    if (t.rig) itemArmUp = true;
     if (t.item === 'staff') {
       const wand = t.archetype === 'fairy';
       const Ls = wand ? 0.45 : headTop * 1.02;
-      const bottom = wand ? -Ls * 0.25 : Math.max(-hp.y, -Ls * 0.45);
+      const bottom = wand ? -Ls * 0.25 : t.rig ? -Ls * 0.3 : Math.max(-hp.y, -Ls * 0.45);
       const top = bottom + Ls, wob = () => r.range(-0.015, 0.015) * (wand ? 0 : 1);
       add(it, 'StaffShaft', taperTube([V(0, bottom, 0), V(wob(), bottom + Ls * 0.33, wob()), V(wob(), bottom + Ls * 0.66, wob()), V(0, top, 0)],
         wand ? 0.008 : 0.016, wand ? 0.012 : 0.022, seg(16), seg(8)), wand ? M.trim : M.wood);
@@ -784,7 +872,7 @@ function buildCharacter(t) {
   root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   root.position.y = A.float;
   root.userData = { scale: k, float: A.float };
-  return { root, body, aura, materials: M };
+  return { root, body, aura, materials: M, joints, traits: t };
 }
 
 // ---------- viewer ----------
@@ -892,8 +980,31 @@ function readUI() {
   Object.assign(t, outputSettings());
   return t;
 }
-const outputSettings = () => ({ style: $('style').value, detail: $('detail').value });
-function updateLabels() { for (const [s, f] of Object.entries(SLIDERS)) $(s + 'Val').textContent = f(Number($(s).value)); }
+const outputSettings = () => ({ style: $('style').value, detail: $('detail').value, chibi: $('chibi').checked, rig: $('rig').checked });
+function updateLabels() {
+  for (const [s, f] of Object.entries(SLIDERS)) $(s + 'Val').textContent = f(Number($(s).value));
+  $('limbs').disabled = $('chibi').checked; // chibi limbs are the KayKit bone lengths
+  $('pose').disabled = $('rig').checked; // the skeleton binds in the KayKit T rest pose
+}
+
+// "Game budget" detail: the largest detail scale that keeps the whole character at or under GAME_TRIS triangles.
+const GAME_TRIS = 4000, gameDetailCache = new Map();
+function gameDetailScale(t) {
+  const key = JSON.stringify({ ...t, name: 0, colors: 0, height: 0, detailScale: 0 });
+  if (gameDetailCache.has(key)) return gameDetailCache.get(key);
+  const tris = (D) => {
+    const c = buildCharacter({ ...t, detailScale: D });
+    let f = 0; for (const m of meshesOf(c.root)) { f += triCount(m.geometry); m.geometry.dispose(); }
+    for (const m of Object.values(c.materials)) m.dispose();
+    return f;
+  };
+  let lo = 0.3, hi = 3;
+  if (tris(hi) <= GAME_TRIS) lo = hi;
+  else for (let i = 0; i < 8; i++) { const mid = (lo + hi) / 2; if (tris(mid) <= GAME_TRIS) lo = mid; else hi = mid; }
+  if (gameDetailCache.size > 200) gameDetailCache.clear();
+  gameDetailCache.set(key, lo);
+  return lo;
+}
 
 function disposeCurrent() {
   const c = state.current; if (!c) return;
@@ -906,6 +1017,7 @@ function rebuild({ fit = false } = {}) {
   const t = state.traits;
   const t0 = performance.now();
   disposeCurrent();
+  if (t.detail === 'game') t.detailScale = gameDetailScale(t); else delete t.detailScale;
   const c = buildCharacter(t);
   state.current = c; scene.add(c.root);
   applyWire();
@@ -939,41 +1051,175 @@ $('colorsBtn').addEventListener('click', () => {
   scheduleRebuild();
 });
 for (const s of Object.keys(SLIDERS)) $(s).addEventListener('input', () => { updateLabels(); scheduleRebuild(); });
-for (const id of ['pose', 'glowEyes', 'style', 'detail', ...SLOTS]) $(id).addEventListener('change', scheduleRebuild);
+for (const id of ['pose', 'glowEyes', 'style', 'detail', 'chibi', 'rig', ...SLOTS]) $(id).addEventListener('change', () => { updateLabels(); scheduleRebuild(); });
 for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).addEventListener('input', scheduleRebuild);
 $('wire').addEventListener('change', applyWire);
 $('fitBtn').addEventListener('click', fitView);
 
 // ---------- export ----------
 const nodeName = (s) => THREE.PropertyBinding.sanitizeNodeName(s.replace(/\s+/g, '_')) || 'Character';
-// Copy of the character with every transform baked into the geometry (in metres), grouped as Root > Body, Aura.
-function exportScene(c, { combine, anim }) {
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+
+// KayKit bones with their rest rotations. On a chibi body the translations are KayKit's own, so KayKit clips (which key
+// translations on every bone) fit; on any other body the bones are moved onto this body's joints, keeping the rotations.
+function kaykitSkeleton(c) {
+  const bones = {}, list = [];
+  for (const [name, parent, tr, q] of KK_BONES) {
+    const bn = new THREE.Bone(); bn.name = name; bn.position.fromArray(tr); bn.quaternion.fromArray(q).normalize();
+    bones[name] = bn; list.push(bn); if (parent) bones[parent].add(bn);
+  }
+  if (!c.traits.chibi) {
+    const J = c.joints, KW = KK.world, W = {};
+    const legS = J['upperleg.l'].y / KW['upperleg.l'].y, armS = J['wrist.l'].distanceTo(J['upperarm.l']) / KW['wrist.l'].distanceTo(KW['upperarm.l']);
+    // bones that are not body joints keep their KayKit offset from a nearby joint, scaled with the limb
+    const ANCHOR = { hand: ['wrist', armS], handslot: ['wrist', armS], toes: ['foot', legS], kneeIK: ['lowerleg', legS], elbowIK: ['lowerarm', armS], handIK: ['wrist', armS] };
+    for (const [name] of KK_BONES) {
+      if (J[name]) { W[name] = J[name]; continue; }
+      const side = name.slice(-2), [a, sc] = ANCHOR[name.slice(0, -2)] || ['foot', legS];
+      W[name] = J[a + side].clone().add(KW[name].clone().sub(KW[a + side]).multiplyScalar(sc));
+    }
+    for (const [name, parent] of KK_BONES) if (parent)
+      bones[name].position.copy(W[name]).sub(W[parent]).applyQuaternion(KK.wq[parent].clone().invert());
+  }
+  return { bones, list, index: Object.fromEntries(list.map((bn, i) => [bn.name, i])) };
+}
+
+// Which KayKit bone moves a part (rigid skinning). 'blend' = torso and robe, weighted from hips to chest by height.
+function boneFor(m) {
+  for (let o = m; o && o.name !== 'Body'; o = o.parent) {
+    if (o.name === 'Item') return 'handslot.r';
+    if (o.name === 'Head') return 'head';
+  }
+  const n = m.name, sm = n.match(/_([LR])(?:_|$)/), s = sm ? '.' + sm[1].toLowerCase() : '';
+  if (s) {
+    if (/^Thigh_/.test(n)) return 'upperleg' + s;
+    if (/^(Knee|Shin)_/.test(n)) return 'lowerleg' + s;
+    if (/^Foot_/.test(n)) return 'foot' + s;
+    if (/^(Shoulder|UpperArm)_/.test(n)) return 'upperarm' + s;
+    if (/^(ElbowRock|Forearm|Sleeve|Bracer)_/.test(n)) return 'lowerarm' + s;
+    if (/^(Hand|Fist)_/.test(n)) return 'hand' + s;
+  }
+  if (n === 'Robe' || n === 'Torso') return 'blend';
+  if (['Skirt', 'Hem', 'Belt', 'Pelvis', 'Belly', 'Tail', 'TailTip'].includes(n)) return 'hips';
+  return 'chest';
+}
+function addSkin(geo, bone, skel, rest) {
+  const n = geo.attributes.position.count, si = new Uint16Array(n * 4), sw = new Float32Array(n * 4), I = skel.index;
+  for (let i = 0; i < n; i++) {
+    if (bone === 'blend') {
+      const f = clamp01((geo.attributes.position.getY(i) - rest.hips.y) / (rest.chest.y - rest.hips.y));
+      si[i * 4] = I.hips; sw[i * 4] = 1 - f; si[i * 4 + 1] = I.chest; sw[i * 4 + 1] = f;
+    } else { si[i * 4] = I[bone]; sw[i * 4] = 1; }
+  }
+  geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+  geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+}
+
+// One material for every colour (a small palette texture, nearest-filtered, each part's UVs on its colour's cell),
+// plus one emissive Glow material. Roughness 1 and metallic 0, as the game wants.
+function makeAtlas(c) {
+  const glowSrc = c.materials.glow, used = [];
+  meshesOf(c.root).forEach((m) => { if (m.material !== glowSrc && !used.includes(m.material)) used.push(m.material); });
+  const G = Math.max(1, Math.ceil(Math.sqrt(used.length))), cell = 8;
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = G * cell;
+  const ctx = canvas.getContext('2d');
+  used.forEach((mat, i) => { ctx.fillStyle = '#' + mat.color.getHexString(); ctx.fillRect((i % G) * cell, Math.floor(i / G) * cell, cell, cell); });
+  const tex = new THREE.CanvasTexture(canvas);
+  Object.assign(tex, { colorSpace: THREE.SRGBColorSpace, magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter, generateMipmaps: false, name: 'Palette' });
+  const palette = new THREE.MeshStandardMaterial({ name: 'Palette', map: tex, roughness: 1, metalness: 0, side: THREE.DoubleSide });
+  const glow = new THREE.MeshStandardMaterial({ name: 'Glow', color: glowSrc.color.clone(), emissive: glowSrc.color.clone(), roughness: 1, metalness: 0 });
+  return {
+    // returns the material that replaces `mat`, pointing the geometry's UVs at its colour first
+    assign(geo, mat) {
+      const n = geo.attributes.position.count, uv = new Float32Array(n * 2), i = used.indexOf(mat);
+      const u = ((i % G) + 0.5) / G, v = 1 - (Math.floor(i / G) + 0.5) / G;
+      for (let j = 0; j < n; j++) { uv[j * 2] = u; uv[j * 2 + 1] = v; }
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      return mat === glowSrc ? glow : palette;
+    },
+    dispose() { tex.dispose(); palette.dispose(); glow.dispose(); },
+  };
+}
+
+// glTF extras on the root node: enough to regenerate the character (archetype + seed) or rebuild it with edits.
+function extrasFor(t, opts) {
+  const { detailScale, ...traits } = t;
+  return { generator: 'Mystical Character Generator', archetype: t.archetype, seed: t.seed, name: t.name, chibi: !!t.chibi,
+    skeleton: opts.rig ? 'KayKit Adventurers (41 bones)' : 'none', detail: t.detail, traits };
+}
+
+// Merge parts that share a material into one mesh (keeps the attributes the parts have in common).
+function mergeParts(geos, attrs) {
+  const clean = geos.map((g0) => {
+    const g1 = g0.index ? g0.toNonIndexed() : g0, g2 = new THREE.BufferGeometry();
+    for (const a of attrs) g2.setAttribute(a, a === 'uv' && !g1.attributes.uv ? new THREE.Float32BufferAttribute(new Float32Array(g1.attributes.position.count * 2), 2) : g1.attributes[a]);
+    return g2;
+  });
+  return mergeVertices(mergeGeometries(clean), 1e-5);
+}
+
+// Copy of the character with every transform baked into the geometry, grouped as Root > Body, Aura (in metres), or
+// with the skeleton as Root > Rig (scaled to metres) > root bone + skinned body, Aura. Held items hang on handslot.r.
+function exportScene(c, { combine, anim, rig = false, atlas = false }) {
   c.root.updateMatrixWorld(true);
-  const k = c.root.userData.scale, S = new THREE.Matrix4().makeScale(k, k, k);
-  const out = new THREE.Group(); out.name = nodeName(state.traits.name); out.position.y = c.root.userData.float;
-  const nodes = [];
+  const t = c.traits, k = c.root.userData.scale, S = new THREE.Matrix4().makeScale(k, k, k);
+  const out = new THREE.Group(); out.name = nodeName(t.name); out.position.y = c.root.userData.float;
+  out.userData = extrasFor(t, { rig });
+  const pal = atlas ? makeAtlas(c) : null;
+  let skel = null, rigNode = null, rest = null;
+  if (rig) {
+    rigNode = new THREE.Group(); rigNode.name = 'Rig'; rigNode.scale.setScalar(k); out.add(rigNode);
+    skel = kaykitSkeleton(c); rigNode.add(skel.bones.root);
+    out.updateMatrixWorld(true);
+    const toRig = rigNode.matrixWorld.clone().invert();
+    rest = Object.fromEntries(skel.list.map((bn) => [bn.name, bn.getWorldPosition(V(0, 0, 0)).applyMatrix4(toRig)]));
+  }
+  const skinned = [], nodes = [];
+  const place = (parent, name, geos, mat, bone) => { // one mesh per material, or one per part
+    const m = bone === undefined ? new THREE.Mesh(geos, mat) : new THREE.SkinnedMesh(geos, mat);
+    m.name = name; parent.add(m); if (bone !== undefined) skinned.push(m); return m;
+  };
   for (const g of [c.body, c.aura]) {
     const meshes = meshesOf(g); if (!meshes.length) continue;
-    const node = new THREE.Group(); node.name = g.name; out.add(node); nodes.push(node);
-    const inv = g.matrixWorld.clone().invert();
-    const baked = meshes.map((m) => {
-      const geo = m.geometry.clone().applyMatrix4(S.clone().multiply(inv).multiply(m.matrixWorld));
-      return { name: m.name, mat: m.material, geo };
+    // with the skeleton, geometry stays in body units and the Rig / Aura node carries the scale to metres
+    let node;
+    if (rig && g === c.body) node = rigNode;
+    else { node = new THREE.Group(); node.name = g.name; if (rig) node.scale.setScalar(k); out.add(node); }
+    nodes.push(node);
+    const inv = g.matrixWorld.clone().invert(), unit = rig ? new THREE.Matrix4() : S;
+    const parts = meshes.map((m) => {
+      const geo = m.geometry.clone().applyMatrix4(unit.clone().multiply(inv).multiply(m.matrixWorld));
+      const mat = pal ? pal.assign(geo, m.material) : m.material;
+      return { name: m.name, mat, geo, bone: rig && g === c.body ? boneFor(m) : undefined };
     });
-    if (!combine) { for (const p of baked) { const m = new THREE.Mesh(p.geo, p.mat); m.name = p.name; node.add(m); } continue; }
-    const byMat = new Map();
-    for (const p of baked) { if (!byMat.has(p.mat)) byMat.set(p.mat, []); byMat.get(p.mat).push(p.geo); }
-    for (const [mat, geos] of byMat) {
-      const clean = geos.map((g0) => {
-        const g1 = g0.index ? g0.toNonIndexed() : g0;
-        const g2 = new THREE.BufferGeometry();
-        g2.setAttribute('position', g1.attributes.position); g2.setAttribute('normal', g1.attributes.normal);
-        g2.setAttribute('uv', g1.attributes.uv || new THREE.Float32BufferAttribute(new Float32Array(g1.attributes.position.count * 2), 2));
-        return g2;
-      });
-      const merged = mergeVertices(mergeGeometries(clean), 1e-5);
-      const m = new THREE.Mesh(merged, mat); m.name = g.name + '_' + mat.name; node.add(m);
+    // held item: plain meshes under the handslot.r bone (like KayKit's weapons), so the game can hide or swap it
+    const items = parts.filter((p) => p.bone === 'handslot.r'), rest2 = parts.filter((p) => p.bone !== 'handslot.r');
+    if (items.length) {
+      const slot = skel.bones['handslot.r'], toSlot = slot.matrixWorld.clone().invert().multiply(rigNode.matrixWorld);
+      const it = new THREE.Group(); it.name = 'Item'; slot.add(it);
+      for (const p of items) { p.geo.applyMatrix4(toSlot); p.bone = undefined; }
+      emit(it, 'Item', items);
     }
+    emit(node, g.name, rest2);
+  }
+  function emit(node, prefix, parts) {
+    const isSkin = parts[0]?.bone !== undefined;
+    if (isSkin) for (const p of parts) addSkin(p.geo, p.bone, skel, rest);
+    if (!combine) { for (const p of parts) place(node, p.name, p.geo, p.mat, p.bone); return; }
+    const byMat = new Map();
+    for (const p of parts) { if (!byMat.has(p.mat)) byMat.set(p.mat, []); byMat.get(p.mat).push(p.geo); }
+    const attrs = ['position', 'normal', 'uv', ...(isSkin ? ['skinIndex', 'skinWeight'] : [])];
+    const merged = [...byMat].map(([mat, geos]) => { const g1 = mergeParts(geos, attrs); for (const g0 of geos) g0.dispose(); return [mat, g1]; });
+    if (isSkin) { // one skinned mesh with a primitive per material, so the file has a single skin like KayKit's
+      const all = mergeGeometries(merged.map(([, g1]) => g1), true);
+      for (const [, g1] of merged) g1.dispose();
+      place(node, prefix, all, merged.map(([mat]) => mat), 'skin');
+    } else for (const [mat, g1] of merged) place(node, prefix + '_' + mat.name, g1, mat);
+  }
+  if (rig) {
+    out.updateMatrixWorld(true);
+    const skeleton = new THREE.Skeleton(skel.list);
+    for (const m of skinned) m.bind(skeleton);
   }
   const clips = [];
   if (anim) {
@@ -989,15 +1235,16 @@ function exportScene(c, { combine, anim }) {
     }
     if (tracks.length) clips.push(new THREE.AnimationClip('Idle', T, tracks));
   }
-  return { out, clips };
+  return { out, clips, dispose: () => { out.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); pal?.dispose(); } };
 }
-async function exportGLB() {
+const exportOptions = () => ({ combine: $('combine').checked, anim: $('anim').checked, rig: $('rig').checked, atlas: $('atlas').checked });
+async function exportGLB(opts = exportOptions()) {
   const c = state.current;
-  const { out, clips } = exportScene(c, { combine: $('combine').checked, anim: $('anim').checked });
+  const { out, clips, dispose } = exportScene(c, opts);
   try {
     const buf = await new GLTFExporter().parseAsync(out, { binary: true, animations: clips });
     return { buf, out, clips };
-  } finally { out.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); }
+  } finally { dispose(); }
 }
 $('downloadBtn').addEventListener('click', async () => {
   if (state.busy) return;
@@ -1013,7 +1260,7 @@ $('downloadBtn').addEventListener('click', async () => {
   finally { $('busy').classList.remove('show'); state.busy = false; }
 });
 
-window.__chargen = { THREE, state, ARCH, OPTIONS, rollTraits, buildCharacter, roll, rebuild, exportGLB, exportScene }; // handy for debugging in the console
+window.__chargen = { THREE, state, ARCH, OPTIONS, KK_BONES, GAME_TRIS, rollTraits, buildCharacter, roll, rebuild, exportGLB, exportScene }; // handy for debugging in the console
 
 roll('wizard', randomSeed());
 log('Ready. Pick an archetype, press Randomize, then Download GLB.', 'ok');
