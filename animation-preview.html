@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Animation Preview &amp; Clip Baker</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
+    --text: #e6e8ec; --muted: #8b93a3; --accent: #e8a33d; --accent2: #b97a1f;
+    --ok: #3fbf7f; --warn: #e0a83a; --err: #e05a5a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { display: grid; grid-template-columns: 350px 1fr; height: 100vh; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 12px 14px 24px; }
+  h1 { font-size: 15px; margin: 2px 0 4px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+  a { color: var(--accent); }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row label { flex: 1; color: var(--text); }
+  .row .val { min-width: 40px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: 11.5px; margin: 2px 0 6px; }
+  input[type=text], input[type=number], select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 7px; width: 160px; font: inherit; }
+  input[type=number].m { width: 72px; }
+  input[type=range] { width: 120px; accent-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 11px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent); }
+  button.small { padding: 3px 8px; font-size: 12px; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  table.stats { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; margin-top: 8px; }
+  table.stats td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+  table.stats td:first-child { text-align: left; color: var(--muted); }
+  details { margin: 6px 0; }
+  summary { cursor: pointer; color: var(--muted); }
+  #joints { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
+  #joints td { padding: 2px 3px; border-bottom: 1px solid var(--line); }
+  #joints select { width: 92px; padding: 2px 4px; font-size: 12px; }
+  #joints .side { color: var(--muted); text-align: center; width: 24px; }
+  #clips { max-height: 300px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); margin-top: 6px; }
+  #clips .grp { padding: 4px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+    background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; }
+  .clip { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .clip:hover { background: #252a35; }
+  .clip.sel { background: #2e2a20; box-shadow: inset 3px 0 0 var(--accent); }
+  .clip .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .clip .dur { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  .clip .ren { color: var(--accent); font-size: 11px; }
+  #log { margin-top: 10px; font: 11.5px/1.45 ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+    max-height: 160px; overflow-y: auto; white-space: pre-wrap; }
+  #log .warn { color: var(--warn); } #log .err { color: var(--err); } #log .ok { color: var(--ok); }
+  main { position: relative; overflow: hidden; }
+  #viewport { position: absolute; inset: 0; }
+  #toolbar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 10px; align-items: center;
+    flex-wrap: wrap; pointer-events: none; }
+  #toolbar > * { pointer-events: auto; }
+  #toolbar .chk { background: rgba(23,26,33,.85); border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; }
+  #toolbar select { width: auto; }
+  #transport { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 10px; align-items: center;
+    background: rgba(23,26,33,.85); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  #transport input[type=range] { flex: 1; width: auto; }
+  #clipLabel { font-weight: 600; min-width: 90px; }
+  #timeVal { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 92px; text-align: right; }
+  #drop { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; font-size: 16px;
+    background: rgba(232,163,61,.12); border: 2px dashed var(--accent); z-index: 4; pointer-events: none; }
+  #drop.show { display: flex; }
+  #empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted);
+    font-size: 15px; pointer-events: none; text-align: center; padding: 20px; }
+  #busy { position: absolute; inset: 0; background: rgba(10,12,16,.55); display: none; align-items: center;
+    justify-content: center; font-size: 15px; z-index: 5; }
+  #busy.show { display: flex; }
+  .spinner { width: 22px; height: 22px; border: 3px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite; margin-right: 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 760px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; }
+    main { grid-row: 1; height: 55vh; } aside { grid-row: 2; border-right: 0; }
+  }
+</style>
+<!-- Libraries load from the jsDelivr CDN (needs internet). The "offline" build has them inlined instead. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <h1>Animation Preview &amp; Clip Baker</h1>
+    <div class="hint">Play the KayKit Knight clips on a rigged GLB by bone name, add procedural clips (idle, walk, run, bite, fly, death, bob) to any rig or prop, then trim, rename and bake the clips you pick into the file. For models from the <a href="character-generator.html" data-offline-href="character-generator-offline.html">character generator</a> and the props page, or any artist rig. Check or shrink the result in the <a href="index.html" data-offline-href="glb-viewer-offline.html">GLB viewer &amp; optimizer</a>.</div>
+
+    <h2>Model</h2>
+    <div class="btns" style="margin-top:2px">
+      <button id="openBtn" class="primary">Open GLB…</button>
+      <input id="openFile" type="file" accept=".glb,model/gltf-binary" hidden>
+      <select id="demo" style="width:auto">
+        <option value="">Demo model…</option>
+        <option value="biped">KayKit-rigged figure</option>
+        <option value="quad">Quadruped (wolf rig)</option>
+        <option value="bird">Bird (crow rig)</option>
+        <option value="prop">Static prop (lantern)</option>
+      </select>
+    </div>
+    <div class="hint">Or drop a .glb on the viewer. Skinned rigs, models with a node per joint (the creature generator's jointed parts) and plain static models all work.</div>
+    <table class="stats">
+      <tbody>
+        <tr><td>Model</td><td id="sM">–</td></tr>
+        <tr><td>Triangles</td><td id="sT">–</td></tr>
+        <tr><td>Rig</td><td id="sR">–</td></tr>
+        <tr><td>Clips in the file</td><td id="sF">–</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Rig</h2>
+    <div class="row"><label for="plan">Body plan</label>
+      <select id="plan">
+        <option value="auto">Auto</option><option value="biped">Biped</option><option value="quad">Quadruped</option>
+        <option value="bug">Many legs (bug)</option><option value="flyer">Winged flyer</option><option value="other">Other (no legs)</option>
+        <option value="static">Static (no joints)</option>
+      </select></div>
+    <div class="hint" id="rigSummary">Open a model to see which joints move.</div>
+    <details id="jointBox"><summary>Joints and roles</summary>
+      <div class="hint">Roles come from the joint names (hips, spine, neck, head, jaw, tail, leg, arm, wing; IK and control bones are left alone). Change one if a name fools it.</div>
+      <table id="joints"><tbody></tbody></table>
+    </details>
+
+    <h2>KayKit clips</h2>
+    <div class="btns" style="margin-top:2px">
+      <button id="kaykitBtn">Load Knight clips (online)</button>
+      <button id="libBtn">Clip library GLB…</button>
+      <input id="libFile" type="file" accept=".glb,model/gltf-binary" hidden>
+    </div>
+    <div class="hint">The Knight from the CC0 KayKit Adventurers pack has 76 clips. Without internet, pick a local <code>Knight.glb</code> (or any GLB with clips) as the library. Clips play by bone name.</div>
+    <div class="row"><label for="trMode">Bone translations</label>
+      <select id="trMode">
+        <option value="hips">Hips only, scaled to this body</option>
+        <option value="all">All (same proportions as KayKit)</option>
+        <option value="none">None</option>
+      </select></div>
+    <div class="row"><label for="rotMode">Rotations</label>
+      <select id="rotMode">
+        <option value="auto">Auto</option>
+        <option value="asis">As they are (same rest pose)</option>
+        <option value="relative">Relative to the rest pose</option>
+      </select></div>
+    <div class="row"><label for="inPlace">In place (no hips drift on X/Z)</label><input id="inPlace" type="checkbox"></div>
+    <div class="hint" id="libInfo">Hips only fits realistic bodies built on the KayKit bones and the chibi look alike; scale tracks are always dropped.</div>
+
+    <h2>Procedural clips</h2>
+    <div class="row"><label for="strength">Strength</label><input id="strength" type="range" min="0.3" max="1.8" step="0.05" value="1"><span class="val" id="strengthVal">1.00</span></div>
+    <div class="row"><label for="armsDown">Lower T-pose arms</label><input id="armsDown" type="checkbox" checked></div>
+    <div class="hint" id="procInfo">Made from the rig's joints for anything without clips. Quadruped names follow the game's quadruped clips (Idle, Walk, Run, Bite).</div>
+
+    <h2>Clips</h2>
+    <div class="row"><input id="filter" type="text" placeholder="Filter clips" spellcheck="false" style="flex:1;width:auto">
+      <button id="tickRec" class="small" title="Tick the recommended clips for this body plan">Recommended</button>
+      <button id="tickNone" class="small">None</button></div>
+    <div id="clips"><div class="hint" style="padding:6px 8px">No model yet.</div></div>
+    <div class="hint">Tick the clips to bake. Click a clip to play it, then rename or trim it below.</div>
+    <div id="selBox" hidden>
+      <div class="row"><label for="clipName">Name in the file</label><input id="clipName" type="text" spellcheck="false"></div>
+      <div class="row"><label>Trim (s)</label><input id="trimS" class="m" type="number" min="0" step="0.01"><input id="trimE" class="m" type="number" min="0" step="0.01"></div>
+      <div class="btns" style="margin-top:0">
+        <button id="markS" class="small" title="Start at the current time">Start here</button>
+        <button id="markE" class="small" title="End at the current time">End here</button>
+        <button id="resetTrim" class="small">Reset</button>
+      </div>
+      <div class="hint" id="selInfo"></div>
+    </div>
+
+    <h2>Bake</h2>
+    <div class="row"><label for="fileName">File name</label><input id="fileName" type="text" spellcheck="false"></div>
+    <div class="row"><label for="optimize">Drop redundant keyframes</label><input id="optimize" type="checkbox" checked></div>
+    <div class="btns">
+      <button id="bakeBtn" class="primary" disabled>Bake GLB</button>
+    </div>
+    <div class="hint">The file keeps the model as it was (rest pose, node names, materials) and gets exactly the ticked clips. The clip list and their sources go in the root node's glTF <code>extras</code>.</div>
+    <table class="stats"><tbody><tr><td>Last file</td><td id="sZ">–</td></tr></tbody></table>
+    <div id="log"></div>
+  </aside>
+
+  <main id="main">
+    <div id="viewport"></div>
+    <div id="empty">Open a GLB or pick a demo model.</div>
+    <div id="toolbar">
+      <label class="chk"><input id="skel" type="checkbox"> Skeleton</label>
+      <label class="chk"><input id="figure" type="checkbox"> 1.8 m figure</label>
+      <label class="chk"><input id="rotate" type="checkbox"> Auto-rotate</label>
+      <button id="fitBtn">Fit view</button>
+    </div>
+    <div id="transport">
+      <button id="playBtn" class="small" disabled>Pause</button>
+      <span id="clipLabel">–</span>
+      <input id="scrub" type="range" min="0" max="1" step="0.001" value="0" disabled>
+      <span id="timeVal">0.00 / 0.00 s</span>
+      <select id="speed" title="Playback speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+      <label><input id="loop" type="checkbox" checked> Loop</label>
+    </div>
+    <div id="drop">Drop a .glb to open it</div>
+    <div id="busy"><div class="spinner"></div><span id="busyText">Working…</span></div>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const $ = (id) => document.getElementById(id);
+const PI = Math.PI;
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const KAYKIT_URL = 'https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/main/addons/kaykit_character_pack_adventures/Characters/gltf/Knight.glb';
+const FPS = 30; // procedural clips are sampled at this rate
+const FWD = V(0, 0, 1), BACK = V(0, 0, -1), UP = V(0, 1, 0), DOWN = V(0, -1, 0);
+
+// ---------- loading ----------
+// GLTFLoader strips dots and other reserved characters from node names (upperarm.l -> upperarml) so animation track names
+// parse. The page works with those names and writes the original ones back into the baked file.
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+async function parseGLB(buf) {
+  const gltf = await loader.parseAsync(buf, '');
+  const nodes = gltf.parser.json.nodes || [];
+  for (const [obj, a] of gltf.parser.associations) {
+    if (obj?.isObject3D && a?.nodes !== undefined && nodes[a.nodes]?.name !== undefined) obj.userData.__gltfName = nodes[a.nodes].name;
+  }
+  return gltf;
+}
+const origName = (o) => o.userData.__gltfName ?? o.name;
+
+// Rewrites a GLB's JSON chunk (the BIN chunk is kept byte for byte).
+function editGlbJson(buf, fn) {
+  const dv = new DataView(buf), jsonLen = dv.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jsonLen)));
+  fn(json);
+  const rest = new Uint8Array(buf, 20 + jsonLen);
+  let js = new TextEncoder().encode(JSON.stringify(json));
+  const pad = Math.ceil(js.length / 4) * 4, jb = new Uint8Array(pad).fill(0x20); jb.set(js); js = jb;
+  const total = 20 + js.length + rest.length, out = new Uint8Array(total), o = new DataView(out.buffer);
+  o.setUint32(0, 0x46546c67, true); o.setUint32(4, 2, true); o.setUint32(8, total, true);
+  o.setUint32(12, js.length, true); o.setUint32(16, 0x4e4f534a, true); out.set(js, 20); out.set(rest, 20 + js.length);
+  return out.buffer;
+}
+// Original node names back, and the bookkeeping key out of the extras.
+function restoreNames(json) {
+  for (const n of json.nodes || []) {
+    if (n.extras && '__gltfName' in n.extras) {
+      n.name = n.extras.__gltfName; delete n.extras.__gltfName;
+      if (!Object.keys(n.extras).length) delete n.extras;
+    }
+  }
+}
+
+// ---------- demo rigs ----------
+// Rest pose of the KayKit Adventurers rig (CC0, Kay Lousberg), read from Knight.glb, as in the character generator:
+// [bone, parent, translation, rotation quaternion] in KayKit units, T-pose facing +Z, ".l" at +X.
+const KK_BONES = [
+  ['root', null, [0, 0, 0], [0, 0, 0, 1]],
+  ['hips', 'root', [0, 0.4057, 0], [0, 0, 0, 1]],
+  ['spine', 'hips', [0, 0.192, 0], [0, 0, 0, 1]],
+  ['chest', 'spine', [0, 0.375, 0], [0, 0, 0, 1]],
+  ['upperarm.l', 'chest', [0.212, 0.1341, 0], [-0.51412, -0.48547, -0.48547, 0.51412]],
+  ['lowerarm.l', 'upperarm.l', [0, 0.2419, 0], [0, 0, -0.05529, 0.99847]],
+  ['wrist.l', 'lowerarm.l', [0, 0.26, 0], [0, 0, 0.02666, 0.99964]],
+  ['hand.l', 'wrist.l', [0, 0.0738, 0], [0, 0, -0.00001, 1]],
+  ['handslot.l', 'hand.l', [0, 0.0961, -0.0575], [0, 0, -0.70711, 0.70711]],
+  ['upperarm.r', 'chest', [-0.212, 0.1341, 0], [-0.51412, 0.48547, 0.48547, 0.51412]],
+  ['lowerarm.r', 'upperarm.r', [0, 0.2419, 0], [0, 0, 0.05529, 0.99847]],
+  ['wrist.r', 'lowerarm.r', [0, 0.26, 0], [0, 0, -0.02666, 0.99964]],
+  ['hand.r', 'wrist.r', [0, 0.0738, 0], [0, 0, 0.00001, 1]],
+  ['handslot.r', 'hand.r', [0, 0.0961, -0.0575], [0, 0, 0.70711, 0.70711]],
+  ['head', 'chest', [0, 0.2688, 0], [0, 0, 0, 1]],
+  ['upperleg.l', 'hips', [0.1709, 0.1136, 0], [0.99985, 0, 0, 0.01737]],
+  ['lowerleg.l', 'upperleg.l', [0, 0.2271, 0], [0.10623, 0, 0, 0.99434]],
+  ['foot.l', 'lowerleg.l', [0, 0.1494, 0], [-0.45524, 0, 0, 0.89037]],
+  ['toes.l', 'foot.l', [0, 0.1657, 0], [0, 0.92035, -0.39108, 0]],
+  ['upperleg.r', 'hips', [-0.1709, 0.1136, 0], [0.99985, 0, 0, 0.01737]],
+  ['lowerleg.r', 'upperleg.r', [0, 0.2271, 0], [0.10623, 0, 0, 0.99434]],
+  ['foot.r', 'lowerleg.r', [0, 0.1494, 0], [-0.45524, 0, 0, 0.89037]],
+  ['toes.r', 'foot.r', [0, 0.1657, 0], [0, -0.92035, 0.39108, 0]],
+  ['kneeIK.l', 'root', [0.1709, 0.2923, 0.5758], [0.70711, 0, 0, 0.70711]],
+  ['control-toe-roll.l', 'root', [0.1709, 0.026, 0.2458], [-0.70711, 0, 0, 0.70711]],
+  ['control-heel-roll.l', 'control-toe-roll.l', [0, 0.3628, 0], [0, 0, -1, 0]],
+  ['control-foot-roll.l', 'control-heel-roll.l', [0, 0.2134, 0], [0, -0.39108, -0.92035, 0]],
+  ['heelIK.l', 'control-foot-roll.l', [0, 0.1657, 0], [-0.39108, 0, 0, 0.92035]],
+  ['IK-foot.l', 'control-foot-roll.l', [0, 0.1657, 0], [-1, 0, 0, 0]],
+  ['IK-toe.l', 'control-heel-roll.l', [0, 0, 0], [0, 0, 0, 1]],
+  ['kneeIK.r', 'root', [-0.1709, 0.2923, 0.5758], [0.70711, 0, 0, 0.70711]],
+  ['control-toe-roll.r', 'root', [-0.1709, 0.026, 0.2458], [-0.70711, 0, 0, 0.70711]],
+  ['control-heel-roll.r', 'control-toe-roll.r', [0, 0.3628, 0], [0, 0, -1, 0]],
+  ['control-foot-roll.r', 'control-heel-roll.r', [0, 0.2134, 0], [0, -0.39108, -0.92035, 0]],
+  ['heelIK.r', 'control-foot-roll.r', [0, 0.1657, 0], [-0.39108, 0, 0, 0.92035]],
+  ['IK-foot.r', 'control-foot-roll.r', [0, 0.1657, 0], [1, 0, 0, 0]],
+  ['IK-toe.r', 'control-heel-roll.r', [0, 0, 0], [0, 0, 0, 1]],
+  ['elbowIK.l', 'root', [0.4535, 1.1068, -0.5889], [-0.70711, 0, 0, 0.70711]],
+  ['handIK.l', 'root', [0.7132, 1.1068, 0], [-0.5, -0.5, -0.5, 0.5]],
+  ['elbowIK.r', 'root', [-0.4535, 1.1068, -0.5889], [-0.70711, 0, 0, 0.70711]],
+  ['handIK.r', 'root', [-0.7132, 1.1068, 0], [-0.5, 0.5, 0.5, 0.5]],
+];
+// Bones with no rest rotation from world positions: [name, parent, [x, y, z]] -> [name, parent, translation, quaternion].
+function fromWorld(list) {
+  const w = {};
+  return list.map(([n, p, pos]) => { w[n] = pos; const pp = p ? w[p] : [0, 0, 0]; return [n, p, pos.map((x, i) => x - pp[i]), [0, 0, 0, 1]]; });
+}
+const mirror = (list) => list.flatMap((b) => b[0].includes('L') && b[2][0] > 0
+  ? [b, [b[0].replace(/L(?=\d*$)/, 'R'), b[1] && b[1].replace(/L(?=\d*$)/, 'R'), [-b[2][0], b[2][1], b[2][2]]]] : [b]);
+const mirrorParts = (parts) => parts.flatMap((p) => typeof p[0] === 'string' && /L\d*$/.test(p[0])
+  ? [p, p.map((x, i) => i > 2 ? x : i === 0 ? x.replace(/L(?=\d*$)/, 'R') : typeof x === 'string' ? x.replace(/L(?=\d*$)/, 'R')
+    : typeof x[0] === 'string' ? [x[0].replace(/L(?=\d*$)/, 'R'), -x[1], x[2], x[3]] : [-x[0], x[1], x[2]])] : [p]);
+const DEMOS = {
+  biped: {
+    name: 'Demo_KayKit_Figure', bones: KK_BONES,
+    parts: [ // [bone, from, to, thickness, colour, depth]; a point is a bone, [bone, dx, dy, dz] or [x, y, z]
+      ['hips', ['hips', 0, -0.05, 0], 'spine', 0.42, '#4a5d8a', 0.3], ['spine', 'spine', 'chest', 0.46, '#5b70a3', 0.32],
+      ['chest', 'chest', ['chest', 0, 0.26, 0], 0.52, '#5b70a3', 0.34], ['head', ['head', 0, 0.02, 0], ['head', 0, 0.62, 0], 0.62, '#e0b48a', 0.56],
+      ['upperarm.l', 'upperarm.l', 'lowerarm.l', 0.14, '#5b70a3'], ['lowerarm.l', 'lowerarm.l', 'hand.l', 0.12, '#e0b48a'],
+      ['upperarm.r', 'upperarm.r', 'lowerarm.r', 0.14, '#5b70a3'], ['lowerarm.r', 'lowerarm.r', 'hand.r', 0.12, '#e0b48a'],
+      ['hand.r', 'hand.r', ['hand.r', -0.02, -0.02, 0.5], 0.05, '#c8ccd4'],
+      ['upperleg.l', 'upperleg.l', 'lowerleg.l', 0.17, '#3b3f4a'], ['lowerleg.l', 'lowerleg.l', 'foot.l', 0.15, '#3b3f4a'],
+      ['upperleg.r', 'upperleg.r', 'lowerleg.r', 0.17, '#3b3f4a'], ['lowerleg.r', 'lowerleg.r', 'foot.r', 0.15, '#3b3f4a'],
+      ['foot.l', ['foot.l', 0, -0.03, -0.06], ['foot.l', 0, -0.03, 0.18], 0.16, '#6b4a30', 0.08],
+      ['foot.r', ['foot.r', 0, -0.03, -0.06], ['foot.r', 0, -0.03, 0.18], 0.16, '#6b4a30', 0.08],
+    ],
+  },
+  quad: {
+    name: 'Demo_Wolf',
+    bones: fromWorld(mirror([
+      ['Root', null, [0, 0, 0]], ['Hips', 'Root', [0, 0.55, -0.28]], ['Chest', 'Hips', [0, 0.58, 0.28]],
+      ['Neck', 'Chest', [0, 0.66, 0.42]], ['Head', 'Neck', [0, 0.84, 0.52]], ['Jaw', 'Head', [0, 0.8, 0.6]],
+      ['Tail1', 'Hips', [0, 0.62, -0.46]], ['Tail2', 'Tail1', [0, 0.6, -0.7]],
+      ['LegFL1', 'Chest', [0.16, 0.5, 0.3]], ['LegFL2', 'LegFL1', [0.16, 0.3, 0.33]], ['LegFL3', 'LegFL2', [0.16, 0.08, 0.3]],
+      ['LegHL1', 'Hips', [0.16, 0.5, -0.3]], ['LegHL2', 'LegHL1', [0.16, 0.3, -0.36]], ['LegHL3', 'LegHL2', [0.16, 0.08, -0.3]],
+    ])),
+    parts: mirrorParts([
+      ['Hips', ['Hips', 0, 0, -0.12], [0, 0.57, 0], 0.34, '#7a7f88', 0.32], ['Chest', [0, 0.57, 0], ['Chest', 0, 0, 0.12], 0.38, '#7a7f88', 0.36],
+      ['Neck', 'Neck', 'Head', 0.17, '#7a7f88'], ['Head', ['Head', 0, 0, -0.06], ['Head', 0, -0.02, 0.24], 0.22, '#858a93', 0.2],
+      ['Jaw', 'Jaw', ['Jaw', 0, -0.01, 0.16], 0.11, '#d8d3c8', 0.05],
+      ['Tail1', 'Tail1', 'Tail2', 0.09, '#6a6f78'], ['Tail2', 'Tail2', ['Tail2', 0, 0.02, -0.22], 0.08, '#d8d3c8'],
+      ['LegFL1', 'LegFL1', 'LegFL2', 0.1, '#6a6f78'], ['LegFL2', 'LegFL2', 'LegFL3', 0.08, '#6a6f78'], ['LegFL3', 'LegFL3', ['LegFL3', 0, -0.08, 0.05], 0.08, '#3a3d44'],
+      ['LegHL1', 'LegHL1', 'LegHL2', 0.12, '#6a6f78'], ['LegHL2', 'LegHL2', 'LegHL3', 0.08, '#6a6f78'], ['LegHL3', 'LegHL3', ['LegHL3', 0, -0.08, 0.05], 0.08, '#3a3d44'],
+    ]),
+  },
+  bird: {
+    name: 'Demo_Crow',
+    bones: fromWorld(mirror([
+      ['Root', null, [0, 0, 0]], ['Hips', 'Root', [0, 0.2, -0.02]], ['Chest', 'Hips', [0, 0.25, 0.07]],
+      ['Neck', 'Chest', [0, 0.3, 0.11]], ['Head', 'Neck', [0, 0.36, 0.13]], ['Jaw', 'Head', [0, 0.355, 0.19]], ['Tail', 'Hips', [0, 0.22, -0.1]],
+      ['WingL', 'Chest', [0.07, 0.27, 0.06]], ['WingTipL', 'WingL', [0.22, 0.27, 0.03]],
+      ['LegL1', 'Hips', [0.04, 0.17, 0]], ['LegL2', 'LegL1', [0.04, 0.09, 0.01]],
+    ])),
+    parts: mirrorParts([
+      ['Hips', ['Hips', 0, 0, -0.08], [0, 0.23, 0.03], 0.14, '#2b2d36', 0.13], ['Chest', [0, 0.23, 0.03], ['Chest', 0, 0.01, 0.06], 0.15, '#2b2d36', 0.14],
+      ['Neck', 'Neck', 'Head', 0.07, '#2b2d36'], ['Head', ['Head', 0, -0.01, -0.03], ['Head', 0, 0, 0.06], 0.08, '#33353f', 0.08],
+      ['Head', ['Head', 0, 0.01, 0.06], ['Head', 0, 0, 0.12], 0.025, '#d9a43a'], ['Jaw', 'Jaw', ['Jaw', 0, -0.005, 0.05], 0.02, '#c08f2e'],
+      ['Tail', 'Tail', ['Tail', 0, -0.02, -0.12], 0.09, '#23252d', 0.015],
+      ['WingL', 'WingL', 'WingTipL', 0.015, '#23252d', 0.11], ['WingTipL', 'WingTipL', ['WingTipL', 0.12, 0, -0.04], 0.012, '#1d1f26', 0.09],
+      ['LegL1', 'LegL1', 'LegL2', 0.018, '#c08f2e'], ['LegL2', 'LegL2', ['LegL2', 0, -0.09, 0.02], 0.015, '#c08f2e'],
+    ]),
+  },
+};
+// A blocky skinned model: one box per part, rigidly skinned to its bone, coloured by vertex colours.
+function buildDemoRig(d) {
+  const root = new THREE.Group(); root.name = d.name;
+  const by = {}, bones = [];
+  for (const [n, p, t, q] of d.bones) {
+    const b = new THREE.Bone(); b.name = n; b.position.fromArray(t); b.quaternion.fromArray(q).normalize();
+    by[n] = b; bones.push(b); (p ? by[p] : root).add(b);
+  }
+  root.updateMatrixWorld(true);
+  const W = (x) => typeof x === 'string' ? by[x].getWorldPosition(V(0, 0, 0))
+    : typeof x[0] === 'string' ? by[x[0]].getWorldPosition(V(0, 0, 0)).add(V(x[1], x[2], x[3])) : V(...x);
+  const geos = d.parts.map(([bone, a, b, w, color, depth = w]) => {
+    const A = W(a), B = W(b), dir = B.clone().sub(A), len = Math.max(dir.length(), 0.01);
+    const g = new THREE.BoxGeometry(w, len, depth).translate(0, len / 2, 0);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(UP, dir.lengthSq() > 1e-9 ? dir.normalize() : UP)).translate(A.x, A.y, A.z);
+    const n = g.attributes.position.count, c = new THREE.Color(color), bi = bones.indexOf(by[bone]);
+    const col = new Float32Array(n * 3), si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) { col.set([c.r, c.g, c.b], i * 3); si[i * 4] = bi; sw[i * 4] = 1; }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+    return g;
+  });
+  const mesh = new THREE.SkinnedMesh(mergeGeometries(geos), new THREE.MeshStandardMaterial({ name: 'Demo', vertexColors: true, roughness: 0.9 }));
+  mesh.name = 'Body'; root.add(mesh); root.updateMatrixWorld(true);
+  mesh.bind(new THREE.Skeleton(bones));
+  return root;
+}
+function buildDemoProp() {
+  const root = new THREE.Group(); root.name = 'Demo_Lantern';
+  const wood = new THREE.MeshStandardMaterial({ name: 'Wood', color: 0x6b4a30, roughness: 1 });
+  const glow = new THREE.MeshStandardMaterial({ name: 'Glow', color: 0xffc46b, emissive: 0xff9a2e, emissiveIntensity: 1.5 });
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.6, 0.1), wood); post.name = 'Post'; post.position.y = 0.8;
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.45), wood); arm.name = 'Arm'; arm.position.set(0, 1.55, 0.2);
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, 0.18), glow); lamp.name = 'Lamp'; lamp.position.set(0, 1.38, 0.38);
+  root.add(post, arm, lamp);
+  return root;
+}
+async function demoBuffer(kind) {
+  const root = kind === 'prop' ? buildDemoProp() : buildDemoRig(DEMOS[kind]);
+  root.updateMatrixWorld(true);
+  return new GLTFExporter().parseAsync(root, { binary: true, trs: true });
+}
+
+// ---------- rig analysis ----------
+const ROLES = ['root', 'hips', 'spine', 'neck', 'head', 'jaw', 'tail', 'leg', 'arm', 'wing'];
+const CHAINED = new Set(['spine', 'neck', 'tail', 'leg', 'arm', 'wing']);
+const SIDED = new Set(['leg', 'arm', 'wing']);
+const IGNORE_RE = /IK|[Cc]ontrol|[Cc]trl|[Pp]ole|[Tt]arget|slot|_end$|End$|_End$/;
+const ROLE_RE = [
+  ['root', /^(root|armature|rig|skeleton)$/], ['jaw', /jaw|mouth|mandible|beaklow/], ['head', /head|skull/], ['neck', /neck/],
+  ['tail', /tail/], ['wing', /wing/], ['leg', /leg|thigh|shin|calf|knee|foot|feet|toe|ankle|paw|hoof|uplegs?$/],
+  ['arm', /arm|shoulder|clavicle|elbow|wrist|hand|finger|thumb/], ['hips', /hips?$|hips|pelvis/], ['spine', /spine|chest|torso|abdomen|belly|ribs/],
+];
+function autoRole(o) {
+  const name = origName(o);
+  if (IGNORE_RE.test(name)) return 'none';
+  const n = name.toLowerCase().replace(/^mixamorig[:_]?/, '');
+  for (const [role, re] of ROLE_RE) if (re.test(n)) return role;
+  return 'none';
+}
+function nameSide(name) {
+  if (/left|[._-]l$|^l[._-]|L\d*$/i.test(name) && !/right/i.test(name)) return /left|[._-]l$|^l[._-]/i.test(name) || /L\d*$/.test(name) ? 1 : 0;
+  if (/right|[._-]r$|^r[._-]|R\d*$/.test(name) || /right|[._-]r$|^r[._-]/i.test(name)) return -1;
+  return 0;
+}
+const restOf = (o) => state.model.rest.get(o);
+
+// Joints, their roles, limb chains and the body plan. Everything is measured in the model's rest pose, in scene space.
+function analyze(m) {
+  restorePose(m); m.root.updateMatrixWorld(true);
+  const bones = new Set();
+  m.root.traverse((o) => { if (o.isSkinnedMesh) for (const b of o.skeleton.bones) bones.add(b); });
+  const joints = [];
+  m.root.traverse((o) => {
+    if (o === m.root) return;
+    if (bones.size ? (bones.has(o) || o.isBone) : !(o.isMesh || o.isLine || o.isPoints || o.isLight || o.isCamera)) joints.push(o);
+  });
+  const box = new THREE.Box3().setFromObject(m.root), size = box.getSize(V(0, 0, 0)), center = box.getCenter(V(0, 0, 0));
+  const H = Math.max(size.y, 1e-3);
+  const set = new Set(joints), info = new Map();
+  for (const o of joints) {
+    let p = o.parent; while (p && p !== m.root && !set.has(p)) p = p.parent;
+    const wp = o.getWorldPosition(V(0, 0, 0)), wq = o.getWorldQuaternion(new THREE.Quaternion());
+    const role = m.roles.get(o) || autoRole(o);
+    const dx = wp.x - center.x;
+    const side = Math.abs(dx) > H * 0.015 ? Math.sign(dx) : nameSide(origName(o));
+    info.set(o, { o, role, auto: autoRole(o), side, wp, wq, wqInv: wq.clone().invert(), parent: set.has(p) ? p : null, chainIdx: 0, top: o });
+  }
+  // chains: a joint continues its parent's chain when both have the same role and side
+  const chains = new Map(); // top joint -> [joints by depth]
+  for (const o of joints) {
+    const J = info.get(o), P = J.parent && info.get(J.parent);
+    if (!CHAINED.has(J.role)) continue;
+    if (P && P.role === J.role && P.side === J.side) { J.chainIdx = P.chainIdx + 1; J.top = P.top; }
+    if (!chains.has(J.top)) chains.set(J.top, []);
+    const c = chains.get(J.top); if (!c[J.chainIdx]) c[J.chainIdx] = o;
+  }
+  // rest direction of each joint: towards the next joint of its chain, else its first child joint, else from its parent
+  for (const o of joints) {
+    const J = info.get(o), c = chains.get(J.top), next = c && c[J.chainIdx + 1];
+    const child = next || joints.find((k) => info.get(k).parent === o);
+    let d = child ? info.get(child).wp.clone().sub(J.wp) : J.parent ? J.wp.clone().sub(info.get(J.parent).wp) : DOWN.clone();
+    if (d.lengthSq() < 1e-10) d = DOWN.clone();
+    J.dir = d.normalize();
+  }
+  const byRole = (r) => joints.filter((o) => info.get(o).role === r);
+  const limbs = (r) => [...chains].filter(([top]) => info.get(top).role === r).map(([top, c]) => ({ joints: c.filter(Boolean), side: info.get(top).side, wp: info.get(top).wp }));
+  const legs = limbs('leg'), arms = limbs('arm'), wings = limbs('wing');
+  const zMid = legs.length ? legs.reduce((s, L) => s + L.wp.z, 0) / legs.length : center.z;
+  for (const L of legs) { L.front = L.wp.z >= zMid - H * 0.01; L.hang = info.get(L.joints[0]).dir.y < -0.6; }
+  legs.sort((a, b) => b.wp.z - a.wp.z || b.side - a.side);
+  let plan = 'other';
+  const moving = joints.filter((o) => info.get(o).role !== 'none').length;
+  if (!joints.length || !moving) plan = 'static';
+  else if (wings.length && legs.length <= 2 && !arms.length) plan = 'flyer';
+  else if (legs.length >= 6) plan = 'bug';
+  else if (legs.length >= 3) plan = 'quad';
+  else if (legs.length === 2) plan = 'biped';
+  if (legs.length >= 3) legs.forEach((L) => { if (legs.length > 2 && !legs.some((k) => k.front !== L.front)) L.front = true; });
+  // gait phases: walk (ph) and run (lag)
+  const n = legs.length;
+  legs.forEach((L, i) => {
+    if (n === 2) L.ph = L.lag = L.side > 0 ? 0 : 0.5;
+    else if (n === 4) {
+      const k = (L.front ? 0 : 2) + (L.side > 0 ? 0 : 1);
+      L.ph = [0, 0.5, 0.75, 0.25][k]; L.lag = [0, 0.1, 0.5, 0.6][k];
+    } else if (n >= 6) {
+      const row = legs.filter((k) => k.side === L.side).indexOf(L);
+      L.ph = L.lag = ((row + (L.side > 0 ? 0 : 1)) % 2) * 0.5;
+    } else L.ph = L.lag = i / n;
+  });
+  for (const A of arms) { const leg = legs.find((L) => L.side === A.side); A.ph = leg ? leg.ph + 0.5 : A.side > 0 ? 0.5 : 0; A.tpose = Math.abs(info.get(A.joints[0]).dir.y) < 0.5; }
+  const hips = byRole('hips')[0] || null;
+  const mover = hips || byRole('root')[0] || m.root;
+  if (mover === m.root && !info.has(m.root)) {
+    m.root.updateMatrixWorld(true);
+    const wq = m.root.getWorldQuaternion(new THREE.Quaternion());
+    info.set(m.root, { o: m.root, role: 'mover', side: 0, wp: m.root.getWorldPosition(V(0, 0, 0)), wq, wqInv: wq.clone().invert(), dir: DOWN.clone(), chainIdx: 0 });
+  }
+  const parentOf = (o) => o.parent; // scene space: the holder has no transform
+  const moverParentInv = new THREE.Matrix3().setFromMatrix4(parentOf(mover).matrixWorld).invert();
+  const spine = byRole('spine'), neck = byRole('neck'), tail = (chains.get(byRole('tail').find((o) => info.get(o).chainIdx === 0)) || byRole('tail')).filter(Boolean);
+  return { joints, info, chains, legs, arms, wings, spine, neck, head: byRole('head')[0] || null, jaw: byRole('jaw')[0] || null, tail, hips, mover,
+    moverParentInv, autoPlan: plan, H, size, center, box };
+}
+
+// ---------- procedural clips ----------
+// A clip poses the rig for a phase u in [0, 1) (w = 2πu) through a small API. Rotations are about the scene axes
+// (X right, Y up, Z front) at each joint's pivot and apply in the rest pose, so the same clip fits rigs with or without
+// rest rotations: rot(j, rx, ry, rz) for small turns (about X, + tips the front down and swings a hanging limb back),
+// aim(j, dir, a) turns a limb towards a direction by a radians, move(dx, dy, dz) moves the body (in metres).
+const lunge = (u) => Math.sin(PI * Math.min(1, u / 0.7)) ** 2; // out and back in the first 70%, then rest
+const snap = (u) => Math.sin(PI * Math.min(1, u / 0.55));
+const ease = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+function armsDown(P) {
+  if (!P.armsDown) return;
+  for (const A of P.A.arms) if (A.tpose) {
+    const d = P.A.info.get(A.joints[0]).dir;
+    P.aim(A.joints[0], DOWN, Math.acos(Math.max(-1, Math.min(1, d.dot(DOWN)))) - 0.2, true);
+  }
+}
+function swayChains(P, w, amp, lag = 0.7) {
+  P.A.tail.forEach((j, i) => P.rot(j, 0, amp * (1 + 0.25 * i) * Math.sin(w - lag * i)));
+}
+function legCycle(P, w, run) {
+  const k = run ? 1.6 : 1;
+  for (const L of P.A.legs) {
+    const a = w + 2 * PI * (run ? L.lag : L.ph), lift = Math.max(0, Math.cos(a)), [j1, j2, j3] = L.joints;
+    if (L.hang) {
+      P.aim(j1, FWD, 0.42 * k * Math.sin(a));
+      const hind = P.plan !== 'biped' && P.plan !== 'flyer' && !L.front;
+      if (j2) P.aim(j2, hind ? FWD : BACK, (hind ? 0.45 : 0.7) * k * lift);
+      if (j3 && P.plan !== 'biped') P.aim(j3, BACK, (hind ? 0.55 : 0.25) * k * lift);
+    } else { // sprawling legs (bugs, lizards): swing forward and back, lift up
+      P.aim(j1, FWD, 0.35 * k * Math.sin(a)); P.aim(j1, UP, 0.3 * k * lift);
+      if (j2) P.aim(j2, DOWN, 0.15 * k * lift);
+    }
+  }
+}
+function armCycle(P, w, run) {
+  for (const A of P.A.arms) {
+    const a = w + 2 * PI * A.ph, [j1, j2] = A.joints;
+    P.aim(j1, FWD, (run ? 0.6 : 0.35) * Math.sin(a));
+    if (j2) P.aim(j2, FWD, run ? 1.0 : 0.25);
+  }
+}
+const GEN = {
+  Idle: { T: 2.4, loop: true, pose(P, u, w) {
+    armsDown(P);
+    P.A.spine.forEach((j) => P.rot(j, 0.02 * Math.sin(2 * w)));
+    if (P.A.hips && P.plan === 'biped') P.move(0, -P.H * 0.004 * (1 - Math.cos(2 * w)), 0);
+    P.A.neck.forEach((j) => P.rot(j, 0.05 * Math.sin(w)));
+    if (P.A.head) P.rot(P.A.head, 0.04 * Math.sin(w + 1), 0.25 * Math.sin(w));
+    swayChains(P, w, 0.22);
+    for (const W of P.A.wings) P.aim(W.joints[0], UP, 0.05 * Math.sin(2 * w));
+    for (const A of P.A.arms) { P.aim(A.joints[0], FWD, 0.04 * Math.sin(w)); if (A.joints[1]) P.aim(A.joints[1], FWD, 0.15); }
+  } },
+  Walk: { T: 1, loop: true, pose(P, u, w) {
+    armsDown(P); legCycle(P, w, false); armCycle(P, w, false);
+    P.move(0, P.H * 0.012 * Math.cos(2 * w), 0);
+    if (P.A.hips) P.rot(P.A.hips, 0, 0.06 * Math.sin(w), 0.03 * Math.sin(w));
+    P.A.spine.forEach((j) => P.rot(j, 0, -0.05 * Math.sin(w)));
+    P.A.neck.forEach((j) => P.rot(j, 0.05 * Math.sin(2 * w)));
+    if (!P.A.legs.length) P.A.spine.forEach((j, i) => P.rot(j, 0, 0.18 * Math.sin(w - 0.8 * i))); // no legs: slither
+    swayChains(P, w, 0.2);
+  } },
+  Run: { T: 0.6, loop: true, pose(P, u, w) {
+    armsDown(P); legCycle(P, w, true); armCycle(P, w, true);
+    P.move(0, P.H * 0.04 * Math.max(0, Math.sin(2 * w)), 0);
+    P.A.spine.forEach((j) => P.rot(j, P.plan === 'biped' ? 0.08 : 0.08 * Math.sin(w)));
+    P.A.neck.forEach((j) => P.rot(j, -0.08 * Math.sin(w)));
+    P.A.tail.forEach((j, i) => P.rot(j, i ? 0.1 * Math.sin(w - 1) : -0.25 + 0.15 * Math.sin(w)));
+  } },
+  Bite: { T: 0.6, loop: true, pose(P, u) {
+    armsDown(P);
+    const e = lunge(u);
+    P.A.spine.forEach((j) => P.rot(j, 0.06 * e));
+    P.A.neck.forEach((j) => P.rot(j, 0.35 * e / Math.max(1, P.A.neck.length)));
+    if (P.A.head) P.rot(P.A.head, (P.A.neck.length ? -0.2 : 0.3) * e);
+    if (P.A.jaw) P.rot(P.A.jaw, 0.55 * snap(u));
+    for (const W of P.A.wings) P.aim(W.joints[0], UP, 0.4 * e);
+    P.move(0, 0, P.H * 0.08 * e);
+  } },
+  Attack: { T: 0.9, loop: true, pose(P, u) {
+    armsDown(P);
+    const up = u < 0.35 ? ease(u / 0.35) : u < 0.5 ? 1 - 0.75 * ease((u - 0.35) / 0.15) : 0.25 * (1 - ease((u - 0.5) / 0.5));
+    const hit = u < 0.35 ? 0 : u < 0.5 ? ease((u - 0.35) / 0.15) : 1 - ease((u - 0.5) / 0.5);
+    const A = P.A.arms.find((a) => a.side < 0) || P.A.arms[0];
+    if (A) { P.aim(A.joints[0], FWD, 2.6 * up, true); if (A.joints[1]) P.aim(A.joints[1], FWD, 0.5 * up, true); }
+    P.A.spine.forEach((j) => P.rot(j, 0.12 * hit - 0.06 * up, 0.25 * up - 0.2 * hit));
+    if (P.A.jaw) P.rot(P.A.jaw, 0.5 * snap(u));
+    P.move(0, 0, P.H * 0.03 * hit);
+  } },
+  Fly: { T: 0.5, loop: true, pose(P, u, w) {
+    for (const W of P.A.wings) W.joints.forEach((j, i) => P.aim(j, UP, i ? 0.4 * Math.sin(w - 0.7 * i) : 0.35 + 1.0 * Math.sin(w)));
+    for (const L of P.A.legs) { P.aim(L.joints[0], BACK, 1.0, true); if (L.joints[1]) P.aim(L.joints[1], BACK, 0.6, true); }
+    P.A.tail.forEach((j) => P.rot(j, -0.12));
+    P.A.neck.forEach((j) => P.rot(j, 0.1));
+    P.move(0, P.H * 0.5 + P.H * 0.08 * Math.sin(w + PI), 0, true);
+  } },
+  Hit: { T: 0.45, loop: false, pose(P, u) {
+    armsDown(P);
+    const e = Math.sin(PI * Math.min(1, u / 0.8));
+    P.A.spine.forEach((j) => P.rot(j, -0.18 * e));
+    if (P.A.head) P.rot(P.A.head, -0.2 * e);
+    P.A.neck.forEach((j) => P.rot(j, -0.12 * e));
+    for (const A of P.A.arms) P.aim(A.joints[0], BACK, 0.25 * e);
+    P.move(0, 0, -P.H * 0.04 * e);
+  } },
+  Death: { T: 1.2, loop: false, pose(P, u) {
+    armsDown(P);
+    const f = Math.min(1, u / 0.6) ** 2; // falls faster and faster, then lies still
+    const J = P.A.info.get(P.A.mover), half = Math.max(P.A.size.x * 0.4, P.H * 0.05);
+    // tip over onto the right side about the ground edge under the body
+    const th = 1.45 * f, h = J.wp.y - P.A.box.min.y;
+    P.rot(P.A.mover, 0, 0, th, true);
+    P.move(half * Math.cos(th) - h * Math.sin(th) - half, half * Math.sin(th) + h * Math.cos(th) - h, 0, true);
+    for (const L of P.A.legs) { P.aim(L.joints[0], FWD, 0.25 * f, true); if (L.joints[1]) P.aim(L.joints[1], BACK, 0.3 * f, true); }
+    for (const A of P.A.arms) P.aim(A.joints[0], UP, 0.5 * f, true);
+    if (P.A.head) P.rot(P.A.head, 0.25 * f, 0, 0, true);
+    if (P.A.jaw) P.rot(P.A.jaw, 0.35 * f, 0, 0, true);
+    for (const W of P.A.wings) P.aim(W.joints[0], DOWN, 0.4 * f, true);
+    P.A.tail.forEach((j) => P.rot(j, 0.15 * f, 0, 0, true));
+  } },
+  Bob: { T: 2, loop: true, pose(P, u, w) { P.move(0, P.H * 0.05 * (1 - Math.cos(w)), 0); P.rot(P.A.mover, 0, 0.12 * Math.sin(w)); } },
+  Spin: { T: 4, loop: true, pose(P, u) { P.rot(P.A.mover, 0, 2 * PI * u, 0, true); } },
+  Sway: { T: 3, loop: true, pose(P, u, w) {
+    P.rot(P.A.mover, 0.03 * Math.sin(w), 0, 0.045 * Math.sin(w + 1.3));
+    P.A.spine.forEach((j, i) => P.rot(j, 0.02 * Math.sin(w - 0.6 * (i + 1)), 0, 0.03 * Math.sin(w + 1.3 - 0.6 * (i + 1))));
+  } },
+};
+// Clips per body plan, and the recommended set (ticked by default when the file has no clips of its own).
+// Quadruped clips are the game's QUADRUPED_CLIPS (Idle, Walk, Run, Bite).
+const PLAN_CLIPS = {
+  biped: { all: ['Idle', 'Walk', 'Run', 'Attack', 'Hit', 'Death'], rec: ['Idle', 'Walk', 'Run', 'Attack'] },
+  quad: { all: ['Idle', 'Walk', 'Run', 'Bite', 'Hit', 'Death'], rec: ['Idle', 'Walk', 'Run', 'Bite'] },
+  bug: { all: ['Idle', 'Walk', 'Run', 'Bite', 'Hit', 'Death'], rec: ['Idle', 'Walk', 'Bite'] },
+  flyer: { all: ['Idle', 'Fly', 'Walk', 'Bite', 'Hit', 'Death'], rec: ['Idle', 'Fly', 'Bite'] },
+  other: { all: ['Idle', 'Walk', 'Bite', 'Hit', 'Death', 'Bob', 'Sway'], rec: ['Idle', 'Bite'] },
+  static: { all: ['Bob', 'Spin', 'Sway'], rec: ['Bob'] },
+};
+const _e = new THREE.Euler(), _q = new THREE.Quaternion(), _ax = V(0, 0, 0), _dv = V(0, 0, 0);
+function makePoser(A, plan, k, down) {
+  const D = new Map(), mv = V(0, 0, 0);
+  const pre = (j, q) => { const cur = D.get(j); D.set(j, cur ? q.clone().multiply(cur) : q.clone()); };
+  const P = {
+    A, plan, H: A.H, armsDown: down, D, mv,
+    rot(j, rx = 0, ry = 0, rz = 0, raw = false) {
+      if (!j || !A.info.has(j)) return; const s = raw ? 1 : k;
+      pre(j, _q.setFromEuler(_e.set(rx * s, ry * s, rz * s)));
+    },
+    aim(j, target, a, raw = false) {
+      if (!j || !a || !A.info.has(j)) return;
+      _dv.copy(A.info.get(j).dir); const cur = D.get(j); if (cur) _dv.applyQuaternion(cur);
+      _ax.crossVectors(_dv, target); if (_ax.lengthSq() < 1e-8) return;
+      pre(j, _q.setFromAxisAngle(_ax.normalize(), a * (raw ? 1 : k)));
+    },
+    move(dx, dy, dz, raw = false) { const s = raw ? 1 : k; mv.x += dx * s; mv.y += dy * s; mv.z += dz * s; },
+    reset() { D.clear(); mv.set(0, 0, 0); },
+  };
+  return P;
+}
+// Samples a procedural clip into quaternion tracks (joints that move) and a position track on the mover.
+function sampleGen(m, name, { plan, k, down }) {
+  const A = m.A, G = GEN[name], n = Math.max(8, Math.round(G.T * FPS)), times = [];
+  const P = makePoser(A, plan, k, down), q = new Map(), pos = [];
+  const lq = new THREE.Quaternion(), lp = V(0, 0, 0);
+  const frames = [];
+  for (let i = 0; i <= n; i++) {
+    times.push((G.T * i) / n); P.reset();
+    G.pose(P, G.loop ? (i / n) % 1 : i / n, 2 * PI * (G.loop ? (i / n) % 1 : i / n));
+    frames.push({ D: new Map([...P.D].map(([j, d]) => [j, d.clone()])), mv: P.mv.clone() });
+  }
+  const touched = new Set(frames.flatMap((f) => [...f.D.keys()]));
+  const tracks = [];
+  for (const j of touched) {
+    const J = A.info.get(j), r = restOf(j), vals = [];
+    for (const f of frames) {
+      const d = f.D.get(j);
+      if (d) lq.copy(J.wqInv).multiply(d).multiply(J.wq).premultiply(r.q); else lq.copy(r.q);
+      vals.push(lq.x, lq.y, lq.z, lq.w);
+    }
+    tracks.push(new THREE.QuaternionKeyframeTrack(j.name + '.quaternion', times, vals));
+  }
+  if (frames.some((f) => f.mv.lengthSq() > 1e-12)) {
+    const r = restOf(A.mover);
+    for (const f of frames) { lp.copy(f.mv).applyMatrix3(A.moverParentInv).add(r.p); pos.push(lp.x, lp.y, lp.z); }
+    tracks.push(new THREE.VectorKeyframeTrack(A.mover.name + '.position', times, pos));
+  }
+  return new THREE.AnimationClip(name, G.T, tracks);
+}
+
+// ---------- clip library (KayKit) ----------
+const normName = (s) => s.toLowerCase().replace(/^mixamorig/, '').replace(/[^a-z0-9]/g, '');
+function nodeFinder(root) {
+  const exact = new Map(), lower = new Map(), norm = new Map();
+  root.traverse((o) => {
+    if (!o.name) return;
+    exact.set(o.name, o);
+    if (!lower.has(o.name.toLowerCase())) lower.set(o.name.toLowerCase(), o);
+    if (!norm.has(normName(o.name))) norm.set(normName(o.name), o);
+  });
+  return (name) => exact.get(name) || lower.get(name.toLowerCase()) || norm.get(normName(name)) || null;
+}
+// Fits a library clip onto the model by node name. Returns the new clip and which nodes it found.
+function retarget(clip, lib, m, opts) {
+  const find = m.find, tracks = [], hit = new Set(), miss = new Set();
+  const hipsRe = /hips|pelvis/i;
+  for (const t of clip.tracks) {
+    const pb = THREE.PropertyBinding.parseTrackName(t.name), src = lib.find(pb.nodeName), dst = find(pb.nodeName);
+    if (!dst) { miss.add(pb.nodeName); continue; }
+    hit.add(dst);
+    const prop = pb.propertyName, rD = restOf(dst), rS = src && lib.rest.get(src);
+    if (prop === 'quaternion') {
+      if (opts.rot === 'relative' && rS) {
+        const v = t.values.slice(), q = new THREE.Quaternion(), k = rD.q.clone().multiply(rS.q.clone().invert());
+        for (let i = 0; i < v.length; i += 4) { q.fromArray(v, i).premultiply(k); q.toArray(v, i); }
+        tracks.push(new THREE.QuaternionKeyframeTrack(dst.name + '.quaternion', t.times.slice(), v));
+      } else tracks.push(new THREE.QuaternionKeyframeTrack(dst.name + '.quaternion', t.times.slice(), t.values.slice()));
+    } else if (prop === 'position') {
+      const isHips = dst === m.A.hips || hipsRe.test(origName(dst));
+      if (opts.tr === 'none' || (opts.tr === 'hips' && !isHips)) continue;
+      const v = t.values.slice();
+      if (opts.tr === 'hips' && rS) {
+        const ls = rS.p.length(), ratio = ls > 1e-4 ? rD.p.length() / ls : m.A.H / lib.H;
+        for (let i = 0; i < v.length; i += 3) {
+          v[i] = rD.p.x + (v[i] - rS.p.x) * ratio; v[i + 1] = rD.p.y + (v[i + 1] - rS.p.y) * ratio; v[i + 2] = rD.p.z + (v[i + 2] - rS.p.z) * ratio;
+        }
+      }
+      if (opts.inPlace && isHips) for (let i = 0; i < v.length; i += 3) { v[i] = rD.p.x; v[i + 2] = rD.p.z; }
+      tracks.push(new THREE.VectorKeyframeTrack(dst.name + '.position', t.times.slice(), v));
+    } // scale and morph tracks are dropped
+  }
+  return { clip: new THREE.AnimationClip(clip.name, clip.duration, tracks), hit, miss };
+}
+// Do the library's rest rotations match the model's, bone for bone? (Then clips can be used as they are.)
+function restMatch(lib, m) {
+  let same = 0, diff = 0;
+  for (const [o, r] of lib.rest) {
+    if (!o.isBone && !lib.animated.has(o.name)) continue;
+    const d = m.find(o.name); if (!d || !lib.animated.has(o.name)) continue;
+    if (restOf(d).q.angleTo(r.q) < 0.09) same++; else diff++;
+  }
+  return { same, diff };
+}
+
+// ---------- viewer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+$('viewport').appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14171f);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 500);
+camera.position.set(3, 3, 4.5);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.autoRotateSpeed = 1.2;
+const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(3, 6, 4);
+scene.add(sun, sun.target, new THREE.HemisphereLight(0xc8d4ff, 0x302820, 1.1));
+const ground = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshStandardMaterial({ color: 0x3d4a32, roughness: 1 }));
+ground.rotation.x = -PI / 2; scene.add(ground);
+const grid = new THREE.GridHelper(2, 2, 0x56607a, 0x343a48); grid.position.y = 0.001; scene.add(grid);
+const figure = new THREE.Group(); figure.visible = false; scene.add(figure);
+{
+  const m = new THREE.MeshStandardMaterial({ color: 0x5a6070, roughness: 0.9 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.95, 4, 12), m); body.position.y = 0.725; body.scale.z = 0.7;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), m); head.position.y = 1.63;
+  figure.add(body, head);
+}
+const holder = new THREE.Group(); scene.add(holder);
+let skelHelper = null;
+
+function resize() {
+  const el = $('viewport'), w = el.clientWidth, h = Math.max(1, el.clientHeight);
+  renderer.setSize(w, h, false);
+  renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%';
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe($('viewport'));
+resize();
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.1);
+  if (state.mixer && state.action) {
+    if (state.playing) state.mixer.update(dt * Number($('speed').value));
+    const d = state.action.getClip().duration;
+    if (!state.scrubbing) $('scrub').value = d ? String(state.action.time / d) : '0';
+    $('timeVal').textContent = `${state.action.time.toFixed(2)} / ${d.toFixed(2)} s`;
+  }
+  controls.autoRotate = $('rotate').checked;
+  controls.update(dt);
+  renderer.render(scene, camera);
+});
+function fitView() {
+  if (!state.model) return;
+  const box = state.model.A.box.clone();
+  if (figure.visible) box.union(new THREE.Box3().setFromObject(figure));
+  const size = box.getSize(V(0, 0, 0)), center = box.getCenter(V(0, 0, 0));
+  const radius = Math.max(size.y, Math.hypot(size.x, size.z) * 0.8, 0.2) / 2;
+  const dist = radius / Math.tan((camera.fov * PI) / 360) * 1.8;
+  const dir = V(0.7, 0.45, 1).normalize();
+  controls.target.copy(center); camera.position.copy(center).addScaledVector(dir, dist);
+  camera.near = dist / 100; camera.far = dist * 50; camera.updateProjectionMatrix();
+  const g = Math.max(size.x, size.z, 1) * 2;
+  ground.scale.setScalar(g); grid.scale.setScalar(Math.ceil(g)); ground.position.y = box.min.y < 0 ? box.min.y : 0;
+  sun.position.copy(center).add(V(0.5, 1, 0.6).multiplyScalar(dist)); sun.target.position.copy(center);
+}
+
+// ---------- state / UI ----------
+const state = { model: null, lib: null, entries: [], sel: null, mixer: null, action: null, playing: true, scrubbing: false, busy: false };
+const fmtBytes = (b) => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
+function log(msg, cls = '') {
+  const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = msg;
+  $('log').appendChild(d); $('log').scrollTop = 1e9;
+}
+async function busy(text, fn) {
+  if (state.busy) return;
+  state.busy = true; $('busy').classList.add('show'); $('busyText').textContent = text;
+  await new Promise((r) => setTimeout(r, 0));
+  try { await fn(); } catch (e) { console.error(e); log('Failed: ' + (e.message || e), 'err'); }
+  finally { $('busy').classList.remove('show'); state.busy = false; }
+}
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+const restorePose = (m) => { for (const [o, r] of m.rest) { o.position.copy(r.p); o.quaternion.copy(r.q); o.scale.copy(r.s); } };
+const procOpts = () => ({ plan: currentPlan(), k: Number($('strength').value), down: $('armsDown').checked });
+const libOpts = () => ({ tr: $('trMode').value, rot: state.lib ? state.lib.rotUsed : 'asis', inPlace: $('inPlace').checked });
+const currentPlan = () => $('plan').value === 'auto' ? state.model.A.autoPlan : $('plan').value;
+
+function disposeModel() {
+  stopPlayback();
+  if (skelHelper) { scene.remove(skelHelper); skelHelper.dispose(); skelHelper = null; }
+  if (!state.model) return;
+  holder.remove(state.model.root);
+  state.model.root.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    for (const mat of o.material ? [].concat(o.material) : []) { for (const v of Object.values(mat)) if (v?.isTexture) v.dispose(); mat.dispose(); }
+  });
+  state.model = null;
+}
+async function openModel(buf, name) {
+  const gltf = await parseGLB(buf);
+  const top = gltf.scene.children.slice();
+  if (!top.length) throw new Error('the file has no nodes');
+  disposeModel();
+  let root;
+  if (top.length === 1) root = top[0];
+  else { root = new THREE.Group(); root.add(...top); }
+  // every node a joint could be needs a unique, non-empty name for the animation tracks
+  const names = new Set(); let k = 0;
+  root.traverse((o) => { if (o.name) names.add(o.name); });
+  const uniq = (base) => { let n = base, i = 1; while (names.has(n)) n = base + '_' + i++; names.add(n); return n; };
+  if (!root.name) root.name = uniq(THREE.PropertyBinding.sanitizeNodeName(name.replace(/\.glb$/i, '')) || 'Root');
+  root.traverse((o) => { if (!o.name && !o.isMesh) o.name = uniq('Node' + k++); });
+  holder.add(root);
+  const m = { root, name: name.replace(/\.glb$/i, ''), fileClips: gltf.animations || [], rest: new Map(), roles: new Map() };
+  root.traverse((o) => m.rest.set(o, { p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone() }));
+  m.find = nodeFinder(root);
+  state.model = m;
+  m.A = analyze(m);
+  state.mixer = new THREE.AnimationMixer(root);
+  let tris = 0; root.traverse((o) => { if (o.isMesh) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
+  $('sM').textContent = m.name; $('sT').textContent = tris.toLocaleString('en-US');
+  $('sF').textContent = m.fileClips.length ? m.fileClips.length + ': ' + m.fileClips.map((c) => c.name).slice(0, 6).join(', ') + (m.fileClips.length > 6 ? '…' : '') : 'none';
+  $('fileName').value = m.name + (/-anim$/.test(m.name) ? '' : '-anim');
+  $('plan').value = 'auto';
+  $('empty').style.display = 'none';
+  skelHelper = new THREE.SkeletonHelper(root); skelHelper.visible = $('skel').checked; scene.add(skelHelper);
+  renderJoints(); updateRigSummary();
+  if (state.lib) prepareLib();
+  buildEntries({ fresh: true });
+  fitView();
+  $('bakeBtn').disabled = false;
+  const fileNote = m.fileClips.length ? `, ${m.fileClips.length} clips in the file` : '';
+  log(`Opened ${name}: ${m.A.joints.length} joints, body plan ${PLAN_LABEL[m.A.autoPlan]}${fileNote}`, 'ok');
+}
+const PLAN_LABEL = { biped: 'biped', quad: 'quadruped', bug: 'many legs', flyer: 'winged flyer', other: 'other (no legs)', static: 'static' };
+function updateRigSummary() {
+  const A = state.model.A, plan = currentPlan(), parts = [];
+  const nBones = A.joints.filter((o) => o.isBone).length;
+  $('sR').textContent = A.joints.length ? `${nBones ? nBones + ' bones' : A.joints.length + ' joint nodes'}` : 'none (static)';
+  if (A.legs.length) parts.push(`${A.legs.length} legs × ${Math.max(...A.legs.map((L) => L.joints.length))}`);
+  if (A.arms.length) parts.push(`${A.arms.length} arms${A.arms.some((a) => a.tpose) ? ' (T-pose)' : ''}`);
+  if (A.wings.length) parts.push(`${A.wings.length} wings`);
+  if (A.spine.length) parts.push(`spine ${A.spine.length}`);
+  for (const r of ['neck', 'head', 'jaw']) if (A[r] && (!Array.isArray(A[r]) || A[r].length)) parts.push(r);
+  if (A.tail.length) parts.push(`tail × ${A.tail.length}`);
+  $('rigSummary').textContent = `${PLAN_LABEL[plan]}${$('plan').value === 'auto' ? ' (auto)' : ''}: ${parts.join(', ') || 'no moving joints'}. Moves ${A.mover === state.model.root ? 'the whole model' : origName(A.mover)} for bob, spin, lunge and fall.`;
+  $('procInfo').textContent = `For ${PLAN_LABEL[plan]}: ${PLAN_CLIPS[plan].all.join(', ')}. ` + (plan === 'quad' ? 'Names follow the game\'s quadruped clips (Idle, Walk, Run, Bite).' : 'Made from the rig\'s joints for anything without clips.');
+}
+function renderJoints() {
+  const tb = $('joints').tBodies[0]; tb.textContent = '';
+  const A = state.model.A;
+  for (const o of A.joints) {
+    const J = A.info.get(o), tr = tb.insertRow();
+    tr.insertCell().textContent = origName(o);
+    const sel = document.createElement('select');
+    sel.add(new Option(`auto: ${J.auto}`, ''));
+    for (const r of ['none', ...ROLES]) sel.add(new Option(r, r));
+    sel.value = state.model.roles.get(o) || '';
+    sel.addEventListener('change', () => {
+      if (sel.value) state.model.roles.set(o, sel.value); else state.model.roles.delete(o);
+      reanalyze();
+    });
+    tr.insertCell().appendChild(sel);
+    const sc = tr.insertCell(); sc.className = 'side'; sc.textContent = J.side > 0 ? 'L' : J.side < 0 ? 'R' : '';
+  }
+  $('jointBox').querySelector('summary').textContent = `Joints and roles (${A.joints.length})`;
+}
+function reanalyze() {
+  stopPlayback();
+  state.model.A = analyze(state.model);
+  renderJoints(); updateRigSummary(); buildEntries();
+}
+
+// ---------- clip entries ----------
+// One entry per clip the page can bake: from the file, procedural, or from the library. Ticks, names and trims stick
+// while the rig or options change.
+function buildEntries({ fresh = false } = {}) {
+  const m = state.model, old = new Map(fresh ? [] : state.entries.map((e) => [e.key, e]));
+  const plan = currentPlan(), list = [];
+  const keep = (e, include) => {
+    const o = old.get(e.key);
+    if (o) Object.assign(e, { include: o.include, name: o.name, start: o.start, end: o.end });
+    else Object.assign(e, { include, name: e.srcName, start: 0, end: e.base.duration });
+    e.end = Math.min(e.end, e.base.duration); e.start = Math.min(e.start, e.end);
+    list.push(e);
+  };
+  m.fileClips.forEach((c, i) => keep({ key: 'f:' + i, group: 'file', srcName: c.name, base: c }, true));
+  const opts = procOpts(), rec = new Set(PLAN_CLIPS[plan].rec);
+  for (const n of PLAN_CLIPS[plan].all) keep({ key: 'p:' + n, group: 'proc', srcName: n, base: sampleGen(m, n, opts) }, !m.fileClips.length && rec.has(n));
+  if (state.lib) for (const [i, c] of state.lib.clips.entries()) {
+    const r = retarget(c, state.lib, m, libOpts());
+    keep({ key: 'l:' + i, group: 'lib', srcName: c.name, base: r.clip, hit: r.hit.size, miss: r.miss.size }, false);
+  }
+  for (const e of list) e.clip = null;
+  state.entries = list;
+  const sel = state.sel && list.find((e) => e.key === state.sel.key);
+  renderClips();
+  select(sel || list.find((e) => e.include) || list[0] || null);
+}
+const GROUP_LABEL = { file: 'In the file', proc: 'Procedural', lib: 'Library' };
+function renderClips() {
+  const box = $('clips'), f = $('filter').value.trim().toLowerCase(); box.textContent = '';
+  for (const g of ['file', 'proc', 'lib']) {
+    const es = state.entries.filter((e) => e.group === g && (!f || e.srcName.toLowerCase().includes(f) || e.name.toLowerCase().includes(f)));
+    if (!es.length) continue;
+    const h = document.createElement('div'); h.className = 'grp';
+    h.textContent = g === 'lib' ? `${GROUP_LABEL[g]}: ${state.lib.name}` : GROUP_LABEL[g];
+    box.appendChild(h);
+    for (const e of es) {
+      const d = document.createElement('div'); d.className = 'clip' + (state.sel === e ? ' sel' : ''); d.dataset.key = e.key;
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = e.include; cb.title = 'Bake this clip';
+      cb.addEventListener('click', (ev) => ev.stopPropagation());
+      cb.addEventListener('change', () => { e.include = cb.checked; });
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.srcName;
+      d.append(cb, nm);
+      if (e.name !== e.srcName) { const r = document.createElement('span'); r.className = 'ren'; r.textContent = '→ ' + e.name; d.appendChild(r); }
+      const du = document.createElement('span'); du.className = 'dur';
+      const trimmed = e.start > 0 || e.end < e.base.duration - 1e-6;
+      du.textContent = (trimmed ? '✂ ' : '') + (e.end - e.start).toFixed(2) + ' s';
+      d.appendChild(du);
+      d.addEventListener('click', () => select(e));
+      box.appendChild(d);
+    }
+  }
+  if (!box.children.length) box.innerHTML = '<div class="hint" style="padding:6px 8px">No clips match.</div>';
+}
+// The clip as it will be baked: trimmed to start..end, renamed.
+function clipOf(e) {
+  if (e.clip && e.clip.name === e.name && e.clip.userData.s === e.start && e.clip.userData.e === e.end) return e.clip;
+  const c = trimClip(e.base, e.start, e.end, e.name); c.userData = { s: e.start, e: e.end };
+  return (e.clip = c);
+}
+function trimClip(clip, s, e, name) {
+  const full = s <= 1e-6 && e >= clip.duration - 1e-6;
+  const tracks = clip.tracks.map((t) => {
+    if (full) return t.clone();
+    const it = t.createInterpolant(), size = t.getValueSize(), times = [], vals = [];
+    const at = (time) => { times.push(time - s); vals.push(...it.evaluate(time)); };
+    at(s);
+    for (let i = 0; i < t.times.length; i++) if (t.times[i] > s + 1e-5 && t.times[i] < e - 1e-5) { times.push(t.times[i] - s); vals.push(...t.values.slice(i * size, (i + 1) * size)); }
+    at(e);
+    return new t.constructor(t.name, times, vals);
+  });
+  return new THREE.AnimationClip(name, full ? clip.duration : e - s, tracks);
+}
+function select(e) {
+  state.sel = e;
+  for (const d of $('clips').querySelectorAll('.clip')) d.classList.toggle('sel', !!e && d.dataset.key === e.key);
+  $('selBox').hidden = !e;
+  if (!e) { stopPlayback(); return; }
+  $('clipName').value = e.name; $('trimS').value = e.start.toFixed(2); $('trimE').value = e.end.toFixed(2);
+  $('trimS').max = $('trimE').max = e.base.duration.toFixed(3);
+  const src = e.group === 'lib' ? `${state.lib.name}, ${e.hit} nodes found${e.miss ? `, ${e.miss} not in this model` : ''}`
+    : e.group === 'proc' ? 'procedural, ' + (GEN[e.srcName].loop ? 'loops' : 'plays once') : 'from the file';
+  $('selInfo').textContent = `${e.srcName}: ${e.base.duration.toFixed(2)} s, ${e.base.tracks.length} tracks (${src}).`;
+  play(e);
+}
+function stopPlayback() {
+  if (state.mixer) { state.mixer.stopAllAction(); if (state.action) state.mixer.uncacheClip(state.action.getClip()); }
+  state.action = null;
+  if (state.model) restorePose(state.model);
+  $('playBtn').disabled = $('scrub').disabled = true; $('clipLabel').textContent = '–'; $('timeVal').textContent = '0.00 / 0.00 s';
+}
+function play(e) {
+  stopPlayback();
+  const clip = clipOf(e);
+  state.action = state.mixer.clipAction(clip);
+  const loop = $('loop').checked && (e.group !== 'proc' || GEN[e.srcName].loop);
+  state.action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+  state.action.clampWhenFinished = true;
+  state.action.play();
+  state.playing = true; $('playBtn').textContent = 'Pause';
+  $('playBtn').disabled = $('scrub').disabled = false; $('clipLabel').textContent = e.name;
+}
+function editSel(fn) {
+  const e = state.sel; if (!e) return;
+  fn(e);
+  e.start = Math.max(0, Math.min(e.start, e.base.duration)); e.end = Math.max(e.start + 1 / FPS, Math.min(e.end, e.base.duration));
+  if (e.end > e.base.duration) { e.end = e.base.duration; e.start = Math.max(0, e.end - 1 / FPS); }
+  renderClips(); select(e);
+}
+function setTicks(fn) { for (const e of state.entries) e.include = fn(e); renderClips(); }
+
+// ---------- library ----------
+async function openLibrary(buf, name) {
+  const gltf = await parseGLB(buf);
+  if (!gltf.animations.length) throw new Error(name + ' has no animation clips');
+  const root = gltf.scene, rest = new Map();
+  root.updateMatrixWorld(true);
+  root.traverse((o) => {
+    rest.set(o, { p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone() });
+    if (o.geometry) o.geometry.dispose();
+    for (const mat of o.material ? [].concat(o.material) : []) { for (const v of Object.values(mat)) if (v?.isTexture) v.dispose(); mat.dispose(); }
+  });
+  const box = new THREE.Box3().setFromObject(root);
+  const animated = new Set(gltf.animations.flatMap((c) => c.tracks.map((t) => THREE.PropertyBinding.parseTrackName(t.name).nodeName)));
+  state.lib = { name: name.replace(/\.glb$/i, ''), root, rest, clips: gltf.animations, find: nodeFinder(root), animated, H: Math.max(box.max.y - box.min.y, 1e-3) };
+  log(`Clip library ${name}: ${gltf.animations.length} clips over ${animated.size} nodes`, 'ok');
+  if (state.model) { prepareLib(); buildEntries(); }
+}
+// Picks the rotation mode for the current model and reports how many library nodes it has.
+function prepareLib() {
+  const lib = state.lib, m = state.model;
+  const found = [...lib.animated].filter((n) => m.find(n)).length;
+  const { same, diff } = restMatch(lib, m);
+  const mode = $('rotMode').value;
+  lib.rotUsed = mode !== 'auto' ? mode : diff > Math.max(2, (same + diff) * 0.1) ? 'relative' : 'asis';
+  const msg = `${lib.name}: ${found} of ${lib.animated.size} animated nodes found in this model. Rest rotations: ${same} match, ${diff} differ, so rotations are used ${lib.rotUsed === 'asis' ? 'as they are' : 'relative to the rest pose'}.`;
+  $('libInfo').textContent = msg;
+  if (!found) log(`${lib.name}: none of its bone names are in this model, so its clips do nothing here`, 'warn');
+}
+
+// ---------- bake ----------
+async function bake() {
+  const m = state.model, picked = state.entries.filter((e) => e.include);
+  const names = picked.map((e) => e.name.trim());
+  const dup = names.find((n, i) => names.indexOf(n) !== i);
+  if (dup) throw new Error(`two ticked clips are both named "${dup}"; rename one (select it and change "Name in the file")`);
+  if (names.some((n) => !n)) throw new Error('a ticked clip has no name');
+  const clips = picked.map((e) => { const c = clipOf(e).clone(); c.name = e.name.trim(); if ($('optimize').checked) c.optimize(); return c; });
+  const sel = state.sel;
+  stopPlayback();
+  m.root.updateMatrixWorld(true);
+  const saved = m.root.userData;
+  m.root.userData = { ...saved, animation: { tool: 'animation-preview', clips: picked.map((e) => ({
+    name: e.name.trim(), from: e.group === 'lib' ? `${state.lib.name}:${e.srcName}` : e.group === 'proc' ? `procedural:${e.srcName}` : `file:${e.srcName}`,
+    ...(e.start > 0 || e.end < e.base.duration - 1e-6 ? { trim: [+e.start.toFixed(3), +e.end.toFixed(3)] } : {}) })) } };
+  let buf;
+  try { buf = await new GLTFExporter().parseAsync(m.root, { binary: true, trs: true, animations: clips }); }
+  finally { m.root.userData = saved; if (sel) select(sel); }
+  buf = editGlbJson(buf, restoreNames);
+  const name = (($('fileName').value.trim().replace(/\.glb$/i, '').replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-|-$/g, '')) || 'model') + '.glb';
+  saveBlob(new Blob([buf], { type: 'model/gltf-binary' }), name);
+  $('sZ').textContent = `${name}, ${fmtBytes(buf.byteLength)}`;
+  log(`Saved ${name} (${fmtBytes(buf.byteLength)}, ${clips.length ? 'clips ' + clips.map((c) => c.name).join(', ') : 'no clips'})`, 'ok');
+  return { buf, name };
+}
+
+// ---------- events ----------
+$('openBtn').addEventListener('click', () => $('openFile').click());
+$('openFile').addEventListener('change', async () => {
+  const f = $('openFile').files[0]; $('openFile').value = '';
+  if (f) await busy('Loading model…', async () => openModel(await f.arrayBuffer(), f.name));
+});
+$('demo').addEventListener('change', async () => {
+  const k = $('demo').value; $('demo').value = '';
+  if (k) await busy('Building demo…', async () => openModel(await demoBuffer(k), (k === 'prop' ? 'Demo_Lantern' : DEMOS[k].name) + '.glb'));
+});
+$('libBtn').addEventListener('click', () => $('libFile').click());
+$('libFile').addEventListener('change', async () => {
+  const f = $('libFile').files[0]; $('libFile').value = '';
+  if (f) await busy('Loading clip library…', async () => openLibrary(await f.arrayBuffer(), f.name));
+});
+$('kaykitBtn').addEventListener('click', () => busy('Downloading Knight.glb…', async () => {
+  let res;
+  try { res = await fetch(KAYKIT_URL); } catch { throw new Error('could not reach GitHub (offline?). Pick a local Knight.glb with "Clip library GLB…" instead'); }
+  if (!res.ok) throw new Error(`GitHub answered ${res.status} for Knight.glb`);
+  await openLibrary(await res.arrayBuffer(), 'Knight.glb');
+}));
+for (const id of ['trMode', 'rotMode', 'inPlace']) $(id).addEventListener('change', () => { if (state.lib && state.model) { prepareLib(); buildEntries(); } });
+$('plan').addEventListener('change', () => { if (state.model) { updateRigSummary(); buildEntries(); } });
+let strengthTimer = 0;
+$('strength').addEventListener('input', () => {
+  $('strengthVal').textContent = Number($('strength').value).toFixed(2);
+  clearTimeout(strengthTimer); strengthTimer = setTimeout(() => state.model && buildEntries(), 120);
+});
+$('armsDown').addEventListener('change', () => state.model && buildEntries());
+$('filter').addEventListener('input', renderClips);
+$('tickRec').addEventListener('click', () => { if (!state.model) return; const rec = new Set(PLAN_CLIPS[currentPlan()].rec); setTicks((e) => e.group === 'file' || (e.group === 'proc' && rec.has(e.srcName))); });
+$('tickNone').addEventListener('click', () => setTicks(() => false));
+$('clipName').addEventListener('change', () => editSel((e) => { e.name = $('clipName').value.trim() || e.srcName; }));
+$('trimS').addEventListener('change', () => editSel((e) => { e.start = Number($('trimS').value) || 0; }));
+$('trimE').addEventListener('change', () => editSel((e) => { e.end = Number($('trimE').value) || e.base.duration; }));
+$('markS').addEventListener('click', () => editSel((e) => { if (state.action) e.start = e.start + state.action.time; }));
+$('markE').addEventListener('click', () => editSel((e) => { if (state.action) e.end = e.start + state.action.time; }));
+$('resetTrim').addEventListener('click', () => editSel((e) => { e.start = 0; e.end = e.base.duration; }));
+$('bakeBtn').addEventListener('click', () => busy('Baking GLB…', bake));
+$('playBtn').addEventListener('click', () => { state.playing = !state.playing; $('playBtn').textContent = state.playing ? 'Pause' : 'Play'; });
+$('scrub').addEventListener('pointerdown', () => { state.scrubbing = true; });
+$('scrub').addEventListener('pointerup', () => { state.scrubbing = false; });
+$('scrub').addEventListener('input', () => {
+  if (!state.action) return;
+  state.playing = false; $('playBtn').textContent = 'Play';
+  state.action.paused = false; state.action.enabled = true;
+  state.action.time = Number($('scrub').value) * state.action.getClip().duration;
+  state.mixer.update(0);
+});
+$('loop').addEventListener('change', () => state.sel && play(state.sel));
+$('skel').addEventListener('change', () => { if (skelHelper) skelHelper.visible = $('skel').checked; });
+$('figure').addEventListener('change', () => { figure.visible = $('figure').checked; fitView(); });
+$('fitBtn').addEventListener('click', fitView);
+// drag and drop
+const main = $('main');
+main.addEventListener('dragover', (e) => { e.preventDefault(); $('drop').classList.add('show'); });
+main.addEventListener('dragleave', () => $('drop').classList.remove('show'));
+main.addEventListener('drop', async (e) => {
+  e.preventDefault(); $('drop').classList.remove('show');
+  const f = [...e.dataTransfer.files].find((x) => /\.glb$/i.test(x.name));
+  if (!f) { log('Drop a .glb file', 'warn'); return; }
+  await busy('Loading model…', async () => openModel(await f.arrayBuffer(), f.name));
+});
+
+window.__animprev = { THREE, state, GEN, PLAN_CLIPS, KK_BONES, KAYKIT_URL, openModel, openLibrary, demoBuffer, analyze, sampleGen, retarget, trimClip, bake, select, buildEntries }; // handy for debugging in the console
+log('Ready. Open a rigged GLB or pick a demo model, then load the Knight clips or use the procedural ones.', 'ok');
+</script>
+</body>
+</html>
