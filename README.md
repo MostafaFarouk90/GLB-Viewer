@@ -83,8 +83,19 @@ The **Game id** list holds the objects from the game's missing-objects list that
 
 The size table is fetched live from the game repo when online; the page also carries a built-in copy and has a **Load targets.json** button. Ids not in `targets.json` yet use the size from the missing-objects list (section F) or an estimate (the provisional section G ids).
 
+## Rock and cliff kit
+`rocks-generator-offline.html` (offline) / `rocks-generator.html` (CDN) makes large terrain dressing procedurally and saves it as GLB, with the same seed, colour and export controls as the props generator.
+
+- **Type**: 12 pieces in five groups. Cliffs: cliff module and outer cliff corner. Features: scree slope, cave mouth, rock arch, crag/spire/mesa. Rocks: boulder (faceted, slab, split, stacked tor) and rock cluster. Ash country: basalt columns (low walkable field, tall cluster, stepped outcrop), ember crag, obsidian shards. Golem: rock chunks.
+- **Size** is width (X) × height × depth (Z) in metres; the piece is built at exactly that size. Fronts face +Z, the base is on y 0 and the footprint is centred.
+- **Cliff modules tile along X.** Both ends are flat and have the same profile, which depends only on the height, depth and profile (strata are fixed per band, the seed's noise fades out at the ends), so any two modules of the same size join with no seam whatever their seeds. **Tile preview** shows copies either side. The **corner** is built depth × depth: its left end joins a module facing +Z, its back joins a module turned to face +X. Tops are flat so terrain can meet them; grass (or ash) goes on the top and on up-facing ledges.
+- **Golem rock chunks** for the Cinder Golem's procedural rig: either every body part as its own node (Pelvis, Chest, Head, UpperArm.L/R, Forearm.L/R, Thigh.L/R, Shin.L/R; .L is the golem's left, +X), each placed at the part's centre with its mesh around the node origin, or four reusable chunks in a row (Torso, Head, Limb, Fist).
+- Colours are painted per face: stone with darker strata bands, the top colour on up-facing faces, glowing ember veins (emissive) where chosen, a dark back for caves. One mesh per colour when **Combine** is on.
+
+The **Game id** list has the rock ids in `targets.json` (boulder-large-a/b, rock-cluster-a, ember-rock-a/b, basalt-columns-a, also made by the props page) and new ids for the pieces the missing-objects list says are missing entirely (cliffs, ledges, scree, cave mouths, arches, crags, Act 2 basalt fields, ember crags, obsidian), plus golem-rock-chunks and poi-cave-mouth from section G. The new ids and their sizes are provisional until the game names them; **Load targets.json** (or the live file) overrides them as soon as the game adds them. Picking an id fits the exact target box, picks the highest detail within the triangle budget and sets the game-ready export (`<id>.glb`, roughness 1, metallic 0, emissive kept). Every file keeps its type, seed, options and size in the root node's glTF `extras` (cliff modules also their tiling length).
+
 ## Editing / development
-`index.html`, `character-generator.html` and `props-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html` and `props-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html`, `character-generator.html`, `props-generator.html` and `rocks-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html` and `rocks-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright
@@ -92,6 +103,6 @@ npm run build    # regenerate the *-offline.html files
 npm test         # Playwright tests (Chromium) against the CDN pages and their offline files
 ```
 
-**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` too (a test checks they match). Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
+**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` and `rocks-generator.html` too (tests check they match). Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
 
 There is intentionally no CI: build and test locally before committing.
