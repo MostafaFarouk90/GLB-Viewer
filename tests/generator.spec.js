@@ -124,6 +124,84 @@ for (const file of GENERATOR_VARIANTS) {
       expect(glbFaces(buf)).toBe(await num(page, 'sF'));
     });
 
+    test('KayKit look, skeleton, one material and game budget', async ({ page }, info) => {
+      await expect(page.locator('#chibi')).not.toBeChecked(); // the general generator is not limited to the chibi look
+      await expect(page.locator('#rig')).not.toBeChecked();
+      await page.uncheck('#bloom');
+      await page.check('#chibi');
+      await expect(page.locator('#limbs')).toBeDisabled();
+      await page.check('#rig');
+      await expect(page.locator('#pose')).toBeDisabled();
+      await page.check('#atlas');
+      await page.selectOption('#detail', 'game');
+      await setSeed(page, 'elf', 'kk');
+      await page.selectOption('#item', 'sword');
+      await expect.poll(() => page.evaluate(() => window.__chargen.state.traits.item)).toBe('sword');
+      const shown = await num(page, 'sF');
+      expect(shown).toBeLessThanOrEqual(4000);
+      expect(shown).toBeGreaterThan(2500);
+      const buf = await download(page, info);
+      const { json } = parseGLB(buf);
+      expect(glbFaces(buf)).toBe(shown);
+      // KayKit Adventurers skeleton: 41 bones with KayKit's names and, on the chibi body, KayKit's rest offsets
+      const kk = await page.evaluate(() => window.__chargen.KK_BONES);
+      expect(json.skins.length).toBe(1);
+      const joints = json.skins[0].joints.map((j) => json.nodes[j]);
+      expect(joints.map((n) => n.name).sort()).toEqual(kk.map((b) => b[0]).sort());
+      expect(joints.length).toBe(41);
+      for (const [name, , tr, q] of kk) {
+        const n = joints.find((j) => j.name === name);
+        (n.translation ?? [0, 0, 0]).forEach((v, i) => expect(v, name).toBeCloseTo(tr[i], 3));
+        (n.rotation ?? [0, 0, 0, 1]).forEach((v, i) => expect(v, name).toBeCloseTo(q[i], 3));
+      }
+      // every skinned primitive carries joints and weights; the held item hangs on handslot.r
+      const skinnedNodes = json.nodes.filter((n) => n.skin !== undefined);
+      expect(skinnedNodes.length).toBeGreaterThan(0);
+      for (const n of skinnedNodes) for (const p of json.meshes[n.mesh].primitives) {
+        expect(p.attributes.JOINTS_0).toBeDefined(); expect(p.attributes.WEIGHTS_0).toBeDefined();
+      }
+      const slot = joints.find((n) => n.name === 'handslot.r');
+      expect(slot.children.map((c) => json.nodes[c].name)).toContain('Item');
+      // one palette material (+ Glow), one small texture
+      expect(json.materials.map((m) => m.name).every((n) => n === 'Palette' || n === 'Glow')).toBe(true);
+      expect(json.images.length).toBe(1);
+      const pal = json.materials.find((m) => m.name === 'Palette');
+      expect(pal.pbrMetallicRoughness.roughnessFactor ?? 1).toBe(1);
+      expect(pal.pbrMetallicRoughness.metallicFactor ?? 1).toBe(0);
+      // archetype and seed in the root node's extras
+      const root = json.nodes[json.scenes[0].nodes[0]];
+      expect(root.extras).toMatchObject({ archetype: 'elf', seed: 'kk', chibi: true });
+      expect(root.extras.traits.item).toBe('sword');
+      expect(root.children.map((c) => json.nodes[c].name)).toContain('Rig');
+    });
+
+    test('KayKit skeleton on a realistic body keeps bone names and rotations', async ({ page }, info) => {
+      await page.check('#rig');
+      await setSeed(page, 'demon', 'kk2');
+      const buf = await download(page, info);
+      const { json } = parseGLB(buf);
+      const kk = await page.evaluate(() => window.__chargen.KK_BONES);
+      const joints = json.skins[0].joints.map((j) => json.nodes[j]);
+      expect(joints.length).toBe(41);
+      const arm = joints.find((n) => n.name === 'upperarm.l'), kArm = kk.find((b) => b[0] === 'upperarm.l');
+      arm.rotation.forEach((v, i) => expect(v).toBeCloseTo(kArm[3][i], 3));
+      // moved onto this body's (longer) arm
+      expect(joints.find((n) => n.name === 'lowerarm.l').translation[1]).toBeGreaterThan(0.25);
+      expect(json.materials.length).toBeGreaterThan(2); // per-colour materials unless "One material" is on
+      expect(glbFaces(buf)).toBe(await num(page, 'sF'));
+    });
+
+    test('game budget stays at or under 4,000 triangles', async ({ page }) => {
+      await page.uncheck('#bloom');
+      await page.selectOption('#detail', 'game');
+      for (const a of ['wizard', 'golem', 'demon', 'fairy']) {
+        await setSeed(page, a, 'budget');
+        const f = await num(page, 'sF');
+        expect(f, a).toBeLessThanOrEqual(4000);
+        expect(f, a).toBeGreaterThan(a === 'golem' ? 800 : 2500);
+      }
+    });
+
     test('exported GLB opens in the viewer and can be decimated', async ({ page }, info) => {
       await setSeed(page, 'demon', 'roundtrip');
       const faces = await num(page, 'sF');
