@@ -258,8 +258,3 @@ for (const file of VARIANTS) {
   });
 }
 
-test('the built-in targets copy matches embers/targets.json', () => {
-  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  const m = html.match(/<script type="application\/json" id="embersTargets">([\s\S]*?)<\/script>/);
-  expect(JSON.parse(m[1])).toEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'embers/targets.json'), 'utf8')));
-});

@@ -1,0 +1,204 @@
+// Headless batch export: makes every game id of the generator pages from the command line, as the pages'
+// Download button would save it, and writes a report.
+//
+// Usage (from anywhere, after "npm install"):
+//   node tools/export-ids.mjs                         every generator page, every game id
+//   node tools/export-ids.mjs props vegetation        only these pages (the name before -generator.html)
+//   node tools/export-ids.mjs props --ids stump-a,cairn-a --seed v2 --out ~/embers-export
+//   node tools/export-ids.mjs --list                  the pages and their game ids, nothing exported
+//
+// Options:
+//   --ids a,b,c      only these ids (ids a page does not have are skipped)
+//   --seed s         seed for every id (default: the id itself, so a run is repeatable)
+//   --out dir        output folder (default: export/ in the repo); files go to <out>/<page>/<file>
+//   --targets x      size table: "live" (default; the game repo, falling back to the built-in copy when offline),
+//                    "builtin" (the copy in the page, made from embers/targets.json) or a path to a targets.json
+//   --lods           also LOD 1 and LOD 2 (<id>.lod1.glb, <id>.lod2.glb) where the page makes them (vegetation)
+//   --cdn            use the CDN pages (props-generator.html) instead of the offline builds; needs internet
+//
+// It opens the offline page (*-generator-offline.html) in headless Chromium, the browser Playwright installs with
+// "npm install" (or PW_CHROMIUM_PATH), and calls the page's EmbersKit.generators entry (see shared/kit.js).
+// report.json and report.txt list each file's triangles, size in metres, bytes and the target box, with warnings
+// for what the game's check would flag (driver axis off its target, base not on y 0, triangles or bytes over the cap).
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { chromium } from '@playwright/test';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const TARGETS_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/src/env/targets.json';
+
+const args = process.argv.slice(2), opts = { pages: [], ids: null, seed: null, out: path.join(root, 'export'), targets: 'live', cdn: false, lods: false, list: false };
+for (let i = 0; i < args.length; i++) {
+  const a = args[i], val = () => { if (i + 1 >= args.length) fail(`${a} needs a value`); return args[++i]; };
+  if (a === '--ids') opts.ids = new Set(val().split(',').map((s) => s.trim()).filter(Boolean));
+  else if (a === '--seed') opts.seed = val();
+  else if (a === '--out') opts.out = path.resolve(val().replace(/^~(?=\/|$)/, process.env.HOME || '~'));
+  else if (a === '--targets') opts.targets = val();
+  else if (a === '--cdn') opts.cdn = true;
+  else if (a === '--lods') opts.lods = true;
+  else if (a === '--list') opts.list = true;
+  else if (a === '-h' || a === '--help') { console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\nimport ')[0].replace(/^\/\/ ?/gm, '')); process.exit(0); }
+  else if (a.startsWith('-')) fail(`unknown option ${a} (see --help)`);
+  else opts.pages.push(a.replace(/-generator(-offline)?\.html$/, ''));
+}
+function fail(msg) { console.error('export-ids: ' + msg); process.exit(1); }
+
+const allPages = fs.readdirSync(root).map((f) => f.match(/^([a-z0-9-]+)-generator\.html$/)?.[1]).filter(Boolean).sort();
+const pages = opts.pages.length ? opts.pages : allPages;
+for (const p of pages) if (!allPages.includes(p)) fail(`no page ${p}-generator.html (pages: ${allPages.join(', ')})`);
+let targetsFile = null;
+if (!['live', 'builtin'].includes(opts.targets)) {
+  targetsFile = path.resolve(opts.targets);
+  if (!fs.existsSync(targetsFile)) fail(`--targets: ${targetsFile} does not exist`);
+}
+
+const browser = await chromium.launch({
+  executablePath: process.env.PW_CHROMIUM_PATH || undefined,
+  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'], // WebGL without a GPU
+});
+const report = { generatedAt: new Date().toISOString(), targets: opts.targets, seed: opts.seed || '(the id)', files: [] };
+try {
+  for (const name of pages) await runPage(name);
+} finally { await browser.close(); }
+
+if (!opts.list) {
+  fs.mkdirSync(opts.out, { recursive: true });
+  fs.writeFileSync(path.join(opts.out, 'report.json'), JSON.stringify(report, null, 1) + '\n');
+  fs.writeFileSync(path.join(opts.out, 'report.txt'), reportText(report));
+  const warned = report.files.filter((f) => f.warnings.length).length;
+  console.log(`\n${report.files.length} files in ${opts.out}${warned ? `, ${warned} with warnings (see report.txt)` : ''}`);
+}
+
+async function runPage(name) {
+  const file = `${name}-generator${opts.cdn ? '' : '-offline'}.html`;
+  if (!fs.existsSync(path.join(root, file))) fail(`${file} is missing; run "npm run build"`);
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  if (targetsFile) await page.route(TARGETS_URL, (r) => r.fulfill({ status: 200, body: fs.readFileSync(targetsFile), headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } }));
+  else if (opts.targets === 'builtin') await page.route(TARGETS_URL, (r) => r.abort());
+  // a page's own downloads (none are expected) would otherwise wait for a dialog
+  page.on('download', (d) => d.cancel());
+
+  await page.goto(pathToFileURL(path.join(root, file)).href);
+  try {
+    await page.waitForFunction(() => document.getElementById('log')?.textContent.includes('Ready'), null, { timeout: 60_000 });
+  } catch { fail(`${file} did not start${errors.length ? ': ' + errors[0] : ''}`); }
+  if (!await page.evaluate((n) => !!window.EmbersKit?.generators?.[n], name)) {
+    await page.close();
+    if (opts.pages.length) fail(`${file} has no game ids to export`);
+    return; // a page without game ids (the character generator)
+  }
+  // let the live size table arrive (or fail) first, so every id uses the same table
+  await page.evaluate(async () => { try { await window.EmbersKit.liveTargets; } catch {} await new Promise((r) => setTimeout(r, 0)); });
+
+  const ids = await page.evaluate((n) => window.EmbersKit.generators[n].ids(), name);
+  const todo = opts.ids ? ids.filter((id) => opts.ids.has(id)) : ids;
+  if (opts.list) { console.log(`${name} (${ids.length}): ${ids.join(' ')}`); await page.close(); return; }
+  if (!todo.length) { await page.close(); return; }
+  const targets = await page.evaluate((n) => window.EmbersKit.generators[n].targets?.() || null, name);
+  const dir = path.join(opts.out, name);
+  fs.mkdirSync(dir, { recursive: true });
+  console.log(`${name}: ${todo.length} id${todo.length > 1 ? 's' : ''}`);
+
+  for (const id of todo) {
+    const seed = opts.seed || id;
+    const before = errors.length;
+    let files;
+    try {
+      files = await page.evaluate(async ([n, id, seed, lods]) => {
+        const out = await window.EmbersKit.generators[n].files(id, seed, { lods });
+        const b64 = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+        return out.map((f) => ({ name: f.name, data: b64(f.data) }));
+      }, [name, id, seed, opts.lods]);
+    } catch (e) {
+      console.log(`  ${id}: FAILED ${e.message.split('\n')[0]}`);
+      report.files.push({ page: name, id, seed, file: null, warnings: ['export failed: ' + e.message.split('\n')[0]] });
+      continue;
+    }
+    for (const f of files) {
+      const data = Buffer.from(f.data, 'base64');
+      fs.writeFileSync(path.join(dir, f.name), data);
+      const entry = { page: name, id, seed, file: `${name}/${f.name}`, bytes: data.length, ...inspectGLB(data), target: targets?.objects?.[id] || null };
+      entry.warnings = [...checks(entry, targets), ...errors.slice(before).map((e) => 'page error: ' + e)];
+      report.files.push(entry);
+      console.log(`  ${f.name}: ${entry.triangles.toLocaleString()} tris, ${fmtSize(entry.size)}, ${(data.length / 1024).toFixed(0)} KB${entry.warnings.length ? '  ! ' + entry.warnings.join('; ') : ''}`);
+    }
+  }
+  await page.close();
+}
+
+// Triangles, meshes, materials, animations and the bounding box (in metres, after node transforms) of a GLB.
+function inspectGLB(buf) {
+  if (buf.readUInt32LE(0) !== 0x46546c67) throw new Error('not a GLB');
+  const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+  let triangles = 0;
+  const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+  const visit = (ni, parent) => {
+    const n = json.nodes[ni], m = mul(parent, local(n));
+    if (n.mesh !== undefined) for (const p of json.meshes[n.mesh].primitives) {
+      if ((p.mode ?? 4) === 4) triangles += (p.indices !== undefined ? json.accessors[p.indices].count : json.accessors[p.attributes.POSITION].count) / 3;
+      const a = json.accessors[p.attributes.POSITION];
+      if (!a.min || !a.max) continue;
+      for (let c = 0; c < 8; c++) {
+        const v = [0, 1, 2].map((k) => (c >> k) & 1 ? a.max[k] : a.min[k]);
+        for (let k = 0; k < 3; k++) {
+          const w = m[k] * v[0] + m[4 + k] * v[1] + m[8 + k] * v[2] + m[12 + k];
+          min[k] = Math.min(min[k], w); max[k] = Math.max(max[k], w);
+        }
+      }
+    }
+    for (const c of n.children || []) visit(c, m);
+  };
+  for (const ni of json.scenes[json.scene ?? 0].nodes) visit(ni, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+  const ok = isFinite(min[0]), r = (x) => +x.toFixed(3);
+  return {
+    triangles: Math.round(triangles), meshes: json.meshes?.length || 0, materials: json.materials?.length || 0,
+    textures: json.images?.length || 0, animations: (json.animations || []).map((a) => a.name),
+    size: ok ? { w: r(max[0] - min[0]), h: r(max[1] - min[1]), d: r(max[2] - min[2]) } : null,
+    base: ok ? r(min[1]) : null, center: ok ? { x: r((min[0] + max[0]) / 2), z: r((min[2] + max[2]) / 2) } : null,
+  };
+}
+// Column-major 4x4 matrices, as glTF stores them.
+function local(n) {
+  if (n.matrix) return n.matrix;
+  const [x, y, z, w] = n.rotation || [0, 0, 0, 1], [sx, sy, sz] = n.scale || [1, 1, 1], [tx, ty, tz] = n.translation || [0, 0, 0];
+  return [
+    (1 - 2 * (y * y + z * z)) * sx, 2 * (x * y + z * w) * sx, 2 * (x * z - y * w) * sx, 0,
+    2 * (x * y - z * w) * sy, (1 - 2 * (x * x + z * z)) * sy, 2 * (y * z + x * w) * sy, 0,
+    2 * (x * z + y * w) * sz, 2 * (y * z - x * w) * sz, (1 - 2 * (x * x + y * y)) * sz, 0,
+    tx, ty, tz, 1,
+  ];
+}
+function mul(a, b) {
+  const o = new Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+  return o;
+}
+
+// The game's main rules (tools/env-pass/check-glb.mjs in the game repo; the viewer's game mode has all of them).
+function checks(e, targets) {
+  const w = [], t = e.target, tol = targets?.tolerance ?? 0.15;
+  if (e.triangles > (targets?.maxTriangles || 10000)) w.push(`${e.triangles} triangles is over the ${targets?.maxTriangles || 10000} cap`);
+  if (e.bytes > (targets?.maxFileMB || 1.5) * 1048576) w.push(`${(e.bytes / 1048576).toFixed(2)} MB is over ${targets?.maxFileMB || 1.5} MB`);
+  if (e.base !== null && Math.abs(e.base) > 0.02) w.push(`base at y ${e.base}, not 0`);
+  if (t && e.size && t.h > 0) {
+    const drv = Math.max(t.w, t.d) > 1.8 * t.h ? (t.w >= t.d ? 'w' : 'd') : 'h';
+    const off = e.size[drv] / t[drv] - 1;
+    if (Math.abs(off) > tol) w.push(`${drv === 'h' ? 'height' : drv === 'w' ? 'width' : 'depth'} ${e.size[drv]} m is ${(off * 100).toFixed(0)}% off the target ${t[drv]} m`);
+  }
+  return w;
+}
+
+function fmtSize(s) { return s ? `${s.w} × ${s.h} × ${s.d} m` : 'empty'; }
+function reportText(r) {
+  const lines = [`Embers game id export, ${r.generatedAt}`, `targets: ${r.targets}, seed: ${r.seed}`, ''];
+  for (const f of r.files) {
+    lines.push(f.file ? `${f.file}  ${f.triangles} tris  ${fmtSize(f.size)} (w × h × d)  ${(f.bytes / 1024).toFixed(0)} KB`
+      + (f.target ? `  target ${f.target.w} × ${f.target.h} × ${f.target.d} m` : '') : `${f.page}/${f.id}  not exported`);
+    for (const w of f.warnings) lines.push(`    ! ${w}`);
+  }
+  return lines.join('\n') + '\n';
+}

@@ -14,7 +14,11 @@
 // matches the pinned one), bundles the <script type="module"> with esbuild, and writes a copy of
 // the page where the importmap (and the HTML comment right before it) is removed and the module
 // script is replaced by the bundled classic script. Links with a data-offline-href attribute are
-// pointed at that (offline) page instead.
+// pointed at that (offline) page instead. Classic <script src="shared/…"></script> tags (the code the pages share,
+// see shared/kit.js) are replaced by the file's contents.
+//
+// It also writes shared/targets-data.js from embers/targets.json, so the pages' offline copy of the game's size
+// table is the one in embers/.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +34,17 @@ const nm = path.join(root, 'node_modules');
 
 const fail = (msg) => { console.error('build failed: ' + msg); process.exit(1); };
 
+writeTargetsData();
 for (const [src, out] of PAGES) await buildPage(src, out);
+
+function writeTargetsData() {
+  const json = JSON.parse(fs.readFileSync(path.join(root, 'embers/targets.json'), 'utf8'));
+  const js = '// Made by tools/build.mjs from embers/targets.json (the game\'s src/env/targets.json): do not edit, edit that file\n'
+    + '// and run "npm run build". The offline copy of the size table; see shared/targets.js.\n'
+    + `(window.EmbersKit = window.EmbersKit || {}).EMBEDDED_TARGETS = ${JSON.stringify(json, null, 1)};\n`;
+  const out = path.join(root, 'shared/targets-data.js');
+  if (!fs.existsSync(out) || fs.readFileSync(out, 'utf8') !== js) { fs.writeFileSync(out, js); console.log('wrote shared/targets-data.js'); }
+}
 
 async function buildPage(srcName, outName) {
   const SRC = path.join(root, srcName);
@@ -94,10 +108,15 @@ async function buildPage(srcName, outName) {
   const js = out.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 
   let res = html.replace(mapTag[0], '');
+  res = res.replace(/<script\s+src="(shared\/[\w.-]+\.js)"\s*><\/script>/g, (_, file) => {
+    const p = path.join(root, file);
+    if (!fs.existsSync(p)) fail(`${srcName} loads ${file}, which does not exist`);
+    return `<script>\n${fs.readFileSync(p, 'utf8').replace(/<\/script/gi, '<\\/script')}</script>`;
+  });
   res = res.replace(modTag[0], () => `<script>\n${js}</script>`);
   res = res.replace(/href="[^"]*"(\s+)data-offline-href="([^"]*)"/g, 'href="$2"');
-  if (/type=["'](importmap|module)["']/i.test(res) || res.includes('cdn.jsdelivr.net')) {
-    fail('output still references the importmap, a module script or jsDelivr');
+  if (/type=["'](importmap|module)["']/i.test(res) || res.includes('cdn.jsdelivr.net') || /<script[^>]+src=/i.test(res)) {
+    fail('output still references the importmap, a module script, a script file or jsDelivr');
   }
   fs.writeFileSync(OUT, res);
   console.log(`wrote ${path.relative(process.cwd(), OUT) || OUT} (${(res.length / 1024).toFixed(0)} KB)`);
