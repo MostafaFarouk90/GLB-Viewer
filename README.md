@@ -107,8 +107,20 @@ Every export keeps the type, seed, palette and settings in glTF `extras` (or in 
 ### Game ids (Embers of Valdren)
 The **Game id** list holds the 27 vegetation ids from the missing-objects list that were not covered yet: oak-a/b/c, birch-a/b, elm-or-ash-a, autumn-tree-a/b, poplar-a, willow-a, bush-round-a/b, bush-flowering-a/b, bush-holly-a, hedge-straight, hedge-corner, grass-clump-a/b/c, fern-a, flower-patch-yellow/white/purple/red and reeds-a/b (stumps, logs, mushrooms and boulders stay in the props generator). Picking one works as in the props generator: game palette and variants, the target box from `targets.json` (willow-a and bush-holly-a use the sizes from the list until the game adds them), the highest detail within the triangle budget (6,000 for trees, 1,500 for bushes and the hedge corner, 1,000 for grass, ferns and flowers, 4,500 otherwise) and a game-ready `<id>.glb`. Ids that share a seed still get different shapes (oak-a, oak-b and oak-c differ).
 
+## Animation preview and clip baker
+`animation-preview-offline.html` (offline) / `animation-preview.html` (CDN) plays clips on any rigged GLB, makes procedural clips for rigs and props that have none, and bakes the clips you pick into the file.
+
+- **Open GLB…** or drop a file: skinned rigs (KayKit, the character generator's KayKit skeleton, the creature generator's skeleton), models with a node per joint (the creature generator's jointed parts) and static models. **Demo model** builds a KayKit-rigged figure, a wolf, a crow or a lantern to try it.
+- **Rig**: the body plan (biped, quadruped, many legs, winged flyer, no legs, static) and each joint's role come from the joint names and the rest pose; IK and control bones are left alone. **Joints and roles** lets you change a role when a name fools it.
+- **KayKit clips**: **Load Knight clips** downloads `Knight.glb` from the CC0 KayKit Adventurers repo (76 clips); offline, pick a local `Knight.glb` or any GLB with clips under **Clip library GLB…**. Clips play by bone name. **Bone translations**: hips only, scaled to this body (default; right for realistic bodies on the KayKit bones and for the chibi look), all (same proportions as KayKit) or none. **Rotations** are used as they are when the rest poses match bone for bone, otherwise relative to the rest pose (Auto picks and says which). **In place** removes the hips drift on X/Z. Scale tracks are dropped.
+- **Procedural clips** per body plan: Idle, Walk, Run, Bite or Attack, Fly, Hit, Death, and Bob, Spin and Sway for props. Quadruped names follow the game's quadruped clips (Idle, Walk, Run, Bite). **Strength** scales the motion; **Lower T-pose arms** brings T-pose arms down for the procedural clips.
+- **Clips**: every clip from the file, the procedural set and the library in one list. Tick the ones to bake, click one to play it, rename it (**Name in the file**) and trim it (start and end, or **Start here** / **End here** at the current time). The viewer has play/pause, a scrubber, speed, loop, a skeleton overlay and the 1.8 m figure.
+- **Bake GLB** writes the model as it was (rest pose, original node names such as `upperarm.l`, materials, extras) with exactly the ticked clips, redundant keyframes dropped. The clip names, where each came from and its trim go in the root node's `extras.animation`. Two ticked clips with the same name are refused.
+
+The game takes NPC clips from `Knight.glb` at runtime, so for KayKit NPCs this page is mostly a visual check before commit; creatures and props are where baked clips matter.
+
 ## Editing / development
-`index.html`, `character-generator.html`, `props-generator.html`, `texture-generator.html` and `vegetation-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html`, `texture-generator-offline.html` and `vegetation-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html`, `character-generator.html`, `props-generator.html`, `texture-generator.html`, `vegetation-generator.html` and `animation-preview.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html`, `texture-generator-offline.html`, `vegetation-generator-offline.html` and `animation-preview-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright
@@ -116,6 +128,6 @@ npm run build    # regenerate the *-offline.html files
 npm test         # Playwright tests (Chromium) against the CDN pages and their offline files
 ```
 
-**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` (and of the two generator pages) too (a test checks they match). Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
+**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` (and of the two generator pages) too (a test checks they match). Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary. The Knight clip test downloads `Knight.glb` once into `tests/fixtures/.cache/` (git-ignored) and is skipped without internet.
 
 There is intentionally no CI: build and test locally before committing.
