@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "node tools/build.mjs",
-    "test": "playwright test"
+    "test": "playwright test",
+    "coverage-data": "node tools/coverage-data.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
