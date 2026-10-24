@@ -83,8 +83,19 @@ The **Game id** list holds the objects from the game's missing-objects list that
 
 The size table is fetched live from the game repo when online; the page also carries a built-in copy and has a **Load targets.json** button. Ids not in `targets.json` yet use the size from the missing-objects list (section F) or an estimate (the provisional section G ids).
 
+## Structures kit generator
+`structures-generator-offline.html` (offline) / `structures-generator.html` (CDN) makes modular structure pieces procedurally and saves them as GLB, the same way as the props page. It is a kit for the odd pieces the KayKit packs lack, not a whole-building generator.
+
+- **Type**: 20 piece types in six groups. Building kit: wall module (stone, plaster and timber, planks or logs; plain, door, window, two windows or archway; intact, ruined or burnt), corner post or pillar, roof (gable, lean-to, hipped or cone; thatch, clay tiles, slate, planks or iron; holed and burnt states), chimney stack. Yard and street: porch or awning, stairs or ladder, scaffold, deck, jetty or walkway, gateway (stone arch, roofed timber gate, palisade gate), palisade module. Mine and forge works: headframe with turning sheaves, lift cage, forge, furnace or kiln, mine entrance. Shrines and wells: wayside niche, post, bellows, anvil, forge and waystone shrines; roofed, boarded or ruined well. Carts: wagon, cart or hand cart (canvas, torn canvas, crates, sacks, hay, brazier or ore; wrecked and burnt states), mine cart. Small buildings: a cottage, hut or open shelter assembled from the wall and roof modules.
+- **Scale: As designed** (the default) builds every piece at real size in metres: a door is 2.1 m high, walls are 2, 3 or 4 m long and 2.8 or 3.6 m high. Wall modules have flat ends and their length exactly as chosen, so they tile along X, and a corner post and a roof of the same size fit them. **Longest side** or **Height** scale the piece with the Size slider instead.
+- **Download kit .zip**: the current wall once per opening, corner once per form or roof once per shape, as `<name>-door.glb`, `<name>-window.glb`…, all at the same scale. **Seed variants** works as on the props page.
+- Every piece is centred on its footprint with its base at y 0, the front (door side, open side) towards +Z. The idle animation turns headframe sheaves and lift pulleys and flickers fires and candles; game ids export without it.
+
+### Game ids (Embers of Valdren)
+cottage-thatch-b (section B, a cottage built from the kit and fitted to the target box), wagon-wreck-a, wagon-burnt and roadside-shrine-a (section C) and mine-cart (section D) use their sizes from `targets.json`. The provisional section G stand-ins use estimated sizes until the game names them: headframe and lift-cage (Oldsmoke, `oldsmokeArt.ts`), brazier-cart, the Cinderreach shrines (shrine-weeping-bellows, shrine-hushed-anvil, shrine-forge, shrine-waystone), cinder-boarded-well, cinder-forge, cinder-smelter and oldsmoke-adit. Picking an id works as on the props page: game palette, target-box fit (driver axis exact, the others stretched by at most 1.6x), the highest detail within the triangle budget, and game-ready export to `<id>.glb`.
+
 ## Editing / development
-`index.html`, `character-generator.html` and `props-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html` and `props-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html`, `character-generator.html`, `props-generator.html` and `structures-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html` and `structures-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright
