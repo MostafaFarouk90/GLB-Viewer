@@ -93,3 +93,15 @@ export function glbFaces(buf) {
   }
   return n;
 }
+
+// Reads a stored (uncompressed) zip, as the batch writes it.
+export function readZip(buf) {
+  const out = {}; let off = 0;
+  while (buf.readUInt32LE(off) === 0x04034b50) {
+    const size = buf.readUInt32LE(off + 18), nameLen = buf.readUInt16LE(off + 26), extra = buf.readUInt16LE(off + 28);
+    const name = buf.subarray(off + 30, off + 30 + nameLen).toString('utf8');
+    out[name] = buf.subarray(off + 30 + nameLen + extra, off + 30 + nameLen + extra + size);
+    off += 30 + nameLen + extra + size;
+  }
+  return out;
+}

@@ -86,7 +86,7 @@
       <button id="randomBtn" class="primary">Randomize</button>
       <button id="colorsBtn">New colors</button>
     </div>
-    <div class="hint">The same archetype and seed always give the same character.</div>
+    <div class="hint">The same archetype and seed always give the same character. For the game's NPCs pick a Townsfolk archetype and tick <b>KayKit chibi look</b> and <b>KayKit skeleton</b>.</div>
 
     <h2>Body</h2>
     <div class="row"><label for="height">Height</label><input id="height" type="range" min="0.3" max="3.5" step="0.05"><span class="val" id="heightVal"></span></div>
@@ -110,6 +110,16 @@
     <div class="row"><label for="tail">Tail</label><select id="tail"></select></div>
     <div class="row"><label for="aura">Aura</label><select id="aura"></select></div>
     <div class="row"><label for="glowEyes">Glowing eyes</label><input id="glowEyes" type="checkbox"></div>
+
+    <h2>Clothing and gear</h2>
+    <div class="row"><label for="offhand">Off-hand item</label><select id="offhand"></select></div>
+    <div class="row"><label for="cloak">Cloak</label><select id="cloak"></select></div>
+    <div class="row"><label for="back">On the back</label><select id="back"></select></div>
+    <div class="row"><label for="shoulders">Shoulders</label><select id="shoulders"></select></div>
+    <div class="row"><label for="apron">Apron</label><select id="apron"></select></div>
+    <div class="row"><label for="boots">Boots</label><select id="boots"></select></div>
+    <div class="row"><label for="ash">Ash-covered</label><input id="ash" type="checkbox"></div>
+    <div class="hint">Greys every colour towards the ash of Act 2 (glow stays bright), for Cinderreach and Oldsmoke folk.</div>
 
     <h2>Colors</h2>
     <div class="colors" id="colors"></div>
@@ -137,7 +147,9 @@
     </table>
     <div class="btns">
       <button id="downloadBtn" class="primary">Download GLB</button>
+      <button id="gearBtn">Download gear kit (.zip)</button>
     </div>
+    <div class="hint">Gear kit: the rigged body without gear, and each piece of gear (headwear, cloak, back, shoulders, held and off-hand item) as its own GLB in the space of the KayKit bone it hangs on, plus gear.json. Add a piece to that bone of any KayKit-rigged character.</div>
     <div id="log"></div>
   </aside>
 
@@ -216,13 +228,41 @@ const OPTIONS = {
   item: { none: 'None', staff: 'Staff', sword: 'Sword', orb: 'Floating orb', bow: 'Bow' },
   tail: { none: 'None', demon: 'Demon', furry: 'Furry' },
   aura: { none: 'None', crystals: 'Orbiting crystals', orbs: 'Spirit orbs', circle: 'Magic circle' },
+  // townsfolk clothing and gear (appended, so older archetype + seed pairs still roll the same character)
+  offhand: { none: 'None', shield: 'Shield', book: 'Book', lantern: 'Lantern', basket: 'Basket', purse: 'Coin purse' },
+  cloak: { none: 'None', cloak: 'Long cloak', cape: 'Short cape' },
+  back: { none: 'None', backpack: 'Backpack', quiver: 'Quiver', sack: 'Sack' },
+  shoulders: { none: 'None', pauldrons: 'Pauldrons', mantle: 'Fur mantle' },
+  apron: { none: 'None', leather: 'Leather apron', cloth: 'Cloth apron' },
+  boots: { none: 'None', boots: 'Boots' },
 };
+Object.assign(OPTIONS.headwear, { strawHat: 'Straw hat', cap: 'Cloth cap', kerchief: 'Headscarf', helmet: 'Guard helmet', minerHelmet: 'Miner helmet' });
+Object.assign(OPTIONS.item, { hammer: 'Smith hammer', pitchfork: 'Pitchfork', spear: 'Spear', pickaxe: 'Pickaxe', tankard: 'Tankard' });
 const SLOTS = Object.keys(OPTIONS);
-const COLOR_KEYS = { skin: 'Skin', cloth: 'Cloth', cloth2: 'Cloth 2', trim: 'Trim', glow: 'Glow', hair: 'Hair', horn: 'Horn', wing: 'Wings' };
+const COLOR_KEYS = { skin: 'Skin', cloth: 'Cloth', cloth2: 'Cloth 2', trim: 'Trim', glow: 'Glow', hair: 'Hair', horn: 'Horn', wing: 'Wings', leather: 'Leather' };
+const COLOR_DEFAULTS = { leather: '#7d3d2c' }; // for palettes that predate a colour key
+const withDefaults = (c) => ({ ...c, ...Object.fromEntries(Object.entries(COLOR_DEFAULTS).filter(([k]) => !(k in c))) });
 
 const hsl = (h, s, l) => '#' + new THREE.Color().setHSL(((h % 1) + 1) % 1, s, l, THREE.SRGBColorSpace).getHexString();
 const SKIN = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac', '#d6a77a', '#b07a4f'];
 const GOLD = '#d8a93a', SILVER = '#c9ced8';
+// Colours of the KayKit Adventurers texture (Knight, Mage, Rogue, Barbarian), so townsfolk sit beside the KayKit NPCs.
+const KK_SKIN = ['#f8ccab', '#f6c09c', '#f2a87e', '#daae7d', '#c8855f', '#9d5c46', '#7a4a36'];
+const KK_HAIR = ['#13191b', '#3c4246', '#534741', '#7d3d2c', '#b35729', '#daae7d', '#e7ceb4', '#a8a29d'];
+const KKC = {
+  rust: '#9b5a45', clay: '#b27052', brick: '#7d3d2c', orange: '#b35729', teal: '#2f6c73', sea: '#228993', blue: '#4d6b82',
+  green: '#0f8345', pine: '#0c5f4c', lime: '#c8da52', cream: '#e7ceb4', stone: '#978f86', pebble: '#a8a29d', umber: '#736357',
+  taupe: '#837265', bark: '#534741', slate: '#596064', steel: '#798388', silver: '#aab8be', iron: '#3c4246', night: '#263236',
+};
+const KK_LEATHER = [KKC.brick, KKC.bark, KKC.umber, KKC.rust];
+const EMBER = '#ff5a0f', LAMP = '#ffb347'; // Act 2 ember orange, lantern light
+// Townsfolk palette: cloth and cloth2 picked from the given KayKit colour names.
+const townPalette = (cloth, cloth2, o = {}) => (r) => ({
+  skin: r.pick(KK_SKIN), cloth: KKC[r.pick(cloth)], cloth2: KKC[r.pick(cloth2)], trim: o.trim ? r.pick(o.trim) : KKC.umber,
+  glow: o.glow ? r.pick(o.glow) : LAMP, hair: r.pick(KK_HAIR), horn: KKC.cream, wing: KKC.slate, leather: r.pick(KK_LEATHER) });
+const TOWN_NAMES = ['Bram', 'Hilda', 'Osric', 'Wenna', 'Tobin', 'Maud', 'Edric', 'Ysolde', 'Garth', 'Nell', 'Aldo', 'Brenna', 'Cedric',
+  'Della', 'Fenn', 'Greta', 'Hale', 'Ivo', 'Jory', 'Kesta', 'Lorn', 'Mira', 'Ned', 'Orla', 'Piet', 'Rowan', 'Sabine', 'Tamsin', 'Ulf', 'Wyn'];
+const TOWNS = ['of Brightwater', 'of Harrowmark', 'of Oldsmoke', 'of Cinderreach'];
 
 // Each archetype: proportion ranges, form (flesh/rock/ghost), float height (m), weights per part slot, palette.
 const ARCH = {
@@ -327,9 +367,48 @@ const ARCH = {
       t: ['of the Dawn', 'the Radiant', 'Lightbringer', 'of the Seventh Sky'] },
   },
 };
+// Townsfolk for Embers of Valdren: human proportions, KayKit colours, everyday clothing and tools. Slots they leave out
+// are 'none'; `ash` is the chance of the ash-covered variant.
+const NONE = { none: 1 };
+const town = (label, o) => ({ label, group: 'Townsfolk', form: 'flesh', float: 0, height: [1.6, 1.85], bulk: [0.9, 1.1], head: [0.95, 1.08],
+  limbs: [0.95, 1.05], pose: { a: 1 }, glowEyes: 0, ash: 0, ...o,
+  parts: { outfit: { tunic: 1 }, hair: { short: 3, long: 2, none: 1 }, ears: { round: 1 }, beard: { none: 3, short: 2, long: 1 }, horns: NONE,
+    headwear: NONE, wings: NONE, item: NONE, tail: NONE, aura: NONE, offhand: NONE, cloak: NONE, back: NONE, shoulders: NONE,
+    apron: NONE, boots: { boots: 2, none: 1 }, ...o.parts },
+  names: { first: TOWN_NAMES, t: o.titles } });
+Object.assign(ARCH, {
+  villager: town('Villager', { parts: { outfit: { tunic: 3, dress: 2 }, headwear: { none: 4, cap: 2, kerchief: 2, strawHat: 1 },
+    item: { none: 3, tankard: 2 }, offhand: { none: 3, basket: 2 }, cloak: { none: 4, cape: 1 }, back: { none: 4, sack: 1 }, apron: { none: 3, cloth: 1 } },
+    palette: townPalette(['clay', 'rust', 'blue', 'green', 'teal', 'cream'], ['bark', 'umber', 'taupe']), titles: [...TOWNS, 'the Baker', 'Miller', 'Cooper'] }),
+  farmer: town('Farmer', { bulk: [0.95, 1.15], parts: { headwear: { strawHat: 4, cap: 1, kerchief: 1, none: 1 }, item: { pitchfork: 4, none: 1 },
+    offhand: { none: 2, basket: 2 }, back: { none: 3, sack: 1 }, apron: { none: 2, cloth: 1 }, boots: { boots: 3, none: 1 } },
+    palette: townPalette(['lime', 'green', 'clay', 'cream', 'blue'], ['umber', 'bark', 'taupe']), titles: [...TOWNS, 'the Ploughman', 'Haywood', 'Fieldman'] }),
+  blacksmith: town('Blacksmith', { bulk: [1.15, 1.4], height: [1.65, 1.9], parts: { outfit: { tunic: 3, none: 1 }, hair: { short: 2, none: 2 },
+    beard: { short: 3, long: 1, none: 1 }, headwear: { none: 3, kerchief: 1 }, item: { hammer: 1 }, apron: { leather: 1 }, boots: { boots: 1 } },
+    palette: townPalette(['slate', 'iron', 'umber', 'rust'], ['bark', 'night']), titles: ['Smith', 'the Smith', 'Ironhand', 'Anvilson'] }),
+  merchant: town('Merchant', { bulk: [1.0, 1.3], parts: { outfit: { robe: 2, tunic: 2 }, headwear: { cap: 3, none: 1 },
+    offhand: { purse: 2, book: 2 }, cloak: { cape: 2, none: 2 }, back: { backpack: 2, none: 2 } },
+    palette: townPalette(['teal', 'blue', 'orange', 'green'], ['cream', 'clay', 'umber'], { trim: [GOLD, KKC.umber] }), titles: [...TOWNS, 'the Trader', 'Goldsby', 'Chandler'] }),
+  guard: town('Guard', { bulk: [1.0, 1.2], height: [1.7, 1.9], parts: { outfit: { armor: 1 }, hair: { short: 1, none: 1 }, headwear: { helmet: 1 },
+    item: { spear: 3, sword: 2 }, offhand: { shield: 3, none: 1 }, cloak: { cape: 2, cloak: 1, none: 1 }, shoulders: { pauldrons: 1 }, boots: { boots: 1 } },
+    palette: townPalette(['blue', 'rust', 'teal'], ['slate', 'iron', 'bark'], { trim: [KKC.steel, KKC.silver] }), titles: [...TOWNS, 'of the Watch', 'Gatewarden'] }),
+  priest: town('Priest', { pose: { a: 3, cast: 1 }, parts: { outfit: { robe: 1 }, hair: { short: 2, none: 2, long: 1 }, headwear: { hood: 2, none: 2, circlet: 1 },
+    item: { staff: 2, none: 1 }, offhand: { book: 3, lantern: 1 }, cloak: { cloak: 1, none: 2 }, shoulders: { mantle: 1, none: 2 }, boots: NONE },
+    palette: townPalette(['cream', 'pebble', 'night'], ['orange', 'brick', 'teal'], { trim: [GOLD], glow: [LAMP, '#ffe9a8'] }),
+    titles: [...TOWNS, 'the Lamplighter', 'of the Old Flame'] }),
+  miner: town('Miner', { height: [1.55, 1.75], bulk: [1.05, 1.25], parts: { headwear: { minerHelmet: 4, cap: 1 }, item: { pickaxe: 1 },
+    offhand: { lantern: 2, none: 2 }, back: { sack: 1, backpack: 1, none: 2 }, apron: { leather: 1, none: 3 }, boots: { boots: 1 } },
+    palette: townPalette(['umber', 'taupe', 'slate', 'rust'], ['bark', 'night', 'iron'], { glow: [LAMP, EMBER] }), ash: 0.3,
+    titles: ['of Oldsmoke', 'Deepdelver', 'the Digger', 'Coalhand'] }),
+  survivor: town('Cinderreach survivor', { pose: { a: 1 }, parts: { outfit: { tunic: 2, robe: 1 }, headwear: { hood: 2, kerchief: 2, none: 1 },
+    item: { none: 2, spear: 1, staff: 1 }, offhand: { lantern: 1, none: 2 }, cloak: { cloak: 2, cape: 1, none: 1 }, back: { sack: 2, backpack: 1 } },
+    palette: townPalette(['taupe', 'umber', 'stone', 'brick'], ['bark', 'night', 'iron'], { glow: [EMBER] }), ash: 0.85,
+    titles: ['of Cinderreach', 'the Ashen', 'Emberborn', 'the Last Lamp'] }),
+});
 
 function makeName(arch, r) {
   const n = ARCH[arch].names;
+  if (n.first) return r.chance(0.7) ? r.pick(n.first) + ' ' + r.pick(n.t) : r.pick(n.first);
   let s = r.pick(n.a) + r.pick(n.b) + r.pick(n.c);
   s = s[0].toUpperCase() + s.slice(1).toLowerCase();
   return r.chance(0.6) ? s + ' ' + r.pick(n.t) : s;
@@ -344,9 +423,10 @@ function rollTraits(archetype, seed) {
   t.head = +r.range(...A.head).toFixed(2);
   t.limbs = +r.range(...A.limbs).toFixed(2);
   t.pose = r.weighted(A.pose);
-  for (const s of SLOTS) t[s] = r.weighted(A.parts[s]);
+  for (const s of SLOTS) t[s] = A.parts[s] ? r.weighted(A.parts[s]) : 'none'; // no draw for a slot the archetype lacks
   t.glowEyes = r.chance(A.glowEyes);
-  t.colors = A.palette(r);
+  t.colors = withDefaults(A.palette(r));
+  t.ash = A.ash !== undefined && r.chance(A.ash);
   return t;
 }
 
@@ -404,21 +484,26 @@ function rock(radius, detail, salt) {
 function makeMaterials(t) {
   const c = t.colors, ghost = ARCH[t.archetype].form === 'ghost', rocky = ARCH[t.archetype].form === 'rock';
   const std = (name, o) => Object.assign(new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0 }), { name }, o);
-  const col = (h) => new THREE.Color(h);
+  // ash-covered variant: every colour except glow and eyes is pulled towards the game's Act 2 ash grey
+  const ASH = new THREE.Color('#8d8780'), col = (h, f = 0.45) => t.ash ? new THREE.Color(h).lerp(ASH, f) : new THREE.Color(h);
+  const metal = (v) => t.ash ? v * 0.35 : v;
   const glassy = t.wings === 'butterfly' || (t.wings === 'feathered' && t.archetype === 'specter');
   const m = {
-    skin: std('Skin', { color: col(c.skin), roughness: rocky ? 0.95 : 0.6 }),
+    skin: std('Skin', { color: col(c.skin, 0.2), roughness: rocky ? 0.95 : 0.6 }),
     cloth: std('Cloth', { color: col(c.cloth), roughness: 0.85, side: THREE.DoubleSide }),
     cloth2: std('Cloth2', { color: col(c.cloth2), roughness: 0.8, side: THREE.DoubleSide }),
-    trim: std('Trim', { color: col(c.trim), metalness: 0.85, roughness: 0.3 }),
-    glow: std('Glow', { color: col(c.glow), emissive: col(c.glow), emissiveIntensity: 2.5, roughness: 0.4 }),
+    trim: std('Trim', { color: col(c.trim, 0.5), metalness: metal(0.85), roughness: 0.3 }),
+    glow: std('Glow', { color: col(c.glow, 0), emissive: col(c.glow, 0), emissiveIntensity: 2.5, roughness: 0.4 }),
     hair: std('Hair', { color: col(c.hair), roughness: 0.75, side: THREE.DoubleSide }),
-    horn: std('Horn', { color: col(c.horn), roughness: 0.45 }),
+    horn: std('Horn', { color: col(c.horn, 0.35), roughness: 0.45 }),
     wing: std('Wings', { color: col(c.wing), roughness: 0.6, side: THREE.DoubleSide }),
-    eye: std('Eyes', { color: col('#111318'), roughness: 0.15 }),
-    wood: std('Wood', { color: col(t.archetype === 'spirit' ? c.horn : '#6b4a2b'), roughness: 0.8 }),
-    steel: std('Steel', { color: col('#cfd3da'), metalness: 1, roughness: 0.25 }),
-    void: std('Shadow', { color: col('#05060a'), roughness: 1 }),
+    eye: std('Eyes', { color: col('#111318', 0), roughness: 0.15 }),
+    wood: std('Wood', { color: col(t.archetype === 'spirit' ? c.horn : '#6b4a2b', 0.35), roughness: 0.8 }),
+    steel: std('Steel', { color: col('#cfd3da', 0.5), metalness: metal(1), roughness: 0.25 }),
+    void: std('Shadow', { color: col('#05060a', 0), roughness: 1 }),
+    leather: std('Leather', { color: col(c.leather || COLOR_DEFAULTS.leather, 0.4), roughness: 0.8, side: THREE.DoubleSide }),
+    straw: std('Straw', { color: col('#d1b25a'), roughness: 0.9, side: THREE.DoubleSide }), // the game's thatch colour
+    linen: std('Linen', { color: col(KKC.cream), roughness: 0.9, side: THREE.DoubleSide }),
   };
   if (glassy) Object.assign(m.wing, { transparent: true, opacity: 0.72, emissive: col(c.wing), emissiveIntensity: 0.35 });
   if (ghost) {
@@ -509,6 +594,13 @@ function buildCharacter(t) {
   const group = (parent, name, p = [0, 0, 0], rot = [0, 0, 0]) => {
     const g = new THREE.Group(); g.name = name; g.position.set(...p); g.rotation.set(...rot); parent.add(g); return g;
   };
+  // Gear: a group whose parts the KayKit skeleton export hangs, as plain meshes, on one bone (like KayKit's helmets on
+  // head, capes on chest and weapons on handslot.r), so a game can hide or swap them and the gear kit can save them alone.
+  const gear = (parent, slot, bone, side = '', p, rot) => {
+    const g = group(parent, 'Gear_' + slot[0].toUpperCase() + slot.slice(1) + (side ? '_' + side : ''), p, rot);
+    g.userData = { bone, slot, kind: t[slot] + (side ? '-' + side.toLowerCase() : '') };
+    return g;
+  };
   const sphere = (rad, w = 24, h = 16) => new THREE.SphereGeometry(rad, seg(w), seg(h));
   const capsule = (rad, len) => new THREE.CapsuleGeometry(rad, Math.max(0.001, len), seg(6), seg(14));
   const sides = [[1, 'L'], [-1, 'R']];
@@ -568,7 +660,7 @@ function buildCharacter(t) {
     add(body, 'Robe', robe, M.cloth, [0, 0, 0], [0, 0, 0], [1, 1, 0.8]);
     if (!ghost) {
       add(body, 'Hem', new THREE.TorusGeometry(0.305 * b * fl, 0.018, seg(8), seg(36)), M.trim, [0, 0.03, 0], [PI / 2, 0, 0], [1, 0.8, 1]);
-      for (const [s, n] of sides) add(body, 'Foot_' + n, sphere(0.05, 12, 8), M.cloth2, [s * 0.08, 0.025, 0.22 * b], [0, 0, 0], [1, 0.6, 1.6]);
+      for (const [s, n] of sides) add(body, 'Foot_' + n, sphere(0.05, 12, 8), t.boots === 'boots' ? M.leather : M.cloth2, [s * 0.08, 0.025, 0.22 * b], [0, 0, 0], [1, 0.6, 1.6]);
     }
     add(body, 'Belt', new THREE.TorusGeometry(0.142 * b, 0.018, seg(8), seg(32)), M.trim, [0, waistY, 0], [PI / 2, 0, 0], [1, 0.8, 1]);
   } else {
@@ -580,8 +672,9 @@ function buildCharacter(t) {
       const leg = group(body, 'Leg_' + n, [s * legX, hipY, 0], [0, 0, chibi ? 0 : s * 0.04]);
       add(leg, 'Thigh_' + n, capsule(0.062 * b * legR, Math.max(0.01, legL * 0.5 - 0.1 * b * legR)), legMat, [0, -legL * 0.25, 0]);
       add(leg, 'Shin_' + n, capsule(0.05 * b * legR, Math.max(0.01, legL * 0.5 - 0.08 * b * legR)), legMat, [0, -legL * 0.72, 0]);
-      const hoof = t.archetype === 'demon' && t.outfit === 'none';
-      add(leg, 'Foot_' + n, sphere(0.058, 14, 10), hoof ? M.horn : M.cloth2, [0, -legL - 0.02, 0.04], [0, 0, 0], [1, 0.55, hoof ? 1.2 : 1.9]);
+      const hoof = t.archetype === 'demon' && t.outfit === 'none', boot = t.boots === 'boots' && !hoof;
+      add(leg, 'Foot_' + n, sphere(boot ? 0.064 : 0.058, 14, 10), hoof ? M.horn : boot ? M.leather : M.cloth2, [0, -legL - 0.02, 0.04], [0, 0, 0], [1, 0.55, hoof ? 1.2 : boot ? 1.8 : 1.9]);
+      if (boot) add(leg, 'BootCuff_' + n, new THREE.CylinderGeometry(0.06 * b * legR, 0.057 * b * legR, legL * 0.22, seg(12)), M.leather, [0, -legL * 0.84, 0]);
     }
     if (t.outfit === 'tunic' || t.outfit === 'dress') {
       const len = t.outfit === 'dress' ? 0.55 : 0.33, flare = t.outfit === 'dress' ? 1.6 : 1.15;
@@ -594,6 +687,17 @@ function buildCharacter(t) {
       add(body, 'Gem', new THREE.OctahedronGeometry(0.03, 0), M.glow, [0, hipY + 0.4, 0.13 * b], [0, 0, 0], [1, 1.3, 0.6]);
     }
   }
+
+  // ---- apron (front panel over whatever the legs wear; leather adds a bib) ----
+  if (t.apron !== 'none' && !ghost) {
+    const leather = t.apron === 'leather', yb = hipY - legL * (leather ? 0.5 : 0.38), wide = robed || rocky || t.outfit === 'dress';
+    const rTop = (rocky ? 0.2 : 0.155) * b, rBot = (wide ? 0.36 : 0.23) * b, mat = leather ? M.leather : M.linen;
+    add(body, 'Apron', lathe([[rBot, yb], [rTop * 1.1, hipY], [rTop, waistY + 0.012]], seg(16), -PI * 0.3, PI * 0.6), mat, [0, 0, 0], [0, 0, 0], [1, 1, 0.85]);
+    if (leather && !rocky) add(body, 'ApronBib', new THREE.BoxGeometry(0.2 * b, shY - 0.1 - waistY, 0.012), mat,
+      [0, (shY - 0.1 + waistY) / 2, (robed ? 0.15 : t.outfit === 'armor' ? 0.16 : 0.13) * b + 0.006]);
+  }
+  if (t.shoulders === 'mantle') add(gear(body, 'shoulders', 'chest'), 'Mantle', new THREE.TorusGeometry((rocky ? 0.2 : 0.13) * b + 0.02, 0.06 * b, seg(8), seg(24)),
+    M.linen, [0, shY - 0.02, 0], [PI / 2, 0, 0], [1.15, 0.8, 0.7]);
 
   // ---- neck ----
   if (!rocky) add(body, 'Neck', new THREE.CylinderGeometry(0.042 * b, 0.05 * b, headY - shY, seg(14)), M.skin, [0, (shY + headY) / 2 - hr * 0.3, -0.01]);
@@ -626,6 +730,10 @@ function buildCharacter(t) {
         add(elbow, 'Bracer_' + n, new THREE.CylinderGeometry(0.047 * b * armR, 0.05 * b * armR, fa * 0.35, seg(14)), M.trim, [0, -fa * 0.72, 0]);
       add(hand, 'Hand_' + n, sphere(0.045 * b * armR, 14, 10), M.skin, [0, -0.035 * armR, 0], [0, 0, 0], [0.9, 1.2, 0.75]);
     }
+    if (t.shoulders === 'pauldrons') { // dome tilted half-way between up the arm and out from the body, so it caps the shoulder in any pose
+      const pg = gear(sh, 'shoulders', 'upperarm.' + n.toLowerCase(), n);
+      add(pg, 'Pauldron_' + n, new THREE.SphereGeometry(0.1 * b * armR, seg(16), seg(8), 0, PI * 2, 0, PI / 2), M.steel, [s * 0.012, 0.012, 0], [0, 0, -s * PI / 4], [1.1, 0.75, 1.15]);
+    }
     arms[n] = { sh, elbow, hand };
     if (s === -1) { itemHand = hand; itemArmUp = fwd < -1; }
   }
@@ -650,7 +758,7 @@ function buildCharacter(t) {
     }
   }
   if (t.hair !== 'none' && !rocky) {
-    add(head, 'Hair', new THREE.SphereGeometry(hr * 1.07, seg(28), seg(14), 0, PI * 2, 0, PI * 0.56), M.hair, [0, hr * 0.03, -hr * 0.04], [-0.35, 0, 0]);
+    if (t.headwear !== 'kerchief' && t.headwear !== 'cap') add(head, 'Hair', new THREE.SphereGeometry(hr * 1.07, seg(28), seg(14), 0, PI * 2, 0, PI * 0.56), M.hair, [0, hr * 0.03, -hr * 0.04], [-0.35, 0, 0]);
     if (t.hair === 'long') add(head, 'HairBack', lathe([[hr * 0.8, -hr * 2.4], [hr * 1.0, -hr * 1.3], [hr * 1.07, -hr * 0.3], [hr * 1.06, hr * 0.25]],
       seg(24), PI * 0.5, PI), M.hair, [0, 0, -hr * 0.05], [0, 0, 0], [1, 1, 0.85]);
   }
@@ -687,8 +795,9 @@ function buildCharacter(t) {
   }
 
   // headwear
+  const hw = t.headwear === 'none' ? head : gear(head, 'headwear', 'head');
   if (t.headwear === 'wizardHat') {
-    const hat = group(head, 'Hat', [0, hr * 0.5, -hr * 0.05], [-0.15, 0, 0]);
+    const hat = group(hw, 'Hat', [0, hr * 0.5, -hr * 0.05], [-0.15, 0, 0]);
     add(hat, 'HatBrim', new THREE.CylinderGeometry(hr * 2.0, hr * 2.0, hr * 0.06, seg(36)), M.cloth);
     const cone = lathe([[hr * 1.05, 0], [hr * 0.82, hr * 0.8], [hr * 0.5, hr * 1.6], [hr * 0.2, hr * 2.3], [0.002, hr * 2.7]], seg(32));
     const p = cone.attributes.position, bendDir = r.chance(0.5) ? 1 : -1;
@@ -699,10 +808,10 @@ function buildCharacter(t) {
     if (r.chance(0.6)) add(hat, 'HatStar', new THREE.OctahedronGeometry(hr * 0.16, 0), M.glow, [0, hr * 0.5, hr * 0.78], [0, 0, PI / 4], [1, 1, 0.4]);
   } else if (t.headwear === 'hood') {
     const gap = PI * 0.8;
-    add(head, 'Hood', new THREE.SphereGeometry(hr * 1.28, seg(28), seg(16), PI / 2 + gap / 2, PI * 2 - gap, 0, PI * 0.72), M.cloth, [0, hr * 0.08, -hr * 0.12]);
-    add(head, 'HoodDrape', lathe([[sw * 1.05, shY - headY - 0.03], [hr * 1.25, -hr * 0.4]], seg(24), PI * 0.28, PI * 1.44), M.cloth, [0, 0, -hr * 0.1], [0, 0, 0], [1, 1, 0.8]);
+    add(hw, 'Hood', new THREE.SphereGeometry(hr * 1.28, seg(28), seg(16), PI / 2 + gap / 2, PI * 2 - gap, 0, PI * 0.72), M.cloth, [0, hr * 0.08, -hr * 0.12]);
+    add(hw, 'HoodDrape', lathe([[sw * 1.05, shY - headY - 0.03], [hr * 1.25, -hr * 0.4]], seg(24), PI * 0.28, PI * 1.44), M.cloth, [0, 0, -hr * 0.1], [0, 0, 0], [1, 1, 0.8]);
   } else if (t.headwear === 'crown') {
-    const cr = group(head, 'Crown', [0, hr * 0.62, 0]);
+    const cr = group(hw, 'Crown', [0, hr * 0.62, 0]);
     add(cr, 'CrownBand', new THREE.TorusGeometry(hr * 0.86, hr * 0.07, seg(8), seg(32)), M.trim, [0, 0, 0], [PI / 2, 0, 0]);
     const spikes = r.int(5, 9);
     for (let i = 0; i < spikes; i++) {
@@ -711,10 +820,32 @@ function buildCharacter(t) {
       if (i % 2 === 0) add(cr, 'CrownGem' + i, new THREE.OctahedronGeometry(hr * 0.07, 0), M.glow, [x * 1.08, 0, z * 1.08]);
     }
   } else if (t.headwear === 'halo') {
-    add(head, 'Halo', new THREE.TorusGeometry(hr * 0.9, hr * 0.06, seg(8), seg(40)), M.glow, [0, hr * 1.5, -hr * 0.25], [PI / 2 - 0.3, 0, 0]);
+    add(hw, 'Halo', new THREE.TorusGeometry(hr * 0.9, hr * 0.06, seg(8), seg(40)), M.glow, [0, hr * 1.5, -hr * 0.25], [PI / 2 - 0.3, 0, 0]);
   } else if (t.headwear === 'circlet') {
-    add(head, 'Circlet', new THREE.TorusGeometry(hr * 0.99, hr * 0.035, seg(6), seg(36)), M.trim, [0, hr * 0.3, 0], [PI / 2 + 0.18, 0, 0], [0.93, 1, 1]);
-    add(head, 'CircletGem', new THREE.OctahedronGeometry(hr * 0.09, 0), M.glow, [0, hr * 0.13, hr * 0.98], [0, 0, 0], [1, 1.3, 0.6]);
+    add(hw, 'Circlet', new THREE.TorusGeometry(hr * 0.99, hr * 0.035, seg(6), seg(36)), M.trim, [0, hr * 0.3, 0], [PI / 2 + 0.18, 0, 0], [0.93, 1, 1]);
+    add(hw, 'CircletGem', new THREE.OctahedronGeometry(hr * 0.09, 0), M.glow, [0, hr * 0.13, hr * 0.98], [0, 0, 0], [1, 1.3, 0.6]);
+  } else if (t.headwear === 'strawHat') {
+    const hat = group(hw, 'Hat', [0, hr * 0.42, -hr * 0.03], [-0.12, 0, 0]);
+    add(hat, 'HatBrim', new THREE.CylinderGeometry(hr * 1.85, hr * 1.9, hr * 0.06, seg(28)), M.straw);
+    add(hat, 'HatCrown', lathe([[hr * 1.06, 0], [hr * 0.98, hr * 0.42], [hr * 0.74, hr * 0.64], [0, hr * 0.7]], seg(24)), M.straw);
+    add(hat, 'HatBand', new THREE.CylinderGeometry(hr * 1.055, hr * 1.065, hr * 0.12, seg(24), 1, true), M.cloth2, [0, hr * 0.1, 0]);
+  } else if (t.headwear === 'cap') {
+    add(hw, 'Cap', new THREE.SphereGeometry(hr * 1.14, seg(24), seg(10), 0, PI * 2, 0, PI * 0.5), M.cloth, [0, hr * 0.12, -hr * 0.04], [-0.2, 0, 0], [1, 0.9, 1.02]);
+    add(hw, 'CapBrim', new THREE.CylinderGeometry(hr * 0.5, hr * 0.5, hr * 0.05, seg(16), 1, false, -PI / 2, PI), M.cloth2, [0, hr * 0.3, hr * 0.8], [0.25, 0, 0]);
+  } else if (t.headwear === 'kerchief') {
+    add(hw, 'Scarf', new THREE.SphereGeometry(hr * 1.1, seg(24), seg(12), 0, PI * 2, 0, PI * 0.58), M.cloth2, [0, hr * 0.02, -hr * 0.05], [-0.4, 0, 0]);
+    add(hw, 'ScarfKnot', sphere(hr * 0.16, 10, 8), M.cloth2, [0, -hr * 0.08, -hr * 1.06], [0, 0, 0], [1.4, 0.8, 0.8]);
+  } else if (t.headwear === 'helmet') { // kettle helmet with a ridge
+    const hm = group(hw, 'Helmet', [0, hr * 0.12, 0]);
+    add(hm, 'HelmetDome', new THREE.SphereGeometry(hr * 1.14, seg(24), seg(10), 0, PI * 2, 0, PI * 0.5), M.steel);
+    add(hm, 'HelmetBrim', new THREE.CylinderGeometry(hr * 1.5, hr * 1.56, hr * 0.06, seg(28)), M.steel);
+    add(hm, 'HelmetRidge', new THREE.TorusGeometry(hr * 1.15, hr * 0.05, seg(6), seg(20), PI), M.trim, [0, 0, 0], [0, PI / 2, 0]);
+  } else if (t.headwear === 'minerHelmet') {
+    const hm = group(hw, 'Helmet', [0, hr * 0.15, 0], [-0.08, 0, 0]);
+    add(hm, 'HelmetDome', new THREE.SphereGeometry(hr * 1.12, seg(24), seg(10), 0, PI * 2, 0, PI * 0.5), M.leather);
+    add(hm, 'HelmetBrim', new THREE.CylinderGeometry(hr * 1.25, hr * 1.25, hr * 0.05, seg(24)), M.leather);
+    add(hm, 'Lamp', new THREE.CylinderGeometry(hr * 0.16, hr * 0.2, hr * 0.22, seg(12)), M.trim, [0, hr * 0.45, hr * 1.05], [PI / 2, 0, 0]);
+    add(hm, 'LampLight', new THREE.CylinderGeometry(hr * 0.14, hr * 0.14, hr * 0.03, seg(12)), M.glow, [0, hr * 0.45, hr * 1.17], [PI / 2, 0, 0]);
   }
 
   // ---- wings ----
@@ -755,6 +886,36 @@ function buildCharacter(t) {
     }
   }
 
+  // ---- cloak and back gear (on the chest bone, like KayKit's capes) ----
+  if (t.cloak !== 'none') { // a back panel that clears the torso or robe at every height
+    const long = t.cloak === 'cloak', r0 = (rocky ? 0.22 : 0.15) * b + 0.02, rMid = (rocky ? 0.3 : 0.21) * b;
+    const yb = long ? 0.08 : waistY - 0.08, rb = long ? (robed ? 0.4 : rocky ? 0.36 : 0.28) * b : 0.24 * b;
+    add(gear(body, 'cloak', 'chest'), 'Cloak', lathe([[rb, yb], [rMid, hipY + (shY - hipY) * 0.4], [r0 + 0.04 * b, shY - 0.06], [r0, shY + 0.02]],
+      seg(20), PI * 0.64, PI * 0.72), M.cloth2, [0, 0, -0.01], [0, 0, 0], [1, 1, 0.85]);
+  }
+  if (t.back !== 'none') {
+    const bk = gear(body, 'back', 'chest'), yc = hipY + torsoL * 0.62;
+    const zb = -((robed ? 0.15 : rocky ? 0.2 : 0.13) * b + (t.cloak !== 'none' ? 0.05 : 0));
+    if (t.back === 'backpack') {
+      const w = 0.22 * b, h = 0.5 * torsoL, d = 0.12 * b;
+      add(bk, 'Pack', new THREE.BoxGeometry(w, h, d), M.leather, [0, yc, zb - d / 2]);
+      add(bk, 'PackFlap', new THREE.BoxGeometry(w * 1.04, h * 0.35, d * 1.08), M.leather, [0, yc + h * 0.34, zb - d / 2 - 0.004]);
+      add(bk, 'PackPocket', new THREE.BoxGeometry(w * 0.6, h * 0.32, d * 0.3), M.cloth2, [0, yc - h * 0.15, zb - d * 1.12]);
+      add(bk, 'Bedroll', new THREE.CylinderGeometry(0.05 * b, 0.05 * b, w * 1.15, seg(12)), M.cloth, [0, yc + h / 2 + 0.05 * b, zb - d / 2], [0, 0, PI / 2]);
+    } else if (t.back === 'quiver') {
+      const L = 0.5 * torsoL + 0.15, q = group(bk, 'Quiver', [0, yc, zb - 0.05 * b], [0, 0, 0.35]);
+      add(q, 'QuiverBody', new THREE.CylinderGeometry(0.05 * b, 0.042 * b, L, seg(12)), M.leather);
+      for (let i = 0; i < 3; i++) {
+        const x = (i - 1) * 0.022 * b;
+        add(q, 'Arrow' + i, new THREE.CylinderGeometry(0.006, 0.006, 0.14, seg(4)), M.wood, [x, L / 2 + 0.07, 0]);
+        add(q, 'Fletch' + i, new THREE.ConeGeometry(0.018, 0.06, seg(4)), M.linen, [x, L / 2 + 0.12, 0], [PI, 0, 0], [1, 1, 0.3]);
+      }
+    } else {
+      add(bk, 'Sack', sphere(0.13 * b, 16, 12), M.linen, [0.05 * b, yc - 0.02, zb - 0.1 * b], [0, 0, 0.2], [1, 1.25, 0.8]);
+      add(bk, 'SackTie', new THREE.TorusGeometry(0.035 * b, 0.012 * b, seg(6), seg(12)), M.leather, [0.08 * b, yc + 0.15 * b, zb - 0.1 * b], [PI / 2, 0, 0.2]);
+    }
+  }
+
   // ---- tail ----
   if (t.tail !== 'none') {
     const z0 = -0.1 * b;
@@ -785,10 +946,11 @@ function buildCharacter(t) {
   }
 
   // ---- held item ----
+  const isc = chibi ? 1.6 : 1; // townsfolk tools and off-hand items are chunkier on the chibi body, nearer KayKit's weapon sizes
   if (t.item !== 'none' && itemHand) {
     const hp = body.worldToLocal(itemHand.localToWorld(V(0, -0.04, 0)));
     // on the KayKit skeleton the item points along handslot.r's +Y, which is forward (+Z) in the rest pose
-    const it = group(body, 'Item', hp.toArray(), [t.rig ? PI / 2 : 0, 0, 0]);
+    const it = group(body, 'Item', hp.toArray(), [t.rig ? PI / 2 : 0, 0, 0]); it.userData = { bone: 'handslot.r', slot: 'item', kind: t.item };
     if (t.rig) itemArmUp = true;
     if (t.item === 'staff') {
       const wand = t.archetype === 'fairy';
@@ -832,6 +994,58 @@ function buildCharacter(t) {
       const ex = R * Math.cos(PI * 0.45), ey = R * Math.sin(PI * 0.45);
       add(inner, 'BowString', new THREE.CylinderGeometry(0.002, 0.002, ey * 2, 4), M.hair, [ex, 0, 0]);
       add(inner, 'BowGrip', new THREE.CylinderGeometry(0.02, 0.02, 0.1, seg(8)), M.cloth2, [R, 0, 0]);
+    } else if (t.item === 'pitchfork' || t.item === 'spear') { // long poles stand on the ground like the staff
+      const Ls = headTop * (t.item === 'spear' ? 1.15 : 1), bottom = t.rig ? -Ls * 0.3 : Math.max(-hp.y, -Ls * 0.45), top = bottom + Ls;
+      add(it, 'Pole', new THREE.CylinderGeometry(0.016 * isc, 0.018 * isc, Ls, seg(8)), M.wood, [0, bottom + Ls / 2, 0]);
+      if (t.item === 'spear') {
+        add(it, 'SpearTip', new THREE.ConeGeometry(0.035 * isc, 0.18 * isc, seg(8)), M.steel, [0, top + 0.09 * isc, 0], [0, 0, 0], [1, 1, 0.45]);
+        add(it, 'SpearCollar', new THREE.CylinderGeometry(0.022 * isc, 0.022 * isc, 0.04 * isc, seg(8)), M.trim, [0, top, 0]);
+      } else {
+        add(it, 'ForkBar', new THREE.BoxGeometry(0.16 * isc, 0.025 * isc, 0.025 * isc), M.steel, [0, top, 0]);
+        for (let i = -1; i <= 1; i++) add(it, 'ForkTine' + (i + 1), new THREE.ConeGeometry(0.01 * isc, 0.2 * isc, seg(6)), M.steel, [i * 0.07 * isc, top + 0.1 * isc, 0]);
+      }
+    } else if (t.item === 'hammer' || t.item === 'pickaxe') { // hangs head-down from the lowered hand, points forward on the skeleton
+      const tool = group(it, t.item === 'hammer' ? 'Hammer' : 'Pickaxe', [0, 0, 0], [itemArmUp ? 0 : 2.75, 0, 0]);
+      const L = (t.item === 'hammer' ? 0.42 : 0.55) * isc, top = L - 0.08 * isc;
+      add(tool, 'Handle', new THREE.CylinderGeometry(0.016 * isc, 0.018 * isc, L, seg(8)), M.wood, [0, L / 2 - 0.08 * isc, 0]);
+      if (t.item === 'hammer') add(tool, 'HammerHead', new THREE.BoxGeometry(0.075 * isc, 0.075 * isc, 0.19 * isc), M.steel, [0, top, 0.02 * isc]);
+      else for (const z of [1, -1]) add(tool, 'PickHead' + (z > 0 ? 'F' : 'B'), taperTube([V(0, top, 0), V(0, top + 0.03 * isc, z * 0.13 * isc), V(0, top - 0.02 * isc, z * 0.26 * isc)],
+        0.024 * isc, z > 0 ? 0 : 0.012 * isc, seg(10), seg(6)), M.steel);
+    } else if (t.item === 'tankard') { // upright on the T rest pose too, like KayKit's Mug
+      const mug = group(it, 'Tankard', [0, 0.01 * isc, 0], [t.rig ? -PI / 2 : 0, 0, 0]), u = 0.01 * isc;
+      add(mug, 'MugBody', lathe([[0, 0], [5.5 * u, 0], [5.8 * u, 13 * u], [5 * u, 13 * u], [5 * u, 1.5 * u], [0, 1.5 * u]], seg(14)), M.wood);
+      add(mug, 'MugFoam', sphere(5.2 * u, 12, 6), M.linen, [0, 12.5 * u, 0], [0, 0, 0], [1, 0.35, 1]);
+      add(mug, 'MugHandle', new THREE.TorusGeometry(3.5 * u, u, seg(6), seg(12), PI), M.trim, [5.8 * u, 6.5 * u, 0], [0, 0, -PI / 2]);
+      for (const y of [3, 10]) add(mug, 'MugBand' + y, new THREE.TorusGeometry(5.7 * u, 0.6 * u, seg(4), seg(14)), M.trim, [0, y * u, 0], [PI / 2, 0, 0]);
+    }
+  }
+
+  // ---- off-hand item (handslot.l). Items keep world up, which on the T rest pose is handslot.l's +Z, as KayKit's Spellbook
+  // and Mug do; only the shield turns: flat on the back of the hand at rest (like KayKit's shields), facing out when posed.
+  if (t.offhand !== 'none') {
+    const hpL = body.worldToLocal(arms.L.hand.localToWorld(V(0, -0.04, 0))), u = 0.01 * isc;
+    const oh = group(body, 'Offhand', hpL.toArray()); oh.userData = { bone: 'handslot.l', slot: 'offhand', kind: t.offhand };
+    if (t.offhand === 'shield') {
+      const R = 24 * u, sh = group(oh, 'Shield', t.rig ? [0, 7 * u, 0] : [7 * u, 0, 0], t.rig ? [0, 0, 0] : [0, 0, -PI / 2]);
+      add(sh, 'ShieldFace', new THREE.CylinderGeometry(R, R, 3 * u, seg(24)), M.cloth);
+      add(sh, 'ShieldRim', new THREE.TorusGeometry(R, 1.4 * u, seg(6), seg(24)), M.trim, [0, 0, 0], [PI / 2, 0, 0]);
+      add(sh, 'ShieldBoss', new THREE.SphereGeometry(5 * u, seg(12), seg(6), 0, PI * 2, 0, PI / 2), M.steel, [0, 1.5 * u, 0]);
+    } else if (t.offhand === 'book') {
+      const bo = group(oh, 'Book', [0, -6 * u, 5 * u]);
+      add(bo, 'BookCover', new THREE.BoxGeometry(6 * u, 22 * u, 16 * u), M.leather);
+      add(bo, 'BookPages', new THREE.BoxGeometry(5 * u, 20.5 * u, 15 * u), M.linen, [0, 0, 0.8 * u]);
+    } else if (t.offhand === 'lantern') {
+      add(oh, 'LanternHandle', new THREE.TorusGeometry(3.5 * u, 0.6 * u, seg(4), seg(10), PI), M.trim, [0, -4 * u, 0]);
+      add(oh, 'LanternCap', new THREE.ConeGeometry(5 * u, 5 * u, seg(6)), M.trim, [0, -6.5 * u, 0]);
+      add(oh, 'LanternLight', new THREE.CylinderGeometry(3.5 * u, 3.5 * u, 8 * u, seg(6)), M.glow, [0, -13 * u, 0]);
+      add(oh, 'LanternBase', new THREE.CylinderGeometry(4.5 * u, 4.5 * u, 1.5 * u, seg(6)), M.trim, [0, -17.5 * u, 0]);
+    } else if (t.offhand === 'basket') {
+      add(oh, 'Basket', lathe([[0, 0], [7 * u, 0], [10 * u, 8 * u], [10.5 * u, 8.5 * u]], seg(14)), M.straw, [0, -22 * u, 0]);
+      add(oh, 'BasketHandle', new THREE.TorusGeometry(9.5 * u, 0.8 * u, seg(4), seg(14), PI), M.straw, [0, -13.5 * u, 0], [0, PI / 2, 0]);
+      add(oh, 'BasketCloth', sphere(9 * u, 12, 6), M.linen, [0, -14 * u, 0], [0, 0, 0], [1, 0.3, 1]);
+    } else if (t.offhand === 'purse') {
+      add(oh, 'Purse', sphere(5 * u, 12, 10), M.leather, [0, -7 * u, 0], [0, 0, 0], [1, 1.15, 0.9]);
+      add(oh, 'PurseTie', new THREE.TorusGeometry(2.5 * u, 0.6 * u, seg(4), seg(10)), M.trim, [0, -2.5 * u, 0], [PI / 2, 0, 0]);
     }
   }
 
@@ -953,7 +1167,12 @@ function log(msg, cls = '') {
 const triCount = (g) => (g.index ? g.index.count : g.attributes.position.count) / 3 | 0;
 function meshesOf(root) { const out = []; root.traverse((o) => { if (o.isMesh) out.push(o); }); return out; }
 
-for (const [id, a] of Object.entries(ARCH)) $('archetype').add(new Option(a.label, id));
+const archGroups = {};
+for (const [id, a] of Object.entries(ARCH)) {
+  const g = a.group || 'Mystical';
+  if (!archGroups[g]) { archGroups[g] = document.createElement('optgroup'); archGroups[g].label = g; $('archetype').appendChild(archGroups[g]); }
+  archGroups[g].appendChild(new Option(a.label, id));
+}
 for (const s of SLOTS) for (const [v, label] of Object.entries(OPTIONS[s])) $(s).add(new Option(label, v));
 for (const [k, label] of Object.entries(COLOR_KEYS)) {
   const l = document.createElement('label'); l.textContent = label;
@@ -966,7 +1185,7 @@ function writeUI(t) {
   for (const s of Object.keys(SLIDERS)) $(s).value = t[s];
   $('pose').value = t.pose;
   for (const s of SLOTS) $(s).value = t[s];
-  $('glowEyes').checked = t.glowEyes;
+  $('glowEyes').checked = t.glowEyes; $('ash').checked = !!t.ash;
   for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).value = t.colors[k];
   updateLabels();
 }
@@ -975,7 +1194,7 @@ function readUI() {
   for (const s of Object.keys(SLIDERS)) t[s] = Number($(s).value);
   t.pose = $('pose').value;
   for (const s of SLOTS) t[s] = $(s).value;
-  t.glowEyes = $('glowEyes').checked;
+  t.glowEyes = $('glowEyes').checked; t.ash = $('ash').checked;
   for (const k of Object.keys(COLOR_KEYS)) t.colors[k] = $('c_' + k).value;
   Object.assign(t, outputSettings());
   return t;
@@ -1046,12 +1265,12 @@ $('archetype').addEventListener('change', () => roll($('archetype').value, $('se
 $('seed').addEventListener('change', () => roll($('archetype').value, $('seed').value.trim() || randomSeed()));
 $('randomBtn').addEventListener('click', () => roll($('archetype').value, randomSeed()));
 $('colorsBtn').addEventListener('click', () => {
-  const c = ARCH[state.traits.archetype].palette(makeRng(randomSeed()));
+  const c = withDefaults(ARCH[state.traits.archetype].palette(makeRng(randomSeed())));
   for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).value = c[k];
   scheduleRebuild();
 });
 for (const s of Object.keys(SLIDERS)) $(s).addEventListener('input', () => { updateLabels(); scheduleRebuild(); });
-for (const id of ['pose', 'glowEyes', 'style', 'detail', 'chibi', 'rig', ...SLOTS]) $(id).addEventListener('change', () => { updateLabels(); scheduleRebuild(); });
+for (const id of ['pose', 'glowEyes', 'ash', 'style', 'detail', 'chibi', 'rig', ...SLOTS]) $(id).addEventListener('change', () => { updateLabels(); scheduleRebuild(); });
 for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).addEventListener('input', scheduleRebuild);
 $('wire').addEventListener('change', applyWire);
 $('fitBtn').addEventListener('click', fitView);
@@ -1085,22 +1304,24 @@ function kaykitSkeleton(c) {
 }
 
 // Which KayKit bone moves a part (rigid skinning). 'blend' = torso and robe, weighted from hips to chest by height.
+// The gear group (held item, off-hand item, headwear, cloak, back, shoulders) a part belongs to, if any.
+function gearOf(m) {
+  for (let o = m; o && o.name !== 'Body'; o = o.parent) if (o.userData.bone) return o;
+  return null;
+}
 function boneFor(m) {
-  for (let o = m; o && o.name !== 'Body'; o = o.parent) {
-    if (o.name === 'Item') return 'handslot.r';
-    if (o.name === 'Head') return 'head';
-  }
+  for (let o = m; o && o.name !== 'Body'; o = o.parent) if (o.name === 'Head') return 'head';
   const n = m.name, sm = n.match(/_([LR])(?:_|$)/), s = sm ? '.' + sm[1].toLowerCase() : '';
   if (s) {
     if (/^Thigh_/.test(n)) return 'upperleg' + s;
-    if (/^(Knee|Shin)_/.test(n)) return 'lowerleg' + s;
+    if (/^(Knee|Shin|BootCuff)_/.test(n)) return 'lowerleg' + s;
     if (/^Foot_/.test(n)) return 'foot' + s;
     if (/^(Shoulder|UpperArm)_/.test(n)) return 'upperarm' + s;
     if (/^(ElbowRock|Forearm|Sleeve|Bracer)_/.test(n)) return 'lowerarm' + s;
     if (/^(Hand|Fist)_/.test(n)) return 'hand' + s;
   }
   if (n === 'Robe' || n === 'Torso') return 'blend';
-  if (['Skirt', 'Hem', 'Belt', 'Pelvis', 'Belly', 'Tail', 'TailTip'].includes(n)) return 'hips';
+  if (['Skirt', 'Hem', 'Belt', 'Pelvis', 'Belly', 'Tail', 'TailTip', 'Apron'].includes(n)) return 'hips';
   return 'chest';
 }
 function addSkin(geo, bone, skel, rest) {
@@ -1190,20 +1411,24 @@ function exportScene(c, { combine, anim, rig = false, atlas = false }) {
     const parts = meshes.map((m) => {
       const geo = m.geometry.clone().applyMatrix4(unit.clone().multiply(inv).multiply(m.matrixWorld));
       const mat = pal ? pal.assign(geo, m.material) : m.material;
-      return { name: m.name, mat, geo, bone: rig && g === c.body ? boneFor(m) : undefined };
+      const gr = rig && g === c.body ? gearOf(m) : null;
+      return { name: m.name, mat, geo, gear: gr, bone: rig && g === c.body && !gr ? boneFor(m) : undefined };
     });
-    // held item: plain meshes under the handslot.r bone (like KayKit's weapons), so the game can hide or swap it
-    const items = parts.filter((p) => p.bone === 'handslot.r'), rest2 = parts.filter((p) => p.bone !== 'handslot.r');
-    if (items.length) {
-      const slot = skel.bones['handslot.r'], toSlot = slot.matrixWorld.clone().invert().multiply(rigNode.matrixWorld);
-      const it = new THREE.Group(); it.name = 'Item'; slot.add(it);
-      for (const p of items) { p.geo.applyMatrix4(toSlot); p.bone = undefined; }
-      emit(it, 'Item', items);
+    // gear: plain meshes in a group under its bone (held item on handslot.r, like KayKit's weapons; headwear on head and
+    // capes on chest, like KayKit's helmets and capes), so the game can hide or swap it
+    const pieces = new Map();
+    for (const p of parts) if (p.gear) { if (!pieces.has(p.gear)) pieces.set(p.gear, []); pieces.get(p.gear).push(p); }
+    for (const [src, list] of pieces) {
+      const bone = skel.bones[src.userData.bone], toBone = bone.matrixWorld.clone().invert().multiply(rigNode.matrixWorld);
+      const it = new THREE.Group(); it.name = src.name; it.userData = { ...src.userData }; bone.add(it);
+      for (const p of list) p.geo.applyMatrix4(toBone);
+      emit(it, src.name, list);
     }
-    emit(node, g.name, rest2);
+    emit(node, g.name, parts.filter((p) => !p.gear));
   }
   function emit(node, prefix, parts) {
-    const isSkin = parts[0]?.bone !== undefined;
+    if (!parts.length) return;
+    const isSkin = parts[0].bone !== undefined;
     if (isSkin) for (const p of parts) addSkin(p.geo, p.bone, skel, rest);
     if (!combine) { for (const p of parts) place(node, p.name, p.geo, p.mat, p.bone); return; }
     const byMat = new Map();
@@ -1246,6 +1471,77 @@ async function exportGLB(opts = exportOptions()) {
     return { buf, out, clips };
   } finally { dispose(); }
 }
+// Minimal zip writer (stored, no compression; GLB data barely compresses anyway).
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+const crc32 = (d) => { let c = 0xffffffff; for (let i = 0; i < d.length; i++) c = CRC_TABLE[(c ^ d[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), data = new Uint8Array(f.data), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint32(14, crc, true);
+    h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint32(16, crc, true);
+    c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+    parts.push(h.buffer, name, data); central.push(c.buffer, name);
+    off += 30 + name.length + data.length;
+  }
+  const size = central.reduce((n, b) => n + b.byteLength, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+  e.setUint32(12, size, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...central, e.buffer], { type: 'application/zip' });
+}
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+const fileBase = () => state.traits.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'character';
+const kebab = (s) => s.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+
+// Gear kit: the character on the KayKit skeleton (always in its T rest pose, whatever the preview shows), split into
+// <name>-body.glb without gear and one <name>-<kind>.glb per gear piece. A piece's geometry is in the space of its bone
+// (in body units: KayKit units on the chibi body), so it is added to that bone as it is, like KayKit's weapon files.
+async function exportGearKit(opts = exportOptions()) {
+  const t = state.traits, own = !t.rig, c = own ? buildCharacter({ ...t, rig: true }) : state.current;
+  const { out, clips, dispose } = exportScene(c, { ...opts, rig: true }), pieces = [];
+  try {
+    out.updateMatrixWorld(true);
+    out.traverse((o) => { if (o.userData.bone && o.parent?.isBone) pieces.push(o); });
+    const base = fileBase(), files = [], manifest = { character: t.name, archetype: t.archetype, seed: t.seed, chibi: !!t.chibi,
+      skeleton: 'KayKit Adventurers (41 bones)', units: c.traits.chibi ? 'KayKit units (bone space)' : 'body units (bone space)',
+      metresPerUnit: +c.root.userData.scale.toFixed(5), body: base + '-body.glb', gear: [] };
+    const exporter = new GLTFExporter();
+    for (const p of pieces) {
+      p.parent.remove(p);
+      const file = `${base}-${kebab(p.userData.kind)}.glb`;
+      p.userData = { generator: 'Mystical Character Generator', character: t.name, archetype: t.archetype, seed: t.seed, ...p.userData,
+        units: manifest.units, metresPerUnit: manifest.metresPerUnit };
+      files.push({ name: file, data: await exporter.parseAsync(p, { binary: true }) });
+      manifest.gear.push({ file, slot: p.userData.slot, kind: p.userData.kind, bone: p.userData.bone, node: p.name });
+    }
+    files.unshift({ name: manifest.body, data: await exporter.parseAsync(out, { binary: true, animations: clips }) });
+    files.push({ name: 'gear.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });
+    return { files, manifest };
+  } finally {
+    dispose();
+    for (const p of pieces) p.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+    if (own) { for (const m of meshesOf(c.root)) m.geometry.dispose(); for (const m of Object.values(c.materials)) m.dispose(); }
+  }
+}
+$('gearBtn').addEventListener('click', async () => {
+  if (state.busy) return;
+  state.busy = true; $('busy').classList.add('show'); $('busyText').textContent = 'Exporting gear kit…';
+  try {
+    const { files, manifest } = await exportGearKit();
+    const zip = makeZip(files), name = fileBase() + '-gear.zip';
+    saveBlob(zip, name);
+    if (!manifest.gear.length) log('This character wears no gear; the kit has only the body.', 'warn');
+    log(`Saved ${name}: ${files.map((f) => f.name).join(', ')} (${fmtBytes(zip.size)})`, 'ok');
+  } catch (e) { console.error(e); log('Export failed: ' + (e.message || e), 'err'); }
+  finally { $('busy').classList.remove('show'); state.busy = false; }
+});
 $('downloadBtn').addEventListener('click', async () => {
   if (state.busy) return;
   state.busy = true; $('busy').classList.add('show'); $('busyText').textContent = 'Exporting GLB…';
@@ -1260,7 +1556,7 @@ $('downloadBtn').addEventListener('click', async () => {
   finally { $('busy').classList.remove('show'); state.busy = false; }
 });
 
-window.__chargen = { THREE, state, ARCH, OPTIONS, KK_BONES, GAME_TRIS, rollTraits, buildCharacter, roll, rebuild, exportGLB, exportScene }; // handy for debugging in the console
+window.__chargen = { THREE, state, ARCH, OPTIONS, KK_BONES, GAME_TRIS, rollTraits, buildCharacter, roll, rebuild, exportGLB, exportScene, exportGearKit }; // handy for debugging in the console
 
 roll('wizard', randomSeed());
 log('Ready. Pick an archetype, press Randomize, then Download GLB.', 'ok');
