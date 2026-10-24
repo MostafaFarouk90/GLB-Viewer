@@ -97,8 +97,18 @@ The size table is fetched live from the game repo when online; the page also car
 
 Every export keeps the type, seed, palette and settings in glTF `extras` (or in the manifest).
 
+## Vegetation generator
+`vegetation-generator-offline.html` (offline) / `vegetation-generator.html` (CDN) makes trees, bushes, hedges, grass, ferns, flowers and reeds in a chunky low-poly style (solid leaf clusters, no alpha leaf cards) and saves them as GLB.
+
+- **Type**: tree (oak, broadleaf, ash or elm, birch, poplar, willow; round, layered or open crown; big roots or flared base; optional spring blossom), bush (leafy, flowering, holly with berries), hedge module (straight piece with flat ends that join, or corner post; neat or shaggy), grass clump (tall or spreading, optional seed heads), fern (6 to 10 fronds), flower patch (daisies, tulips or bluebells, one or two colours) and reeds (with or without cattails).
+- **Seed / Randomize / New colors / Size / Seed variants** work as in the props generator. Size measures the height by default. **Palette** offers the game's summer greens and an autumn set; birch, poplar, willow and holly bring their own bark or leaf colours.
+- **LODs**: **Download LODs** saves `name.glb`, `name.lod1.glb` and `name.lod2.glb` in a zip (default 25% and 5% of the faces, so a 6,000-face oak gives about 1,500 and 300). Each LOD is the same plant rebuilt coarser (same layout, simplest leaf clusters, fewer blossoms and marks) and then simplified with meshoptimizer while leaf clusters keep their volume, so small plants can stay above the percentage. **Show** above the view previews LOD 1 and 2, and the variants zip can include LODs too. The game does not load LOD files yet; the `.lodN.glb` naming is a proposal.
+
+### Game ids (Embers of Valdren)
+The **Game id** list holds the 27 vegetation ids from the missing-objects list that were not covered yet: oak-a/b/c, birch-a/b, elm-or-ash-a, autumn-tree-a/b, poplar-a, willow-a, bush-round-a/b, bush-flowering-a/b, bush-holly-a, hedge-straight, hedge-corner, grass-clump-a/b/c, fern-a, flower-patch-yellow/white/purple/red and reeds-a/b (stumps, logs, mushrooms and boulders stay in the props generator). Picking one works as in the props generator: game palette and variants, the target box from `targets.json` (willow-a and bush-holly-a use the sizes from the list until the game adds them), the highest detail within the triangle budget (6,000 for trees, 1,500 for bushes and the hedge corner, 1,000 for grass, ferns and flowers, 4,500 otherwise) and a game-ready `<id>.glb`. Ids that share a seed still get different shapes (oak-a, oak-b and oak-c differ).
+
 ## Editing / development
-`index.html`, `character-generator.html`, `props-generator.html` and `texture-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html` and `texture-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html`, `character-generator.html`, `props-generator.html`, `texture-generator.html` and `vegetation-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html`, `texture-generator-offline.html` and `vegetation-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright
@@ -106,6 +116,6 @@ npm run build    # regenerate the *-offline.html files
 npm test         # Playwright tests (Chromium) against the CDN pages and their offline files
 ```
 
-**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` too (a test checks they match). Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
+**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` (and of the two generator pages) too (a test checks they match). Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
 
 There is intentionally no CI: build and test locally before committing.
