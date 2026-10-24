@@ -83,6 +83,20 @@ The **Game id** list holds the objects from the game's missing-objects list that
 
 The size table is fetched live from the game repo when online; the page also carries a built-in copy and has a **Load targets.json** button. Ids not in `targets.json` yet use the size from the missing-objects list (section F) or an estimate (the provisional section G ids).
 
+## Texture and decal generator
+`texture-generator-offline.html` (offline) / `texture-generator.html` (CDN) makes stylised base-colour textures and ground decals procedurally, in the game palette, at 512 px by default. Like the other generators it needs no account and runs in the browser.
+
+- **Tiling textures** (repeat with no seam): thatch, wood planks, cobblestones, stone blocks, roof tiles (clay or slate), bark, grass ground, moss, dirt with pebbles, ash ground, scorched cracked earth. The Tiling line in the stats measures the seam.
+- **Decals** (alpha, transparent at the border): ash patch, scorch mark or fire-pit ring, flagstone circle (grass or open gaps), puddle, moss patch, ground cracks (optionally glowing), fallen leaves. The colour under transparent pixels is the decal's own, so the edge never filters to black.
+- **Seed / Randomize / New colors** as in the other generators. **Palette**: game field and village, game ash country, or random. **Density**, **Contrast**, **Flat bands** (toon look), **Edge softness**, per-type variant and **Ember specks**.
+- **Download image**: PNG (written by the page itself, with exact alpha), JPEG for textures, or WebP; 256, 512 or 1024 px.
+- **Download GLB**: a flat square at y 0, centred on x 0, z 0, top of the image towards −Z, roughness 1, metallic 0, base colour only. A decal uses its W × D in metres and Blend or Mask alpha; a texture gives one tile of **Tile size**.
+- **Texture pack (.zip)**: every texture and decal with the current seed and palette as PNG, plus `manifest.json` with the settings that regenerate each one, for the game or the other generators.
+- **Game id**: `ash-patch-decal` (3 × 3 m, about 60 placements on the east edge) and `waystone-flagstones` (9 m paving circle). Picking one sets the decal, the palette and the size (from the live `targets.json` once the game adds the id there, otherwise from the missing-objects list) and names the file `<id>.glb`. The props page still has a geometry version of both if the game prefers meshes.
+- **Palette atlas**: open a GLB with several materials and press **Build atlas**. Flat colours become swatches and textures whose UVs stay inside 0 to 1 are copied into one atlas image (textures that repeat use their average colour, and the log says which); UVs move onto the atlas, every material becomes one `Atlas` material (plus one per glow colour, since the game keeps emissive colours but not emissive maps), roughness 1, metallic 0. Skins and animations are kept. **Download atlas GLB** keeps the original file name.
+
+Every export keeps the type, seed, palette and settings in glTF `extras` (or in the manifest).
+
 ## Vegetation generator
 `vegetation-generator-offline.html` (offline) / `vegetation-generator.html` (CDN) makes trees, bushes, hedges, grass, ferns, flowers and reeds in a chunky low-poly style (solid leaf clusters, no alpha leaf cards) and saves them as GLB.
 
@@ -94,7 +108,7 @@ The size table is fetched live from the game repo when online; the page also car
 The **Game id** list holds the 27 vegetation ids from the missing-objects list that were not covered yet: oak-a/b/c, birch-a/b, elm-or-ash-a, autumn-tree-a/b, poplar-a, willow-a, bush-round-a/b, bush-flowering-a/b, bush-holly-a, hedge-straight, hedge-corner, grass-clump-a/b/c, fern-a, flower-patch-yellow/white/purple/red and reeds-a/b (stumps, logs, mushrooms and boulders stay in the props generator). Picking one works as in the props generator: game palette and variants, the target box from `targets.json` (willow-a and bush-holly-a use the sizes from the list until the game adds them), the highest detail within the triangle budget (6,000 for trees, 1,500 for bushes and the hedge corner, 1,000 for grass, ferns and flowers, 4,500 otherwise) and a game-ready `<id>.glb`. Ids that share a seed still get different shapes (oak-a, oak-b and oak-c differ).
 
 ## Editing / development
-`index.html`, `character-generator.html`, `props-generator.html` and `vegetation-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html` and `vegetation-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html`, `character-generator.html`, `props-generator.html`, `texture-generator.html` and `vegetation-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html`, `texture-generator-offline.html` and `vegetation-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright

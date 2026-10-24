@@ -9,6 +9,7 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 export const VARIANTS = ['index.html', 'glb-viewer-offline.html'];
 export const GENERATOR_VARIANTS = ['character-generator.html', 'character-generator-offline.html'];
 export const PROPS_VARIANTS = ['props-generator.html', 'props-generator-offline.html'];
+export const TEXTURE_VARIANTS = ['texture-generator.html', 'texture-generator-offline.html'];
 export const VEG_VARIANTS = ['vegetation-generator.html', 'vegetation-generator-offline.html'];
 const CDN = 'https://cdn.jsdelivr.net/';
 // The viewer's game profile fetches the live targets.json from the game repo; tests serve the repo copy instead.
