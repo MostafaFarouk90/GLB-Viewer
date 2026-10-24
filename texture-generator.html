@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Texture &amp; Decal Generator</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
+    --text: #e6e8ec; --muted: #8b93a3; --accent: #e8a33d; --accent2: #b97a1f;
+    --ok: #3fbf7f; --warn: #e0a83a; --err: #e05a5a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { display: grid; grid-template-columns: 330px 1fr; height: 100vh; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 12px 14px 24px; }
+  h1 { font-size: 15px; margin: 2px 0 4px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+  a { color: var(--accent); }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row label { flex: 1; color: var(--text); }
+  .row .val { min-width: 54px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: 11.5px; margin: 2px 0 6px; }
+  input[type=text], input[type=number], select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 7px; width: 150px; font: inherit; }
+  input[type=number].m { width: 64px; }
+  input[type=range] { width: 114px; accent-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); }
+  input[type=color] { width: 100%; height: 26px; padding: 0 2px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 11px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent); }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .colors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 8px; }
+  .colors label { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; color: var(--muted); }
+  table.stats { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; margin-top: 8px; }
+  table.stats td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+  table.stats td:first-child { text-align: left; color: var(--muted); }
+  #log { margin-top: 10px; font: 11.5px/1.45 ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+    max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
+  #log .warn { color: var(--warn); } #log .err { color: var(--err); } #log .ok { color: var(--ok); }
+  main { position: relative; overflow: hidden; }
+  #viewport { position: absolute; inset: 0; }
+  #toolbar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 10px; align-items: center;
+    flex-wrap: wrap; pointer-events: none; }
+  #toolbar > * { pointer-events: auto; }
+  #toolbar .chk { background: rgba(23,26,33,.85); border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; }
+  #toolbar select { width: auto; }
+  #texName { margin-left: auto; font-size: 16px; font-weight: 600; letter-spacing: .02em; background: rgba(23,26,33,.85);
+    border-radius: 7px; padding: 5px 11px; }
+  /* the flat image, on a checkerboard so alpha shows */
+  #flat { position: absolute; right: 10px; bottom: 10px; width: 220px; height: 220px; border: 1px solid var(--line); border-radius: 6px;
+    background: repeating-conic-gradient(#3a3f4b 0 25%, #2a2e37 0 50%) 0 0 / 16px 16px; image-rendering: auto; }
+  #flatOpts { position: absolute; right: 10px; bottom: 236px; background: rgba(23,26,33,.85); border: 1px solid var(--line);
+    border-radius: 7px; padding: 4px 8px; }
+  #busy { position: absolute; inset: 0; background: rgba(10,12,16,.55); display: none; align-items: center;
+    justify-content: center; font-size: 15px; z-index: 5; }
+  #busy.show { display: flex; }
+  .spinner { width: 22px; height: 22px; border: 3px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite; margin-right: 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 760px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; }
+    main { grid-row: 1; height: 55vh; } aside { grid-row: 2; border-right: 0; }
+    #flat { width: 130px; height: 130px; } #flatOpts { bottom: 146px; }
+  }
+</style>
+<!-- Libraries load from the jsDelivr CDN (needs internet). The "offline" build has them inlined instead. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <h1>Texture &amp; Decal Generator</h1>
+    <div class="hint">Procedural 512 px game-palette textures that tile, alpha decals for the ground, and a palette atlas that turns a many-material model into one texture. For the <a href="props-generator.html" data-offline-href="props-generator-offline.html">props</a> and <a href="character-generator.html" data-offline-href="character-generator-offline.html">character</a> generators and the <a href="index.html" data-offline-href="glb-viewer-offline.html">GLB viewer &amp; optimizer</a>.</div>
+
+    <h2>Game</h2>
+    <div class="row"><label for="gameId">Game id</label><select id="gameId"></select></div>
+    <div class="hint">Embers of Valdren decals from the missing-objects list. Picking one sets the decal, the game palette and its size, and the download is a flat <code>&lt;id&gt;.glb</code> ready for the game.</div>
+    <div class="btns" style="margin-top:2px">
+      <button id="targetsBtn">Load targets.json…</button>
+      <input id="targetsFile" type="file" accept=".json,application/json" hidden>
+    </div>
+
+    <h2>Texture</h2>
+    <div class="row"><label for="kind">Type</label><select id="kind"></select></div>
+    <div class="row"><label for="seed">Seed</label><input id="seed" type="text" spellcheck="false"></div>
+    <div class="btns" style="margin-top:4px">
+      <button id="randomBtn" class="primary">Randomize</button>
+      <button id="colorsBtn">New colors</button>
+    </div>
+    <div class="hint">The same type and seed always give the same image. Textures tile seamlessly; decals fade to transparent at the edge.</div>
+
+    <h2>Look</h2>
+    <div class="row"><label for="scale">Density</label><input id="scale" type="range" min="1" max="4" step="1"><span class="val" id="scaleVal"></span></div>
+    <div class="row"><label for="contrast">Contrast</label><input id="contrast" type="range" min="0.2" max="1.6" step="0.05"><span class="val" id="contrastVal"></span></div>
+    <div class="row"><label for="posterize">Flat bands (toon)</label>
+      <select id="posterize"><option value="0">Off</option><option value="3">3 levels</option><option value="4">4 levels</option><option value="6">6 levels</option><option value="8">8 levels</option></select></div>
+    <div class="row" id="softRow"><label for="soft">Edge softness</label><input id="soft" type="range" min="0.05" max="0.6" step="0.01"><span class="val" id="softVal"></span></div>
+    <div class="row" id="optRow"><label for="opt" id="optLabel">Variant</label><select id="opt"></select></div>
+    <div class="row" id="embersRow"><label for="embers">Ember specks</label><input id="embers" type="checkbox"></div>
+
+    <h2>Colors</h2>
+    <div class="row"><label for="palette">Palette</label>
+      <select id="palette"><option value="field">Game: field and village</option><option value="ash">Game: ash country</option><option value="random">Random for this seed</option></select></div>
+    <div class="colors" id="colors"></div>
+
+    <h2>Output</h2>
+    <div class="row"><label for="res">Image size</label>
+      <select id="res"><option value="256">256 px</option><option value="512" selected>512 px (game)</option><option value="1024">1024 px</option></select></div>
+    <div class="row"><label for="format">Image format</label>
+      <select id="format"><option value="png">PNG</option><option value="jpeg">JPEG (opaque)</option><option value="webp">WebP</option></select></div>
+    <div class="row" id="tileRow"><label for="tileM">Tile size (m)</label><input id="tileM" class="m" type="number" min="0.1" max="50" step="0.1" value="2"></div>
+    <div class="row" id="decalRow"><label>Decal W × D (m)</label><input id="decalW" class="m" type="number" min="0.1" max="50" step="0.1" value="3"><input id="decalD" class="m" type="number" min="0.1" max="50" step="0.1" value="3"></div>
+    <div class="row" id="alphaRow"><label for="alphaMode">Alpha</label>
+      <select id="alphaMode"><option value="BLEND">Blend (soft edge)</option><option value="MASK">Mask (cut-out)</option></select></div>
+    <div class="hint" id="glbHint">The GLB is a flat square on the ground at y 0, centred on x 0, z 0, with the top of the image towards −Z. Roughness 1, metallic 0, base colour only.</div>
+    <div class="row"><label for="fileName">File name</label><input id="fileName" type="text" spellcheck="false"></div>
+    <div class="btns">
+      <button id="imageBtn" class="primary">Download image</button>
+      <button id="glbBtn">Download GLB</button>
+      <button id="packBtn">Texture pack (.zip)</button>
+    </div>
+    <div class="hint">The pack has every texture and decal with this seed and palette at the chosen size, as PNG, plus <code>manifest.json</code> with the settings to regenerate each one.</div>
+    <table class="stats">
+      <tbody>
+        <tr><td>Image</td><td id="sR">–</td></tr>
+        <tr><td>Tiling</td><td id="sS">–</td></tr>
+        <tr><td>Opaque pixels</td><td id="sA">–</td></tr>
+        <tr><td>Target (W × H × D)</td><td id="sT">–</td></tr>
+        <tr><td>Last file</td><td id="sZ">–</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Palette atlas (from a model)</h2>
+    <div class="hint">Open a GLB with several materials. Every flat colour becomes a swatch and every texture whose UVs stay inside 0 to 1 is copied into one atlas image; the UVs are moved onto it, so the model needs one material (plus one per glow colour). Roughness 1, metallic 0.</div>
+    <div class="btns" style="margin-top:2px">
+      <button id="modelBtn">Open model…</button>
+      <input id="modelFile" type="file" accept=".glb,model/gltf-binary" hidden>
+    </div>
+    <div class="row"><label for="atlasRes">Atlas size</label>
+      <select id="atlasRes"><option value="256">256 px</option><option value="512" selected>512 px (game)</option><option value="1024">1024 px</option></select></div>
+    <div class="row"><label for="atlasCopy">Copy textures into the atlas</label><input id="atlasCopy" type="checkbox" checked></div>
+    <div class="hint">Off: textured materials become their average colour, so the atlas is swatches only.</div>
+    <div class="row"><label for="atlasFormat">Atlas image in the GLB</label>
+      <select id="atlasFormat"><option value="image/png">PNG</option><option value="image/jpeg">JPEG</option></select></div>
+    <div class="btns">
+      <button id="atlasBtn" disabled>Build atlas</button>
+      <button id="atlasGlbBtn" class="primary" disabled>Download atlas GLB</button>
+      <button id="atlasPngBtn" disabled>Atlas PNG</button>
+    </div>
+    <div id="log"></div>
+  </aside>
+
+  <main id="main">
+    <div id="viewport"></div>
+    <div id="toolbar">
+      <select id="preview" title="Preview shape">
+        <option value="plane">Tiled ground (3 × 3)</option><option value="cube">Cube</option><option value="sphere">Sphere</option>
+        <option value="decal">Decal on the ground</option><option value="model" disabled>Model</option>
+      </select>
+      <label class="chk"><input id="rotate" type="checkbox"> Auto-rotate</label>
+      <label class="chk"><input id="knight" type="checkbox" checked> 1.8 m figure</label>
+      <button id="fitBtn">Fit view</button>
+      <span id="texName"></span>
+    </div>
+    <label id="flatOpts" class="chk"><input id="tile2" type="checkbox" checked> Show 2 × 2 tiles</label>
+    <canvas id="flat" width="440" height="440"></canvas>
+    <div id="busy"><div class="spinner"></div><span id="busyText">Working…</span></div>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+const $ = (id) => document.getElementById(id);
+const PI = Math.PI;
+const TARGETS_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/src/env/targets.json';
+let TARGETS = { tolerance: 0.15, knightHeight: 1.8, maxTriangles: 10000, maxFileMB: 1.5, objects: {} };
+
+// ---------- random ----------
+function hashSeed(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+  h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+function makeRng(str) {
+  let a = hashSeed(str);
+  const next = () => { // mulberry32
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  return { next, range: (lo, hi) => lo + (hi - lo) * next(), int: (lo, hi) => lo + Math.floor(next() * (hi - lo + 1)), pick: (arr) => arr[Math.floor(next() * arr.length)] };
+}
+const randomSeed = () => {
+  const words = ['ember', 'frost', 'moon', 'rune', 'ash', 'star', 'thorn', 'mist', 'void', 'dawn', 'storm', 'shade', 'oak', 'opal', 'wyrm', 'glyph'];
+  const r = makeRng(String(Math.random()) + Date.now());
+  return r.pick(words) + '-' + r.pick(words) + '-' + r.int(10, 999);
+};
+
+// ---------- noise ----------
+// Value noise, fbm and Worley cells that repeat with an integer period, so a texture sampled over u, v in [0, 1)
+// with integer frequencies tiles without a seam.
+const md = (a, n) => ((a % n) + n) % n;
+function makeNoise(r) {
+  const p = Array.from({ length: 256 }, (_, i) => i);
+  for (let i = 255; i > 0; i--) { const j = Math.floor(r.next() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+  const perm = new Uint8Array(512); for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+  const val = new Float32Array(256); for (let i = 0; i < 256; i++) val[i] = r.next();
+  const h2 = (x, y) => perm[perm[x & 255] + (y & 255)];
+  function noise(x, y, px = 256, py = 256) {
+    const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+    const x0 = md(xi, px), x1 = md(xi + 1, px), y0 = md(yi, py), y1 = md(yi + 1, py);
+    const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    const a = val[h2(x0, y0)], b = val[h2(x1, y0)], c = val[h2(x0, y1)], d = val[h2(x1, y1)];
+    return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+  }
+  // fbm over [0,1)^2 with base frequency f (integer = tiles), octaves oct; ox/oy shift the pattern.
+  function fbm(u, v, f, oct = 4, ox = 0, oy = 0) {
+    let s = 0, amp = 1, norm = 0, fr = f;
+    for (let o = 0; o < oct; o++) { s += amp * noise((u + ox) * fr, (v + oy) * fr, fr, fr); norm += amp; amp *= 0.5; fr *= 2; }
+    return s / norm;
+  }
+  // Worley cells: n x n jittered points; W.f1/W.f2 = nearest/second distance (in cells), W.id = cell value 0..1,
+  // W.dx/W.dy = offset from the nearest point.
+  const W = { f1: 0, f2: 0, id: 0, dx: 0, dy: 0 };
+  function worley(u, v, n, jit = 0.85, salt = 0) {
+    const x = u * n, y = v * n, xi = Math.floor(x), yi = Math.floor(y);
+    let f1 = 9, f2 = 9, id = 0, bx = 0, by = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const cx = xi + dx, cy = yi + dy, wx = md(cx, n) + salt, wy = md(cy, n);
+      const qx = cx + 0.5 + (val[h2(wx + 101, wy)] - 0.5) * jit, qy = cy + 0.5 + (val[h2(wx, wy + 57)] - 0.5) * jit;
+      const ex = x - qx, ey = y - qy, d = Math.sqrt(ex * ex + ey * ey);
+      if (d < f1) { f2 = f1; f1 = d; id = val[h2(wx, wy)]; bx = ex; by = ey; } else if (d < f2) f2 = d;
+    }
+    W.f1 = f1; W.f2 = f2; W.id = id; W.dx = bx; W.dy = by;
+    return W;
+  }
+  return { noise, fbm, worley, h2, val };
+}
+
+// ---------- colour helpers (sRGB 0..1) ----------
+const clamp01 = (x) => x < 0 ? 0 : x > 1 ? 1 : x;
+const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const ramp3 = (c0, c1, c2, t) => t < 0.5 ? mix(c0, c1, clamp01(t * 2)) : mix(c1, c2, clamp01((t - 0.5) * 2));
+const hexRgb = (h) => { const n = parseInt(h.replace('#', ''), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+const rgbHex = (c) => '#' + c.map((x) => Math.round(clamp01(x) * 255).toString(16).padStart(2, '0')).join('');
+const ASH_GREY = hexRgb('#8d8780'), EMBER = hexRgb('#ff5a0f');
+
+// Decal helpers: p in [-1, 1]^2 around the centre; an irregular outline radius per angle.
+const polar = (u, v) => { const x = (u - 0.5) * 2, y = (v - 0.5) * 2; return { x, y, d: Math.hypot(x, y), a: Math.atan2(y, x) / (2 * PI) + 0.5 }; };
+const outline = (e, a, freq, amp, base = 0.8) => base + amp * ((e.noise(a * freq, 3.7, freq) - 0.5) * 2 + 0.4 * (e.noise(a * freq * 4, 9.1, freq * 4) - 0.5));
+// Soft edge with a noisy fringe: 1 inside, 0 outside, the fringe width set by Edge softness.
+const edgeAlpha = (e, t, u, v) => 1 - smooth(1 - e.soft, 1, t + (e.fbm(u, v, 9, 3, 0.3, 0.7) - 0.5) * e.soft * 1.2);
+
+// ---------- kinds ----------
+// group 'tex' = tiling texture (must repeat across u and v), 'decal' = alpha image centred in the square.
+// slots: colour names; pal: defaults per game palette; build(e) returns (u, v) => [r, g, b] or [r, g, b, a].
+const opt = (label, values) => ({ label, values });
+const KINDS = {
+  thatch: {
+    label: 'Thatch', group: 'tex', slots: ['Straw', 'Shadow', 'Highlight'],
+    pal: { field: ['#d1b25a', '#7a5f2a', '#ead08a'], ash: ['#8d8780', '#4a3722', '#b0aaa2'] },
+    build(e) {
+      const rows = 4 * e.S, C = e.C;
+      return (u, v) => {
+        const rv = v * rows + 0.5 + e.noise(u * 32 * e.S, 7.3, 32 * e.S) * 0.35, row = md(Math.floor(rv), rows), f = rv - Math.floor(rv);
+        const strands = e.noise(u * 96 * e.S + row * 17.1, f * 3, 96 * e.S), fine = e.noise(u * 192 * e.S + row * 5.3, f * 6, 192 * e.S);
+        const shade = 0.5 + 0.5 * smooth(0, 0.5, f);
+        let c = mix(C[1], C[0], clamp01((0.45 * strands + 0.55 * fine) * shade * 1.35));
+        if (fine > 0.74 && f > 0.25) c = mix(c, C[2], smooth(0.74, 0.9, fine));
+        return c;
+      };
+    },
+  },
+  planks: {
+    label: 'Wood planks', group: 'tex', slots: ['Wood', 'Seam', 'Grain'],
+    pal: { field: ['#8a5f37', '#3b2614', '#6b4a2b'], ash: ['#4a3722', '#1d1610', '#2b2b2b'] },
+    opts: opt('Nails', { on: 'Nails at the joints', off: 'No nails' }),
+    build(e) {
+      const rows = 4 * e.S, C = e.C, rr = e.r;
+      const lay = Array.from({ length: rows }, () => {
+        const n = rr.int(1, 3), off = rr.next(), cuts = Array.from({ length: n }, () => rr.next()).sort();
+        return { off, cuts, tints: Array.from({ length: n }, () => rr.range(0.85, 1.12)) };
+      });
+      const seam = 0.0045, nails = e.opt !== 'off';
+      return (u, v) => {
+        const rv = v * rows + 0.5, row = Math.floor(rv) % rows, f = rv - Math.floor(rv), L = lay[row]; // wrap mid-board
+        const uu = md(u - L.off, 1);
+        let seg = 0; while (seg < L.cuts.length && L.cuts[seg] <= uu) seg++;
+        let dEnd = 9; for (const c of L.cuts) { const d = Math.abs(uu - c); dEnd = Math.min(dEnd, d, 1 - d); }
+        const tint = L.tints[seg % L.tints.length];
+        const g = e.noise(u * 5 * e.S + seg * 3.1 + row * 1.7, rv * 5, 5 * e.S);
+        const lines = 0.5 + 0.5 * Math.sin((g * 9 + f * 2.2) * PI * 2);
+        let c = mix(mul(C[0], tint), C[2], Math.pow(lines, 5) * 0.6 + e.noise(u * 64 * e.S, rv * 16, 64 * e.S) * 0.15);
+        const dv = Math.min(f, 1 - f) / rows; // distance to the long seams, image units
+        c = mul(c, 0.82 + 0.3 * smooth(0, 0.02, f / rows) - 0.12 * smooth(0.92, 1, f));
+        const d = Math.min(dv, dEnd);
+        if (d < seam) c = mix(C[1], c, smooth(seam * 0.4, seam, d));
+        if (nails && dEnd < 0.03) for (const fy of [0.28, 0.72]) {
+          const nd = Math.hypot((dEnd - 0.014), (f - fy) / rows);
+          if (nd < 0.0055) c = mix(mul(C[1], 0.6), c, smooth(0.003, 0.0055, nd));
+        }
+        return c;
+      };
+    },
+  },
+  cobbles: {
+    label: 'Cobblestones', group: 'tex', slots: ['Stone', 'Stone 2', 'Mortar'],
+    pal: { field: ['#8a8578', '#9d978a', '#5c574e'], ash: ['#4d4a46', '#5c5853', '#2b2b2b'] },
+    build(e) {
+      const C = e.C, n = 6 * e.S;
+      return (u, v) => {
+        const w = e.worley(u, v, n, 0.8), edge = w.f2 - w.f1, id = w.id, f1 = w.f1, lx = w.dx, ly = w.dy;
+        const speck = e.fbm(u, v, 32 * e.S, 3);
+        let c = mix(C[0], C[1], id);
+        c = mul(c, (0.78 + 0.3 * (1 - f1)) * (0.88 + 0.25 * speck) * (1 - 0.18 * clamp01(lx + ly)));
+        const mw = 0.09 + 0.05 * e.noise(u * 24 * e.S, v * 24 * e.S, 24 * e.S, 24 * e.S);
+        return mix(mul(C[2], 0.85 + 0.3 * speck), c, smooth(mw, mw + 0.07, edge));
+      };
+    },
+  },
+  bricks: {
+    label: 'Stone blocks', group: 'tex', slots: ['Stone', 'Stone 2', 'Mortar'],
+    pal: { field: ['#8a8578', '#a09a8c', '#5c574e'], ash: ['#4d4a46', '#3e3b38', '#2b2b2b'] },
+    build(e) {
+      const C = e.C, rows = 4 * e.S, cols = 2 * e.S;
+      return (u, v) => {
+        const wob = (e.noise(u * 40 * e.S, v * 40 * e.S, 40 * e.S, 40 * e.S) - 0.5) * 0.05;
+        const rv = v * rows + wob, row = md(Math.floor(rv), rows), fy = rv - Math.floor(rv);
+        const cu = u * cols + (row % 2) * 0.5 + wob, col = md(Math.floor(cu), cols), fx = cu - Math.floor(cu);
+        const dx = Math.min(fx, 1 - fx) / cols, dy = Math.min(fy, 1 - fy) / rows, d = Math.min(dx, dy);
+        const id = e.val[e.h2(col + 11, row + 3)], speck = e.fbm(u, v, 24 * e.S, 3);
+        let c = mul(mix(C[0], C[1], id), 0.85 + 0.3 * speck);
+        const bev = 0.018;
+        if (d < bev) c = mul(c, (fx < 0.5 && dx < bev) || (fy < 0.5 && dy < bev) ? 1.12 : 0.8);
+        return mix(mul(C[2], 0.85 + 0.3 * speck), c, smooth(0.005, 0.009, d));
+      };
+    },
+  },
+  rooftiles: {
+    label: 'Roof tiles', group: 'tex', slots: ['Tile', 'Shadow', 'Highlight'],
+    pal: { field: ['#a83a2c', '#5e1e16', '#c8604a'], ash: ['#4a4644', '#232120', '#6a6560'] },
+    opts: opt('Shape', { round: 'Rounded (clay)', square: 'Square (slate)' }),
+    build(e) {
+      const C = e.C, rows = 6 * e.S, cols = 8 * e.S, round = e.opt !== 'square';
+      return (u, v) => {
+        const rv = v * rows + 0.5, row = md(Math.floor(rv), rows), fy = rv - Math.floor(rv); // wrap mid-tile
+        const cu = u * cols + (row % 2) * 0.5, col = md(Math.floor(cu), cols), fx = cu - Math.floor(cu);
+        const id = e.val[e.h2(col + 7, row + 19)];
+        const bottom = round ? 1 - 0.28 * Math.pow(2 * fx - 1, 2) : 0.97;
+        const gap = Math.min(fx, 1 - fx);
+        if (fy > bottom || gap < 0.035) return mul(C[1], 0.85 + 0.2 * fy);
+        let c = mul(mix(C[0], C[2], id * 0.35), (0.7 + 0.35 * fy) * (0.6 + 0.4 * smooth(0, 0.2, fy)));
+        if (round) c = mul(c, 0.85 + 0.25 * Math.sin(fx * PI));
+        c = mul(c, 0.9 + 0.2 * e.fbm(u, v, 32 * e.S, 2));
+        if (bottom - fy < 0.06) c = mix(c, C[2], 0.45);
+        return c;
+      };
+    },
+  },
+  bark: {
+    label: 'Bark', group: 'tex', slots: ['Bark', 'Crevice', 'Light'],
+    pal: { field: ['#6b4a2b', '#3a2716', '#8a6a48'], ash: ['#2b2b2b', '#151414', '#4a3722'] },
+    build(e) {
+      const C = e.C, S = e.S;
+      return (u, v) => {
+        const warp = e.fbm(u, v, 3 * S, 3);
+        const n = e.noise(u * 14 * S + warp * 3, v * 3 * S, 14 * S, 3 * S);
+        const ridge = 1 - Math.abs(2 * n - 1), fine = e.fbm(u, v, 24 * S, 3, 0.2, 0.5);
+        let c = mix(C[0], C[2], clamp01(ridge * fine * 1.3 - 0.2));
+        return mix(C[1], c, smooth(0.25, 0.45, ridge));
+      };
+    },
+  },
+  grass: {
+    label: 'Grass ground', group: 'tex', slots: ['Grass', 'Shadow', 'Light'],
+    pal: { field: ['#5a8c44', '#3d6630', '#86b45e'], ash: ['#6f6a52', '#4a3722', '#8d8780'] },
+    build(e) {
+      const C = e.C, S = e.S;
+      return (u, v) => {
+        const base = e.fbm(u, v, 4 * S, 4), blades = e.noise(u * 128 * S, v * 24 * S, 128 * S, 24 * S);
+        return ramp3(C[1], C[0], C[2], clamp01(0.62 * base + 0.48 * blades - 0.05));
+      };
+    },
+  },
+  moss: {
+    label: 'Moss', group: 'tex', slots: ['Moss', 'Shadow', 'Light'],
+    pal: { field: ['#4f7d3a', '#2c4a22', '#7fae55'], ash: ['#5a5a3c', '#2f2e22', '#7a785a'] },
+    build(e) {
+      const C = e.C, S = e.S;
+      return (u, v) => {
+        const w = e.worley(u, v, 12 * S, 0.9), dome = clamp01(1 - w.f1 * 1.25);
+        return ramp3(C[1], C[0], C[2], clamp01(dome * 0.75 + e.fbm(u, v, 48 * S, 2) * 0.35 + (w.id - 0.5) * 0.15));
+      };
+    },
+  },
+  dirt: {
+    label: 'Dirt with pebbles', group: 'tex', slots: ['Dirt', 'Dark', 'Pebble'],
+    pal: { field: ['#7a5a3a', '#5a4029', '#9a948a'], ash: ['#4a3722', '#2b2018', '#5c5853'] },
+    build(e) {
+      const C = e.C, S = e.S;
+      return (u, v) => {
+        let c = mix(C[1], C[0], clamp01(e.fbm(u, v, 6 * S, 5) * 1.3 - 0.1));
+        const w = e.worley(u, v, 16 * S, 0.8);
+        const rad = 0.22 + 0.14 * w.id;
+        if (w.id < 0.45 && w.f1 < rad) {
+          const sh = 0.75 + 0.35 * (1 - w.f1 / rad) - 0.2 * clamp01((w.dx + w.dy) / rad);
+          c = mix(c, mul(C[2], sh * (0.85 + 0.3 * w.id)), smooth(rad, rad * 0.8, w.f1));
+        }
+        return c;
+      };
+    },
+  },
+  ash: {
+    label: 'Ash ground', group: 'tex', slots: ['Ash', 'Char', 'Ember'], embers: true,
+    pal: { field: ['#8d8780', '#2b2b2b', '#ff5a0f'], ash: ['#8d8780', '#2b2b2b', '#ff5a0f'] },
+    build(e) {
+      const C = e.C, S = e.S;
+      return (u, v) => {
+        let c = mul(C[0], 0.8 + 0.35 * e.fbm(u, v, 5 * S, 5));
+        const ch = e.fbm(u, v, 7 * S, 3, 0.37, 0.11);
+        c = mix(c, C[1], smooth(0.6, 0.7, ch) * 0.85);
+        const w = e.worley(u, v, 40 * S, 0.9);
+        if (w.id < 0.12 && w.f1 < 0.2) c = mix(C[1], c, smooth(0.1, 0.2, w.f1));
+        if (e.embers && w.id > 0.965 && w.f1 < 0.16) c = mix(C[2], c, smooth(0.06, 0.16, w.f1));
+        return c;
+      };
+    },
+  },
+  scorched: {
+    label: 'Scorched cracked earth', group: 'tex', slots: ['Scorched', 'Charcoal', 'Ember'], embers: true, embersOn: true,
+    pal: { field: ['#4a3722', '#1e1c1a', '#ff5a0f'], ash: ['#4a3722', '#1e1c1a', '#ff5a0f'] },
+    build(e) {
+      const C = e.C, S = e.S;
+      return (u, v) => {
+        const w = e.worley(u, v, 6 * S, 0.9), edge = w.f2 - w.f1;
+        const cw = 0.045 + 0.04 * e.noise(u * 20 * S, v * 20 * S, 20 * S, 20 * S);
+        let c = mix(C[1], C[0], clamp01(e.fbm(u, v, 8 * S, 4) * 1.4 - 0.15));
+        c = mul(c, 0.55 + 0.45 * smooth(cw, cw + 0.25, edge) + 0.1 * w.id);
+        if (edge < cw) c = e.embers ? mix(C[2], mul(C[1], 0.5), smooth(cw * 0.25, cw, edge)) : mul(C[1], 0.45);
+        return c;
+      };
+    },
+  },
+  // ----- decals -----
+  ashpatch: {
+    label: 'Ash patch', group: 'decal', slots: ['Ash', 'Char', 'Stubs'], embers: true,
+    pal: { field: ['#8d8780', '#5a5550', '#1e1c1a'], ash: ['#8d8780', '#5a5550', '#1e1c1a'] },
+    build(e) {
+      const C = e.C;
+      return (u, v) => {
+        const p = polar(u, v), R = outline(e, p.a, 6, 0.1, 0.82), t = p.d / R;
+        let c = mul(C[0], 0.82 + 0.3 * e.fbm(u, v, 6, 5));
+        c = mix(c, C[1], smooth(0.55, 0.7, e.fbm(u, v, 5, 3, 0.4, 0.2)) * 0.8);
+        c = mix(c, C[1], smooth(0.5, 1, t) * 0.35); // greyer towards the edge
+        const w = e.worley(u, v, 26 * e.S, 0.9);
+        if (w.id < 0.3 && w.f1 < 0.1 && t < 0.92) c = mix(C[2], c, smooth(0.05, 0.1, w.f1));
+        if (e.embers && w.id > 0.94 && w.f1 < 0.12 && t < 0.6) c = mix(EMBER, c, smooth(0.05, 0.12, w.f1));
+        return [...c, edgeAlpha(e, t, u, v)];
+      };
+    },
+  },
+  scorch: {
+    label: 'Scorch mark', group: 'decal', slots: ['Soot', 'Burn', 'Ember'], embers: true,
+    pal: { field: ['#141312', '#4a3722', '#ff5a0f'], ash: ['#141312', '#4a3722', '#ff5a0f'] },
+    opts: opt('Shape', { mark: 'Scorch mark', ring: 'Fire-pit ring (ash centre)' }),
+    build(e) {
+      const C = e.C, ring = e.opt === 'ring';
+      return (u, v) => {
+        const p = polar(u, v), R = outline(e, p.a, 5, 0.1, 0.8), k = e.fbm(u, v, 7, 4), t = p.d / R + (k - 0.5) * 0.25;
+        let c = mix(C[0], C[1], smooth(0.15, 0.95, t));
+        let a = 1 - smooth(0.45, 1, t);
+        a = Math.pow(a, 0.7) * (0.85 + 0.15 * k);
+        if (ring) { c = mix(mul(ASH_GREY, 0.8 + 0.3 * k), c, smooth(0.18, 0.4, t)); a = Math.max(a, 1 - smooth(0.3, 0.4, t)); }
+        if (e.embers) { const w = e.worley(u, v, 30, 0.9); if (w.id > 0.9 && w.f1 < 0.14 && t < 0.55) c = mix(C[2], c, smooth(0.05, 0.14, w.f1)); }
+        return [...c, clamp01(a)];
+      };
+    },
+  },
+  flagstones: {
+    label: 'Flagstone circle', group: 'decal', slots: ['Stone', 'Stone 2', 'Grass'],
+    pal: { field: ['#8a8578', '#969078', '#5a8c44'], ash: ['#5c5853', '#4d4a46', '#2b2b2b'] },
+    opts: opt('Gaps', { grass: 'Grass between the slabs', open: 'Open (transparent)' }),
+    build(e) {
+      const C = e.C, rr = e.r, pts = [[0, 0, rr.next()]];
+      const rings = 3 + e.S;
+      for (let k = 1; k <= rings; k++) {
+        const rad = (k / (rings + 0.35)) * 0.94, n = Math.round((2 * PI * rad) / (0.94 / (rings + 0.35)) * 0.95), off = rr.next();
+        for (let i = 0; i < n; i++) { const a = ((i + off) / n) * PI * 2 + rr.range(-0.06, 0.06), q = rad + rr.range(-0.02, 0.02); pts.push([Math.cos(a) * q, Math.sin(a) * q, rr.next()]); }
+      }
+      const open = e.opt === 'open', cellR = 0.94 / (rings + 0.35);
+      return (u, v) => {
+        const p = polar(u, v);
+        let f1 = 9, f2 = 9, id = 0;
+        for (const q of pts) { const d = Math.hypot(p.x - q[0], p.y - q[1]); if (d < f1) { f2 = f1; f1 = d; id = q[2]; } else if (d < f2) f2 = d; }
+        const edge = (f2 - f1) / cellR, k = e.fbm(u, v, 12, 3);
+        const R = outline(e, p.a, 12, 0.02, 0.95);
+        let c = mul(mix(C[0], C[1], id), (0.82 + 0.28 * k) * (0.85 + 0.2 * smooth(0, 0.35, edge)));
+        const gw = 0.07 + 0.04 * e.noise(u * 30, v * 30, 30, 30);
+        const slab = smooth(gw, gw + 0.05, edge);
+        let a = 1 - smooth(R - 0.03, R, p.d);
+        if (open) a *= slab; else c = mix(mul(C[2], 0.8 + 0.35 * e.fbm(u, v, 40, 2)), c, slab);
+        return [...c, a];
+      };
+    },
+  },
+  puddle: {
+    label: 'Puddle', group: 'decal', slots: ['Water', 'Deep', 'Rim'],
+    pal: { field: ['#5b7186', '#2e3e4f', '#a9b8c4'], ash: ['#4a4e52', '#1f2226', '#8d8780'] },
+    build(e) {
+      const C = e.C;
+      return (u, v) => {
+        const p = polar(u, v), R = outline(e, p.a, 4, 0.13, 0.72), t = Math.hypot(p.x, p.y * 1.25) / R;
+        let c = mix(C[1], C[0], smooth(0, 0.75, t));
+        const streak = e.noise((u + v) * 6, (u - v) * 30, 256, 256);
+        c = mix(c, C[2], smooth(0.72, 0.85, streak) * 0.4);
+        c = mix(c, C[2], smooth(0.8, 0.95, t) * 0.7);
+        return [...c, 0.82 * (1 - smooth(1 - e.soft * 0.4, 1, t))];
+      };
+    },
+  },
+  mosspatch: {
+    label: 'Moss patch', group: 'decal', slots: ['Moss', 'Shadow', 'Light'],
+    pal: { field: ['#4f7d3a', '#2c4a22', '#7fae55'], ash: ['#5a5a3c', '#2f2e22', '#7a785a'] },
+    build(e) {
+      const C = e.C;
+      return (u, v) => {
+        const p = polar(u, v), R = outline(e, p.a, 5, 0.12, 0.78), t = p.d / R;
+        const w = e.worley(u, v, 10 * e.S, 0.9), dome = clamp01(1 - w.f1 * 1.3);
+        const cover = (1 - t) * 1.6 + dome * 0.7 - 0.45 + (e.fbm(u, v, 8, 3) - 0.5) * 0.4;
+        const c = ramp3(C[1], C[0], C[2], clamp01(dome * 0.8 + e.fbm(u, v, 40, 2) * 0.3));
+        return [...c, smooth(0.1, 0.1 + e.soft, cover)];
+      };
+    },
+  },
+  cracks: {
+    label: 'Ground cracks', group: 'decal', slots: ['Crack', 'Edge', 'Glow'], embers: true, embersOn: true,
+    pal: { field: ['#2a2420', '#5a5048', '#ff5a0f'], ash: ['#141312', '#3a3530', '#ff5a0f'] },
+    build(e) {
+      const C = e.C;
+      return (u, v) => {
+        const p = polar(u, v), R = outline(e, p.a, 5, 0.1, 0.85), t = p.d / R;
+        const w = e.worley(u, v, 4 + 2 * e.S, 0.9), edge = w.f2 - w.f1;
+        const cw = (0.035 + 0.035 * e.noise(u * 16, v * 16, 16, 16)) * (1.3 - t * 0.8);
+        const line = 1 - smooth(cw, cw * 2.2, edge), keep = smooth(0.3, 0.42, e.fbm(u, v, 5, 3, 0.6, 0.1));
+        const core = 1 - smooth(cw * 0.3, cw, edge);
+        const c = e.embers ? mix(C[1], C[2], core) : mix(C[1], C[0], core);
+        return [...c, clamp01(line * keep * (1 - smooth(0.7, 1, t)))];
+      };
+    },
+  },
+  leaves: {
+    label: 'Fallen leaves', group: 'decal', slots: ['Leaf 1', 'Leaf 2', 'Leaf 3'],
+    pal: { field: ['#c8782a', '#a83a2c', '#d1b25a'], ash: ['#4a3722', '#6b4a2b', '#2b2b2b'] },
+    build(e) {
+      const C = e.C, rr = e.r, n = 40 + 25 * e.S;
+      const L = Array.from({ length: n }, () => {
+        const rad = Math.sqrt(rr.next()) * 0.78, a = rr.next() * PI * 2, len = rr.range(0.06, 0.1);
+        return { x: Math.cos(a) * rad, y: Math.sin(a) * rad, rot: rr.next() * PI * 2, len, wid: len * rr.range(0.38, 0.5), ci: rr.int(0, 2), sh: rr.range(0.8, 1.15) };
+      });
+      return (u, v) => {
+        const p = polar(u, v);
+        for (let i = n - 1; i >= 0; i--) { // last leaf on top
+          const l = L[i], dx = p.x - l.x, dy = p.y - l.y;
+          if (dx * dx + dy * dy > l.len * l.len) continue;
+          const cs = Math.cos(l.rot), sn = Math.sin(l.rot), lx = (dx * cs + dy * sn) / l.len, ly = (-dx * sn + dy * cs) / l.wid;
+          const half = 1 - lx * lx; // pointed at both ends
+          if (Math.abs(ly) > half) continue;
+          let c = mul(C[l.ci], l.sh * (0.85 + 0.25 * (1 - Math.abs(ly) / Math.max(half, 1e-3))));
+          if (Math.abs(ly) < 0.07) c = mul(c, 0.7); // midrib
+          const a = smooth(0, 0.08, half - Math.abs(ly));
+          return [...c, a];
+        }
+        return [...C[0], 0];
+      };
+    },
+  },
+};
+const GROUPS = { tex: 'Tiling textures', decal: 'Decals (alpha)' };
+
+// ---------- game ids (Embers of Valdren) ----------
+// Flat ground pieces from the missing-objects list (section F). Sizes come from targets.json when the game adds
+// them there; "box" is the size from the list until then.
+const GAME_IDS = {
+  'ash-patch-decal': { kind: 'ashpatch', pal: 'ash', box: { w: 3, d: 3, h: 0.02 } },
+  'waystone-flagstones': { kind: 'flagstones', pal: 'field', opt: 'grass', box: { w: 9, d: 9, h: 0.1 } },
+};
+const gameBox = (id) => TARGETS.objects?.[id] || GAME_IDS[id].box;
+
+// ---------- generation ----------
+// Everything that defines an image; the pixels are a pure function of these traits and the resolution.
+function defaultColors(kind, palette, seed) {
+  const K = KINDS[kind];
+  if (palette !== 'random') return [...K.pal[palette]];
+  const r = makeRng(kind + '|' + seed + '|colors'), dh = r.range(-0.08, 0.08), ds = r.range(-0.15, 0.15), dl = r.range(-0.08, 0.08);
+  return K.pal.field.map((h) => {
+    const c = new THREE.Color(h), hsl = {}; c.getHSL(hsl, THREE.SRGBColorSpace);
+    return '#' + c.setHSL(md(hsl.h + dh, 1), clamp01(hsl.s + ds), clamp01(hsl.l + dl), THREE.SRGBColorSpace).getHexString(THREE.SRGBColorSpace);
+  });
+}
+function makeTraits(kind, seed, over = {}) {
+  const K = KINDS[kind], palette = over.palette || 'field';
+  return {
+    kind, seed, palette, scale: 2, contrast: 1, posterize: 0, soft: 0.25,
+    opt: K.opts ? Object.keys(K.opts.values)[0] : null, embers: !!K.embersOn,
+    colors: defaultColors(kind, palette, seed), ...over,
+  };
+}
+// Returns { data: Uint8ClampedArray RGBA, res, tiling }.
+function generate(t, res = 512) {
+  const K = KINDS[t.kind], r = makeRng(t.kind + '|' + t.seed), nz = makeNoise(r);
+  const e = { ...nz, r, S: t.scale, C: t.colors.map(hexRgb), opt: t.opt, embers: t.embers, soft: t.soft };
+  const px = K.build(e), f = new Float32Array(res * res * 4), decal = K.group === 'decal';
+  for (let y = 0; y < res; y++) for (let x = 0; x < res; x++) {
+    const u = (x + 0.5) / res, v = (y + 0.5) / res, c = px(u, v), i = (y * res + x) * 4;
+    f[i] = c[0]; f[i + 1] = c[1]; f[i + 2] = c[2]; f[i + 3] = c.length > 3 ? c[3] : 1;
+    if (decal) f[i + 3] *= 1 - smooth(0.92, 0.99, Math.hypot(u - 0.5, v - 0.5) * 2); // always clear at the border
+  }
+  // contrast around the alpha-weighted mean colour, then optional toon bands on the luminance
+  let m = [0, 0, 0], wsum = 0;
+  for (let i = 0; i < f.length; i += 4) { const a = f[i + 3]; m[0] += f[i] * a; m[1] += f[i + 1] * a; m[2] += f[i + 2] * a; wsum += a; }
+  m = m.map((x) => x / Math.max(wsum, 1e-6));
+  const lum = (i) => 0.2126 * f[i] + 0.7152 * f[i + 1] + 0.0722 * f[i + 2];
+  if (t.contrast !== 1) for (let i = 0; i < f.length; i += 4) for (let k = 0; k < 3; k++) f[i + k] = m[k] + (f[i + k] - m[k]) * t.contrast;
+  if (t.posterize > 1) {
+    let lo = 1, hi = 0;
+    for (let i = 0; i < f.length; i += 4) if (f[i + 3] > 0.5) { const l = lum(i); lo = Math.min(lo, l); hi = Math.max(hi, l); }
+    const n = t.posterize, span = Math.max(hi - lo, 1e-3);
+    for (let i = 0; i < f.length; i += 4) {
+      const l = Math.max(lum(i), 1e-3), q = lo + (Math.min(n - 1, Math.floor(((l - lo) / span) * n)) + 0.5) * (span / n), k = q / l;
+      f[i] *= k; f[i + 1] *= k; f[i + 2] *= k;
+    }
+  }
+  // Transparent pixels get the decal's mean colour, so filtering at the edge never pulls in black.
+  const data = new Uint8ClampedArray(f.length), bleed = m.map((x) => clamp01(x));
+  for (let i = 0; i < f.length; i += 4) {
+    const a = clamp01(f[i + 3]), w = smooth(0, 0.25, a);
+    for (let k = 0; k < 3; k++) data[i + k] = Math.round(clamp01(bleed[k] + (f[i + k] - bleed[k]) * w) * 255);
+    data[i + 3] = Math.round(a * 255);
+  }
+  return { data, res, tiling: K.group === 'tex' };
+}
+// Edge difference across the wrap divided by the average neighbour difference inside (about 1 = seamless).
+function seamRatio(data, res) {
+  let wrapX = 0, wrapY = 0, inX = 0, inY = 0;
+  const px = (x, y, k) => data[(y * res + x) * 4 + k];
+  for (let y = 0; y < res; y++) for (let x = 0; x < res; x++) for (let k = 0; k < 3; k++) {
+    const c = px(x, y, k), dx = Math.abs(c - px((x + 1) % res, y, k)), dy = Math.abs(c - px(x, (y + 1) % res, k));
+    if (x === res - 1) wrapX += dx; else inX += dx;
+    if (y === res - 1) wrapY += dy; else inY += dy;
+  }
+  return Math.max(wrapX / Math.max(inX / (res - 1), 1), wrapY / Math.max(inY / (res - 1), 1));
+}
+const opaqueShare = (data) => { let n = 0; for (let i = 3; i < data.length; i += 4) if (data[i] >= 128) n++; return n / (data.length / 4); };
+function toCanvas(img) {
+  const c = document.createElement('canvas'); c.width = c.height = img.res;
+  c.getContext('2d').putImageData(new ImageData(img.data, img.res, img.res), 0, 0);
+  return c;
+}
+
+// ---------- PNG / zip / GLB writers ----------
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+const crc32 = (d, c = 0xffffffff) => { for (let i = 0; i < d.length; i++) c = CRC_TABLE[(c ^ d[i]) & 0xff] ^ (c >>> 8); return c; };
+// Own PNG encoder (canvas export premultiplies alpha and loses the colour under transparent pixels).
+async function encodePNG(data, w, h) {
+  const stride = w * 4, raw = new Uint8Array((stride + 1) * h);
+  for (let y = 0; y < h; y++) { // filter 1 (Sub)
+    const o = y * (stride + 1), s = y * stride; raw[o] = 1;
+    for (let x = 0; x < stride; x++) raw[o + 1 + x] = (data[s + x] - (x >= 4 ? data[s + x - 4] : 0)) & 255;
+  }
+  const z = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+  const chunk = (type, body) => {
+    const out = new Uint8Array(12 + body.length), dv = new DataView(out.buffer);
+    dv.setUint32(0, body.length); for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    out.set(body, 8); dv.setUint32(8 + body.length, (crc32(out.subarray(4, 8 + body.length)) ^ 0xffffffff) >>> 0);
+    return out;
+  };
+  const ihdr = new Uint8Array(13), dv = new DataView(ihdr.buffer);
+  dv.setUint32(0, w); dv.setUint32(4, h); ihdr.set([8, 6, 0, 0, 0], 8); // 8-bit RGBA
+  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', z), chunk('IEND', new Uint8Array(0))];
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let off = 0;
+  for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
+}
+const canvasBlob = (canvas, type, q = 0.9) => new Promise((res, rej) => canvas.toBlob((b) => b ? res(b) : rej(new Error(type + ' encoding failed')), type, q));
+async function encodeImage(img, format) {
+  if (format === 'png') return { bytes: await encodePNG(img.data, img.res, img.res), mime: 'image/png', ext: 'png' };
+  const mime = format === 'jpeg' ? 'image/jpeg' : 'image/webp';
+  const blob = await canvasBlob(toCanvas(img), mime);
+  if (blob.type !== mime) log(`This browser cannot write ${format.toUpperCase()}; saved ${blob.type} instead`, 'warn');
+  return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: blob.type, ext: blob.type.split('/')[1].replace('jpeg', 'jpg') };
+}
+// Minimal zip writer (stored, no compression).
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), data = typeof f.data === 'string' ? enc.encode(f.data) : new Uint8Array(f.data), crc = (crc32(data) ^ 0xffffffff) >>> 0;
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint32(14, crc, true);
+    h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint32(16, crc, true);
+    c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+    parts.push(h.buffer, name, data); central.push(c.buffer, name);
+    off += 30 + name.length + data.length;
+  }
+  const size = central.reduce((n, b) => n + b.byteLength, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+  e.setUint32(12, size, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...central, e.buffer], { type: 'application/zip' });
+}
+// Replaces the bytes of GLB images (index -> { bytes, mime }) and repacks the binary chunk.
+function replaceGlbImages(buf, repl) {
+  const dv = new DataView(buf), dec = new TextDecoder();
+  const jsonLen = dv.getUint32(12, true), json = JSON.parse(dec.decode(new Uint8Array(buf, 20, jsonLen)));
+  const binOff = 20 + jsonLen + 8, bin = new Uint8Array(buf, binOff, dv.getUint32(20 + jsonLen, true));
+  const views = json.bufferViews.map((bv) => bin.subarray(bv.byteOffset || 0, (bv.byteOffset || 0) + bv.byteLength));
+  for (const [i, r] of repl) { const img = json.images[i]; views[img.bufferView] = r.bytes; img.mimeType = r.mime; }
+  let off = 0; const offs = views.map((v) => { const o = off; off = Math.ceil((o + v.length) / 4) * 4; return o; });
+  const newBin = new Uint8Array(off);
+  views.forEach((v, i) => { newBin.set(v, offs[i]); json.bufferViews[i].byteOffset = offs[i]; json.bufferViews[i].byteLength = v.length; });
+  json.buffers[0].byteLength = off;
+  let js = new TextEncoder().encode(JSON.stringify(json));
+  const jpad = Math.ceil(js.length / 4) * 4, jb = new Uint8Array(jpad).fill(0x20); jb.set(js); js = jb;
+  const total = 12 + 8 + js.length + 8 + newBin.length, out = new Uint8Array(total), o = new DataView(out.buffer);
+  o.setUint32(0, 0x46546c67, true); o.setUint32(4, 2, true); o.setUint32(8, total, true);
+  o.setUint32(12, js.length, true); o.setUint32(16, 0x4e4f534a, true); out.set(js, 20);
+  o.setUint32(20 + js.length, newBin.length, true); o.setUint32(24 + js.length, 0x004e4942, true); out.set(newBin, 28 + js.length);
+  return out.buffer;
+}
+
+// ---------- viewer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+$('viewport').appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14171f);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 500);
+camera.position.set(3, 3, 4.5);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.autoRotateSpeed = 1.2;
+const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(3, 6, 4);
+scene.add(sun, sun.target, new THREE.HemisphereLight(0xc8d4ff, 0x302820, 1.1));
+const ground = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshStandardMaterial({ color: 0x3d5a32, roughness: 1 }));
+ground.rotation.x = -PI / 2; scene.add(ground);
+const knight = new THREE.Group(); scene.add(knight);
+{
+  const m = new THREE.MeshStandardMaterial({ color: 0x5a6070, roughness: 0.9 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.95, 4, 12), m); body.position.y = 0.725; body.scale.z = 0.7;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), m); head.position.y = 1.63;
+  knight.add(body, head);
+}
+const previewTex = new THREE.CanvasTexture(document.createElement('canvas'));
+previewTex.colorSpace = THREE.SRGBColorSpace; previewTex.wrapS = previewTex.wrapT = THREE.RepeatWrapping;
+previewTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+const previewMat = new THREE.MeshStandardMaterial({ map: previewTex, roughness: 1, metalness: 0 });
+const previewMesh = new THREE.Mesh(new THREE.BufferGeometry(), previewMat); scene.add(previewMesh);
+const modelHolder = new THREE.Group(); scene.add(modelHolder);
+
+function resize() {
+  const el = $('viewport'), w = el.clientWidth, h = Math.max(1, el.clientHeight);
+  renderer.setSize(w, h, false);
+  renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%';
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe($('viewport'));
+resize();
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  controls.autoRotate = $('rotate').checked;
+  controls.update(Math.min(clock.getDelta(), 0.1));
+  renderer.render(scene, camera);
+});
+function fitView() {
+  const obj = $('preview').value === 'model' ? modelHolder : previewMesh;
+  const box = new THREE.Box3().setFromObject(obj);
+  if (knight.visible) box.union(new THREE.Box3().setFromObject(knight));
+  if (box.isEmpty()) return;
+  const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(size.y, Math.hypot(size.x, size.z) * 0.8, 0.5) / 2;
+  const dist = radius / Math.tan((camera.fov * PI) / 360) * 1.6;
+  const dir = new THREE.Vector3(0.5, 0.75, 1).normalize();
+  controls.target.copy(center); camera.position.copy(center).addScaledVector(dir, dist);
+  camera.near = dist / 100; camera.far = dist * 50; camera.updateProjectionMatrix();
+  ground.scale.setScalar(Math.max(size.x, size.z, 2) * 1.6);
+  sun.position.copy(center).add(new THREE.Vector3(0.5, 1, 0.6).multiplyScalar(dist)); sun.target.position.copy(center);
+}
+
+// ---------- state / UI ----------
+const state = { traits: null, image: null, model: null, atlas: null, busy: false };
+const fmtBytes = (b) => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
+const fmtLen = (m) => m < 1 ? (m * 100).toFixed(m < 0.1 ? 1 : 0) + ' cm' : m.toFixed(2) + ' m';
+function log(msg, cls = '') {
+  const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = msg;
+  $('log').appendChild(d); $('log').scrollTop = 1e9;
+}
+const isDecal = (t = state.traits) => KINDS[t.kind].group === 'decal';
+
+$('gameId').add(new Option('None (free design)', ''));
+for (const id of Object.keys(GAME_IDS)) $('gameId').add(new Option(id, id));
+for (const [g, label] of Object.entries(GROUPS)) {
+  const og = document.createElement('optgroup'); og.label = label;
+  for (const [k, K] of Object.entries(KINDS)) if (K.group === g) og.appendChild(new Option(K.label, k));
+  $('kind').appendChild(og);
+}
+for (let i = 0; i < 3; i++) {
+  const l = document.createElement('label'), s = document.createElement('span'); s.id = 'cl_' + i;
+  const inp = document.createElement('input'); inp.type = 'color'; inp.id = 'c_' + i;
+  l.append(s, inp); $('colors').appendChild(l);
+  inp.addEventListener('input', scheduleRebuild);
+}
+
+function writeUI(t) {
+  const K = KINDS[t.kind], decal = K.group === 'decal';
+  $('gameId').value = t.gameId || '';
+  $('kind').value = t.kind; $('seed').value = t.seed; $('palette').value = t.palette;
+  $('scale').value = t.scale; $('contrast').value = t.contrast; $('posterize').value = String(t.posterize); $('soft').value = t.soft;
+  $('optRow').style.display = K.opts ? '' : 'none';
+  if (K.opts) {
+    $('optLabel').textContent = K.opts.label; $('opt').textContent = '';
+    for (const [v, label] of Object.entries(K.opts.values)) $('opt').add(new Option(label, v));
+    $('opt').value = t.opt;
+  }
+  $('embersRow').style.display = K.embers ? '' : 'none'; $('embers').checked = t.embers;
+  K.slots.forEach((s, i) => { $('cl_' + i).textContent = s; $('c_' + i).value = t.colors[i]; });
+  for (const id of ['softRow', 'decalRow', 'alphaRow']) $(id).style.display = decal ? '' : 'none';
+  $('tileRow').style.display = decal ? 'none' : '';
+  $('flatOpts').style.display = decal ? 'none' : '';
+  $('format').querySelector('[value=jpeg]').disabled = decal;
+  if (decal && $('format').value === 'jpeg') $('format').value = 'png';
+  if (t.box) { $('decalW').value = t.box.w; $('decalD').value = t.box.d; }
+  $('decalW').disabled = $('decalD').disabled = !!t.box;
+  $('fileName').value = t.gameId || t.kind;
+  updateLabels();
+}
+function updateLabels() {
+  $('scaleVal').textContent = '×' + $('scale').value;
+  $('contrastVal').textContent = Number($('contrast').value).toFixed(2);
+  $('softVal').textContent = Number($('soft').value).toFixed(2);
+}
+function readUI() {
+  const t = { ...state.traits };
+  t.scale = Number($('scale').value); t.contrast = Number($('contrast').value); t.posterize = Number($('posterize').value);
+  t.soft = Number($('soft').value); t.palette = $('palette').value; t.embers = $('embers').checked;
+  if (KINDS[t.kind].opts) t.opt = $('opt').value;
+  t.colors = [0, 1, 2].map((i) => $('c_' + i).value);
+  return t;
+}
+const resolution = () => Number($('res').value);
+const decalSize = () => ({ w: Math.max(0.05, Number($('decalW').value) || 1), d: Math.max(0.05, Number($('decalD').value) || 1) });
+
+function rebuild({ fit = false } = {}) {
+  const t = state.traits, res = resolution();
+  const img = generate(t, res);
+  state.image = img;
+  // flat view
+  const fc = $('flat'), g = fc.getContext('2d'), src = toCanvas(img);
+  g.clearRect(0, 0, fc.width, fc.height); g.imageSmoothingEnabled = true;
+  if (img.tiling && $('tile2').checked) for (let i = 0; i < 4; i++) g.drawImage(src, (i % 2) * fc.width / 2, (i >> 1) * fc.height / 2, fc.width / 2, fc.height / 2);
+  else g.drawImage(src, 0, 0, fc.width, fc.height);
+  previewTex.image = src; previewTex.needsUpdate = true;
+  // stats
+  $('sR').textContent = `${res} × ${res} px`;
+  if (img.tiling) {
+    const s = seamRatio(img.data, res), ok = s < 2;
+    $('sS').textContent = ok ? `seamless ✓ (edge ${s.toFixed(2)}× inside)` : `seam ✗ (edge ${s.toFixed(2)}× inside)`;
+    $('sS').style.color = ok ? 'var(--ok)' : 'var(--err)';
+  } else { $('sS').textContent = 'decal (no tiling)'; $('sS').style.color = ''; }
+  $('sA').textContent = (opaqueShare(img.data) * 100).toFixed(0) + '%';
+  if (isDecal(t)) { const b = t.box || { ...decalSize(), h: 0 }; $('sT').textContent = `${fmtLen(b.w)} × ${fmtLen(b.h)} × ${fmtLen(b.d)}`; }
+  else $('sT').textContent = `tile ${fmtLen(Number($('tileM').value) || 2)}`;
+  const K = KINDS[t.kind];
+  $('texName').textContent = t.gameId ? `${t.gameId} · ${K.label}` : K.label;
+  if (isDecal(t) && !['decal', 'model'].includes($('preview').value)) $('preview').value = 'decal';
+  if (!isDecal(t) && $('preview').value === 'decal') $('preview').value = 'plane';
+  updatePreview(fit);
+}
+function updatePreview(fit) {
+  const mode = $('preview').value, t = state.traits;
+  previewMesh.visible = mode !== 'model'; modelHolder.visible = mode === 'model';
+  previewMesh.geometry.dispose();
+  previewMat.transparent = false; previewMat.alphaTest = 0; previewMat.depthWrite = true;
+  ground.material.color.set(t.palette === 'ash' ? 0x3a332c : 0x3d5a32);
+  ground.visible = true; ground.position.y = 0;
+  const tile = Number($('tileM').value) || 2;
+  if (mode === 'decal') {
+    const b = t.box || decalSize();
+    previewMesh.geometry = decalGeometry(b.w, b.d); previewMesh.position.set(0, 0.004, 0);
+    previewTex.repeat.set(1, 1); previewTex.flipY = false;
+    if ($('alphaMode').value === 'MASK') previewMat.alphaTest = 0.5; else { previewMat.transparent = true; previewMat.depthWrite = false; }
+  } else if (mode === 'plane') {
+    previewMesh.geometry = decalGeometry(tile * 3, tile * 3); previewMesh.position.set(0, 0.004, 0);
+    previewTex.repeat.set(3, 3); previewTex.flipY = false;
+  } else if (mode === 'cube') {
+    previewMesh.geometry = new THREE.BoxGeometry(tile / 2, tile / 2, tile / 2); previewMesh.position.set(0, tile / 4, 0);
+    previewTex.repeat.set(1, 1); previewTex.flipY = true;
+  } else if (mode === 'sphere') {
+    previewMesh.geometry = new THREE.SphereGeometry(tile / 3, 48, 32); previewMesh.position.set(0, tile / 3, 0);
+    previewTex.repeat.set(2, 1); previewTex.flipY = true;
+  }
+  previewTex.needsUpdate = true; previewMat.needsUpdate = true;
+  const span = mode === 'model' ? new THREE.Box3().setFromObject(modelHolder).getSize(new THREE.Vector3()).x : mode === 'plane' ? tile * 3 : mode === 'decal' ? (t.box || decalSize()).w : tile / 2;
+  knight.visible = $('knight').checked; knight.position.set(-((span || 1) / 2 + 0.6), 0, 0);
+  if (fit) fitView();
+}
+// Flat square on the XZ plane at y 0, normal +Y, image top towards -Z (glTF UVs: v = 0 is the top row).
+function decalGeometry(w, d) {
+  const g = new THREE.PlaneGeometry(w, d).rotateX(-PI / 2), uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i));
+  return g;
+}
+
+function roll(kind, seed, over = {}) {
+  const keep = state.traits ? { scale: state.traits.scale, contrast: state.traits.contrast, posterize: state.traits.posterize, soft: state.traits.soft, palette: $('palette').value } : {};
+  state.traits = makeTraits(kind, seed, { ...keep, ...over });
+  writeUI(state.traits);
+  rebuild({ fit: true });
+  log(`${KINDS[kind].label} (seed "${seed}")`);
+}
+function rollGame(id, seed) {
+  const d = GAME_IDS[id], box = gameBox(id);
+  state.traits = makeTraits(d.kind, seed, { palette: d.pal, gameId: id, box: { w: box.w, d: box.d, h: box.h }, ...(d.opt ? { opt: d.opt } : {}) });
+  $('format').value = 'png';
+  writeUI(state.traits);
+  rebuild({ fit: true });
+  log(`${id}: ${KINDS[d.kind].label}, ${fmtLen(box.w)} × ${fmtLen(box.d)}${TARGETS.objects?.[id] ? '' : ' (size from the missing-objects list, not in targets.json yet)'}, seed "${seed}"`);
+}
+let pending = 0;
+function scheduleRebuild() {
+  cancelAnimationFrame(pending);
+  pending = requestAnimationFrame(() => { state.traits = readUI(); updateLabels(); rebuild(); });
+}
+async function loadTargets(text, from) {
+  try {
+    const j = JSON.parse(text);
+    if (!j.objects || typeof j.objects !== 'object') throw new Error('no "objects" table');
+    TARGETS = j;
+    const known = Object.keys(GAME_IDS).filter((id) => j.objects[id]).length;
+    log(`Targets from ${from}: ${Object.keys(j.objects).length} ids, ${known} of the ${Object.keys(GAME_IDS).length} decal ids here`, 'ok');
+    if (state.traits?.gameId) rollGame(state.traits.gameId, state.traits.seed);
+  } catch (e) { log(`Could not read targets from ${from}: ${e.message}`, 'warn'); }
+}
+
+$('kind').addEventListener('change', () => roll($('kind').value, $('seed').value.trim() || randomSeed()));
+const reroll = (seed) => state.traits.gameId ? rollGame(state.traits.gameId, seed) : roll(state.traits.kind, seed);
+$('seed').addEventListener('change', () => reroll($('seed').value.trim() || randomSeed()));
+$('randomBtn').addEventListener('click', () => reroll(randomSeed()));
+$('colorsBtn').addEventListener('click', () => {
+  $('palette').value = 'random';
+  defaultColors(state.traits.kind, 'random', randomSeed()).forEach((c, i) => { $('c_' + i).value = c; });
+  scheduleRebuild();
+});
+$('palette').addEventListener('change', () => {
+  defaultColors(state.traits.kind, $('palette').value, state.traits.seed).forEach((c, i) => { $('c_' + i).value = c; });
+  scheduleRebuild();
+});
+for (const id of ['scale', 'contrast', 'soft']) $(id).addEventListener('input', scheduleRebuild);
+for (const id of ['posterize', 'opt', 'embers', 'res']) $(id).addEventListener('change', scheduleRebuild);
+for (const id of ['decalW', 'decalD', 'tileM']) $(id).addEventListener('change', () => rebuild({ fit: true }));
+$('alphaMode').addEventListener('change', () => updatePreview(false));
+$('tile2').addEventListener('change', () => rebuild());
+$('gameId').addEventListener('change', () => {
+  const id = $('gameId').value, seed = $('seed').value.trim() || randomSeed();
+  if (id) rollGame(id, seed); else roll(state.traits.kind, seed, { gameId: undefined, box: undefined });
+});
+$('targetsBtn').addEventListener('click', () => $('targetsFile').click());
+$('targetsFile').addEventListener('change', async () => {
+  const f = $('targetsFile').files[0]; if (f) await loadTargets(await f.text(), f.name);
+  $('targetsFile').value = '';
+});
+$('preview').addEventListener('change', () => updatePreview(true));
+$('knight').addEventListener('change', () => { knight.visible = $('knight').checked; fitView(); });
+$('fitBtn').addEventListener('click', fitView);
+
+// ---------- export ----------
+const fileBase = () => ($('fileName').value.trim().replace(/\.(glb|png|jpe?g|webp)$/i, '').replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-|-$/g, '')) || 'texture';
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+async function busy(text, fn) {
+  if (state.busy) return;
+  state.busy = true; $('busy').classList.add('show'); $('busyText').textContent = text;
+  await new Promise((r) => setTimeout(r, 0));
+  try { await fn(); } catch (e) { console.error(e); log('Export failed: ' + (e.message || e), 'err'); }
+  finally { $('busy').classList.remove('show'); state.busy = false; }
+}
+const extrasOf = (t, res) => ({ generator: 'texture-generator', kind: t.kind, seed: t.seed, palette: t.palette, colors: t.colors, scale: t.scale,
+  contrast: t.contrast, posterize: t.posterize, soft: t.soft, opt: t.opt, embers: t.embers, res, ...(t.gameId ? { gameId: t.gameId } : {}) });
+
+// A flat GLB: the decal at its size (alpha), or one tile of the texture (opaque). Image bytes are our own PNG.
+async function exportGLB(t = state.traits, img = state.image) {
+  const decal = isDecal(t), b = decal ? (t.box || decalSize()) : { w: Number($('tileM').value) || 2, d: Number($('tileM').value) || 2 };
+  const tex = new THREE.CanvasTexture(toCanvas(img)); tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace;
+  if (!decal) tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  const mat = new THREE.MeshStandardMaterial({ name: decal ? 'Decal' : KINDS[t.kind].label.replace(/\s+/g, ''), map: tex, roughness: 1, metalness: 0 });
+  if (decal) { if ($('alphaMode').value === 'MASK') mat.alphaTest = 0.5; else mat.transparent = true; }
+  const mesh = new THREE.Mesh(decalGeometry(b.w, b.d), mat); mesh.name = decal ? 'Decal' : 'Tile';
+  const root = new THREE.Group(); root.name = THREE.PropertyBinding.sanitizeNodeName(t.gameId || fileBase()); root.add(mesh);
+  root.userData = extrasOf(t, img.res);
+  try {
+    const buf = await new GLTFExporter().parseAsync(root, { binary: true });
+    const png = await encodePNG(img.data, img.res, img.res);
+    return replaceGlbImages(buf, new Map([[0, { bytes: png, mime: 'image/png' }]]));
+  } finally { mesh.geometry.dispose(); mat.dispose(); tex.dispose(); }
+}
+const tooBig = (n) => n > (TARGETS.maxFileMB || 1.5) * 1048576;
+$('imageBtn').addEventListener('click', () => busy('Encoding image…', async () => {
+  const fmt = $('format').value, { bytes, mime, ext } = await encodeImage(state.image, fmt), name = `${fileBase()}.${ext}`;
+  saveBlob(new Blob([bytes], { type: mime }), name);
+  $('sZ').textContent = `${name} ${fmtBytes(bytes.length)}`;
+  log(`Saved ${name} (${state.image.res} px, ${fmtBytes(bytes.length)})`, 'ok');
+}));
+$('glbBtn').addEventListener('click', () => busy('Exporting GLB…', async () => {
+  const buf = await exportGLB(), name = fileBase() + '.glb';
+  saveBlob(new Blob([buf], { type: 'model/gltf-binary' }), name);
+  $('sZ').textContent = `${name} ${fmtBytes(buf.byteLength)}`;
+  log(`Saved ${name} (${fmtBytes(buf.byteLength)})`, tooBig(buf.byteLength) ? 'warn' : 'ok');
+}));
+// Every kind with the current seed, palette and look, as PNG, plus a manifest.
+async function makePack(res = resolution()) {
+  const t0 = state.traits, files = [], items = [];
+  for (const [k, K] of Object.entries(KINDS)) {
+    const t = makeTraits(k, t0.seed, { palette: t0.palette === 'random' ? 'random' : t0.palette, scale: t0.scale, contrast: t0.contrast, posterize: t0.posterize, soft: t0.soft });
+    if (k === t0.kind) Object.assign(t, { colors: t0.colors, opt: t0.opt, embers: t0.embers });
+    const img = generate(t, res), file = `${K.group === 'tex' ? 'textures' : 'decals'}/${k}.png`;
+    files.push({ name: file, data: await encodePNG(img.data, res, res) });
+    items.push({ file, label: K.label, type: K.group === 'tex' ? 'tiling texture' : 'decal (alpha)', ...extrasOf(t, res) });
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  files.push({ name: 'manifest.json', data: JSON.stringify({ generator: 'texture-generator', seed: t0.seed, palette: t0.palette, res, items }, null, 1) });
+  return files;
+}
+$('packBtn').addEventListener('click', () => busy('Building the texture pack…', async () => {
+  const files = await makePack(), zip = makeZip(files), name = `textures-${t0slug()}.zip`;
+  saveBlob(zip, name);
+  log(`Saved ${name}: ${files.length - 1} images + manifest.json (${fmtBytes(zip.size)})`, 'ok');
+}));
+const t0slug = () => (state.traits.palette + '-' + state.traits.seed).replace(/[^a-z0-9-]+/gi, '-').toLowerCase();
+
+// ---------- palette atlas ----------
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+$('modelBtn').addEventListener('click', () => $('modelFile').click());
+$('modelFile').addEventListener('change', async () => {
+  const f = $('modelFile').files[0]; $('modelFile').value = '';
+  if (f) await busy('Loading model…', async () => openModel(await f.arrayBuffer(), f.name));
+});
+async function openModel(buf, name) {
+  const gltf = await loader.parseAsync(buf, '');
+  const root = gltf.scene || gltf.scenes[0];
+  state.model = { root, animations: gltf.animations || [], name: name.replace(/\.glb$/i, '') };
+  state.atlas = null;
+  const mats = new Set(); root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) mats.add(m); });
+  showModel(root);
+  $('atlasBtn').disabled = false; $('atlasGlbBtn').disabled = $('atlasPngBtn').disabled = true;
+  log(`Opened ${name}: ${mats.size} materials, ${[...mats].filter((m) => m.map).length} with a texture`, 'ok');
+}
+function showModel(root) {
+  modelHolder.clear(); modelHolder.add(root);
+  const o = $('preview').querySelector('[value=model]'); o.disabled = false; $('preview').value = 'model';
+  updatePreview(true);
+}
+// Average colour of an image (sRGB 0..1).
+function averageColor(image) {
+  const c = document.createElement('canvas'); c.width = c.height = 8;
+  const g = c.getContext('2d'); g.drawImage(image, 0, 0, 8, 8);
+  const d = g.getImageData(0, 0, 8, 8).data, s = [0, 0, 0];
+  for (let i = 0; i < d.length; i += 4) for (let k = 0; k < 3; k++) s[k] += d[i + k];
+  return s.map((x) => x / (255 * 64));
+}
+// Builds the atlas and a copy of the model that uses it. Returns { root, canvas, stats }.
+function buildAtlas(src, { size = 512, copy = true } = {}) {
+  const root = SkeletonUtils.clone(src), meshes = [];
+  root.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  const warn = [];
+  // one entry per source material: flat (a swatch) or textured (a cell with the image)
+  const entries = new Map();
+  for (const m of meshes) {
+    if (Array.isArray(m.material)) { warn.push(`${m.name || 'a mesh'} has several materials on one mesh; only the first is kept`); m.material = m.material[0]; }
+    m.geometry = m.geometry.clone();
+    const mat = m.material;
+    if (!entries.has(mat)) entries.set(mat, { mat, meshes: [], textured: false });
+    entries.get(mat).meshes.push(m);
+  }
+  for (const en of entries.values()) {
+    const map = en.mat.map, img = map?.image;
+    if (!map || !img || !img.width) continue;
+    let inside = true;
+    for (const m of en.meshes) {
+      const uv = m.geometry.attributes.uv;
+      if (!uv) { inside = false; break; }
+      for (let i = 0; i < uv.count && inside; i++) { const u = uv.getX(i), v = uv.getY(i); if (u < -0.002 || u > 1.002 || v < -0.002 || v > 1.002) inside = false; }
+    }
+    const tint = en.mat.color.toArray([], THREE.SRGBColorSpace);
+    if (copy && inside) en.textured = true;
+    else {
+      const avg = averageColor(img);
+      en.flat = avg.map((x, k) => x * tint[k]);
+      if (copy) warn.push(`${en.mat.name || 'a material'} repeats its texture (UVs outside 0 to 1); its average colour is used`);
+    }
+  }
+  const list = [...entries.values()], tex = list.filter((e) => e.textured), flat = list.filter((e) => !e.textured);
+  const cellsN = tex.length + (flat.length ? 1 : 0), k = Math.max(1, Math.ceil(Math.sqrt(cellsN))), cell = Math.floor(size / k), pad = Math.max(2, Math.round(cell / 64));
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
+  const g = canvas.getContext('2d'); g.fillStyle = '#808080'; g.fillRect(0, 0, size, size);
+  let ci = 0;
+  const cellXY = (i) => [(i % k) * cell, Math.floor(i / k) * cell];
+  for (const en of tex) {
+    const [x, y] = cellXY(ci++), inner = cell - 2 * pad, img = en.mat.map.image;
+    g.drawImage(img, x, y, cell, cell); // bleed under the gutter
+    g.drawImage(img, x + pad, y + pad, inner, inner);
+    const tint = en.mat.color;
+    if (tint.r < 0.999 || tint.g < 0.999 || tint.b < 0.999) {
+      g.globalCompositeOperation = 'multiply'; g.fillStyle = '#' + tint.getHexString(THREE.SRGBColorSpace); g.fillRect(x, y, cell, cell);
+      g.globalCompositeOperation = 'source-over';
+    }
+    // GLTFLoader textures are flipY = false, like the atlas, so v maps straight to rows from the top
+    const flipped = en.mat.map.flipY;
+    for (const m of en.meshes) {
+      const uv = m.geometry.attributes.uv;
+      for (let i = 0; i < uv.count; i++) {
+        const u = clamp01(uv.getX(i)), v = clamp01(uv.getY(i)), vr = flipped ? 1 - v : v;
+        uv.setXY(i, (x + pad + u * inner) / size, (y + pad + vr * inner) / size);
+      }
+      uv.needsUpdate = true;
+    }
+  }
+  if (flat.length) {
+    const [x0, y0] = cellXY(ci++), n = Math.ceil(Math.sqrt(flat.length)), sw = cell / n;
+    flat.forEach((en, i) => {
+      const c = en.flat || en.mat.color.toArray([], THREE.SRGBColorSpace), x = x0 + (i % n) * sw, y = y0 + Math.floor(i / n) * sw;
+      g.fillStyle = rgbHex(c); g.fillRect(Math.floor(x), Math.floor(y), Math.ceil(sw), Math.ceil(sw));
+      const cu = (x + sw / 2) / size, cv = (y + sw / 2) / size;
+      for (const m of en.meshes) {
+        const count = m.geometry.attributes.position.count, uv = new THREE.Float32BufferAttribute(new Float32Array(count * 2), 2);
+        for (let j = 0; j < count; j++) uv.setXY(j, cu, cv);
+        m.geometry.setAttribute('uv', uv);
+      }
+    });
+  }
+  const atlasTex = new THREE.CanvasTexture(canvas); atlasTex.flipY = false; atlasTex.colorSpace = THREE.SRGBColorSpace;
+  // one material, plus one per glow colour (the game keeps emissive colours, not emissive maps)
+  const outMats = new Map();
+  for (const en of list) {
+    const em = en.mat.emissive && (en.mat.emissive.r + en.mat.emissive.g + en.mat.emissive.b > 0.01) ? en.mat.emissive.getHexString(THREE.SRGBColorSpace) : '';
+    const vc = en.meshes.some((m) => m.geometry.attributes.color) && en.mat.vertexColors;
+    const key = em + (vc ? '|vc' : '') + (en.mat.side === THREE.DoubleSide ? '|2' : '');
+    if (!outMats.has(key)) {
+      const m = new THREE.MeshStandardMaterial({ name: em ? 'AtlasGlow_' + em : 'Atlas' + (outMats.size ? '_' + outMats.size : ''), map: atlasTex, roughness: 1, metalness: 0, vertexColors: !!vc, side: en.mat.side });
+      if (em) { m.emissive.set('#' + em); m.emissiveIntensity = en.mat.emissiveIntensity ?? 1; }
+      outMats.set(key, m);
+    }
+    for (const m of en.meshes) m.material = outMats.get(key);
+  }
+  return { root, canvas, texture: atlasTex, stats: { materialsIn: entries.size, materialsOut: outMats.size, textured: tex.length, swatches: flat.length, size }, warn };
+}
+$('atlasBtn').addEventListener('click', () => busy('Building the atlas…', async () => {
+  const a = buildAtlas(state.model.root, { size: Number($('atlasRes').value), copy: $('atlasCopy').checked });
+  state.atlas = a;
+  for (const w of a.warn) log(w, 'warn');
+  showModel(a.root);
+  const fc = $('flat'), g = fc.getContext('2d'); g.clearRect(0, 0, fc.width, fc.height); g.drawImage(a.canvas, 0, 0, fc.width, fc.height);
+  $('flatOpts').style.display = 'none';
+  $('atlasGlbBtn').disabled = $('atlasPngBtn').disabled = false;
+  const s = a.stats;
+  log(`Atlas ${s.size} px: ${s.materialsIn} materials → ${s.materialsOut} (${s.textured} textures copied, ${s.swatches} colour swatches)`, 'ok');
+}));
+async function exportAtlasGLB() {
+  const a = state.atlas;
+  a.texture.userData.mimeType = $('atlasFormat').value;
+  a.root.userData = { ...a.root.userData, atlas: { generator: 'texture-generator', ...a.stats } };
+  a.root.updateMatrixWorld(true);
+  return new GLTFExporter().parseAsync(a.root, { binary: true, animations: state.model.animations });
+}
+$('atlasGlbBtn').addEventListener('click', () => busy('Exporting GLB…', async () => {
+  const buf = await exportAtlasGLB(), name = state.model.name + '.glb';
+  saveBlob(new Blob([buf], { type: 'model/gltf-binary' }), name);
+  log(`Saved ${name} (${fmtBytes(buf.byteLength)})`, tooBig(buf.byteLength) ? 'warn' : 'ok');
+}));
+$('atlasPngBtn').addEventListener('click', () => busy('Encoding atlas…', async () => {
+  const c = state.atlas.canvas, d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  const bytes = await encodePNG(d, c.width, c.height), name = state.model.name + '-atlas.png';
+  saveBlob(new Blob([bytes], { type: 'image/png' }), name);
+  log(`Saved ${name} (${fmtBytes(bytes.length)})`, 'ok');
+}));
+
+window.__texgen = { THREE, GLTFExporter, state, KINDS, GAME_IDS, makeTraits, generate, seamRatio, opaqueShare, encodePNG, makePack, exportGLB, buildAtlas, openModel, rollGame, roll, targets: () => TARGETS }; // handy for debugging in the console, and for other pages
+
+roll('thatch', randomSeed());
+log('Ready. Pick a texture, a decal or a game id, then download the image or a GLB.', 'ok');
+// the game's live size table, when online (decal sizes fall back to the missing-objects list)
+(async () => {
+  try {
+    const ctl = new AbortController(); setTimeout(() => ctl.abort(), 6000);
+    const res = await fetch(TARGETS_URL, { cache: 'no-store', signal: ctl.signal });
+    if (res.ok) await loadTargets(await res.text(), 'the game repo');
+  } catch { /* offline: keep the list sizes */ }
+})();
+</script>
+</body>
+</html>
