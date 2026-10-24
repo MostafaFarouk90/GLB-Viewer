@@ -1,0 +1,2601 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Structures Kit Generator</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
+    --text: #e6e8ec; --muted: #8b93a3; --accent: #e8a33d; --accent2: #b97a1f;
+    --ok: #3fbf7f; --warn: #e0a83a; --err: #e05a5a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { display: grid; grid-template-columns: 330px 1fr; height: 100vh; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 12px 14px 24px; }
+  h1 { font-size: 15px; margin: 2px 0 4px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+  a { color: var(--accent); }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row label { flex: 1; color: var(--text); }
+  .row .val { min-width: 54px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: 11.5px; margin: 2px 0 6px; }
+  input[type=text], input[type=number], select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 7px; width: 150px; font: inherit; }
+  input[type=range] { width: 114px; accent-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); }
+  input[type=color] { width: 100%; height: 26px; padding: 0 2px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 11px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent); }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .colors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 8px; }
+  .colors label { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; color: var(--muted); }
+  table.stats { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.stats td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+  table.stats td:first-child { text-align: left; color: var(--muted); }
+  #log { margin-top: 10px; font: 11.5px/1.45 ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+    max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
+  #log .warn { color: var(--warn); } #log .err { color: var(--err); } #log .ok { color: var(--ok); }
+  main { position: relative; overflow: hidden; }
+  #viewport { position: absolute; inset: 0; }
+  #toolbar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 10px; align-items: center;
+    flex-wrap: wrap; pointer-events: none; }
+  #toolbar > * { pointer-events: auto; }
+  #toolbar .chk { background: rgba(23,26,33,.85); border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; }
+  #propName { margin-left: auto; font-size: 16px; font-weight: 600; letter-spacing: .02em; background: rgba(23,26,33,.85);
+    border-radius: 7px; padding: 5px 11px; }
+  #busy { position: absolute; inset: 0; background: rgba(10,12,16,.55); display: none; align-items: center;
+    justify-content: center; font-size: 15px; z-index: 5; }
+  #busy.show { display: flex; }
+  .spinner { width: 22px; height: 22px; border: 3px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite; margin-right: 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 760px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; }
+    main { grid-row: 1; height: 55vh; } aside { grid-row: 2; border-right: 0; }
+  }
+</style>
+<!-- Libraries load from the jsDelivr CDN (needs internet). The "offline" build has them inlined instead. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<!-- Offline copy of the game's size table (Embers of Valdren, src/env/targets.json). The page loads the live file
+     from the game repo when it can and falls back to this copy. -->
+<script type="application/json" id="embersTargets">
+{
+ "$comment": "Target sizes in metres (width x, depth z, height y) for environment objects, from assets/environment-needs-prompts.md. Used by src/env/scaleTable.ts and tools/env-pass/check-glb.mjs.",
+ "tolerance": 0.15,
+ "knightHeight": 1.8,
+ "proportion": {
+  "$comment": "Ids ingested with an exact fit to the target size (tools/env-pass/ingest.mjs): uniform scale to the height, optional tile = repeat the model n times along x, then width/depth scaled to the target without the 15% cap. For artist models whose shape is far from the table (batch 2).",
+  "stonewall-low": { "tile": 2 },
+  "wattle-fence": { "tile": 2 },
+  "picket-fence": { "tile": 2 },
+  "garden-bed-a": { "tile": 2 },
+  "signpost-a": {},
+  "washing-line": {},
+  "barn-a": {}
+},
+  "objects": {
+  "oak-a": {
+   "w": 10.5,
+   "d": 10.5,
+   "h": 13
+  },
+  "oak-b": {
+   "w": 10.5,
+   "d": 10.5,
+   "h": 13
+  },
+  "oak-c": {
+   "w": 10.5,
+   "d": 10.5,
+   "h": 13
+  },
+  "birch-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "poplar-a": {
+   "w": 2.5,
+   "d": 2.5,
+   "h": 14.0
+  },
+  "cairn-a": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 1.3
+  },
+  "birch-b": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "elm-or-ash-a": {
+   "w": 6.0,
+   "d": 6.0,
+   "h": 10.0
+  },
+  "autumn-tree-a": {
+   "w": 6.0,
+   "d": 6.0,
+   "h": 9.0
+  },
+  "autumn-tree-b": {
+   "w": 6.0,
+   "d": 6.0,
+   "h": 9.0
+  },
+  "bush-round-a": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.1
+  },
+  "bush-round-b": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.1
+  },
+  "bush-flowering-a": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.2
+  },
+  "bush-flowering-b": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.2
+  },
+  "hedge-straight": {
+   "w": 3.4,
+   "d": 0.9,
+   "h": 1.6
+  },
+  "hedge-corner": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 1.6
+  },
+  "grass-clump-a": {
+   "w": 0.6,
+   "d": 0.6,
+   "h": 0.5
+  },
+  "grass-clump-b": {
+   "w": 0.6,
+   "d": 0.6,
+   "h": 0.5
+  },
+  "grass-clump-c": {
+   "w": 0.6,
+   "d": 0.6,
+   "h": 0.5
+  },
+  "fern-a": {
+   "w": 0.9,
+   "d": 0.9,
+   "h": 0.7
+  },
+  "flower-patch-yellow": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "flower-patch-white": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "flower-patch-purple": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "flower-patch-red": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "reeds-a": {
+   "w": 0.8,
+   "d": 0.8,
+   "h": 1.8
+  },
+  "reeds-b": {
+   "w": 0.8,
+   "d": 0.8,
+   "h": 1.8
+  },
+  "stump-a": {
+   "w": 0.9,
+   "d": 0.9,
+   "h": 0.6
+  },
+  "stump-b": {
+   "w": 0.9,
+   "d": 0.9,
+   "h": 0.6
+  },
+  "log-fallen-a": {
+   "w": 3.0,
+   "d": 0.8,
+   "h": 0.7
+  },
+  "mushrooms-a": {
+   "w": 0.5,
+   "d": 0.5,
+   "h": 0.3
+  },
+  "boulder-large-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 2.4
+  },
+  "boulder-large-b": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 2.4
+  },
+  "rock-cluster-a": {
+   "w": 2.5,
+   "d": 2.0,
+   "h": 1.0
+  },
+  "haystack-round": {
+   "w": 2.4,
+   "d": 2.4,
+   "h": 2.6
+  },
+  "haybale-a": {
+   "w": 1.2,
+   "d": 0.8,
+   "h": 0.7
+  },
+  "haycart-a": {
+   "w": 3.2,
+   "d": 1.6,
+   "h": 1.8
+  },
+  "woodpile-chop": {
+   "w": 2.0,
+   "d": 1.2,
+   "h": 1.3
+  },
+  "trough-a": {
+   "w": 2.0,
+   "d": 0.7,
+   "h": 0.7
+  },
+  "garden-bed-a": {
+   "w": 2.0,
+   "d": 1.4,
+   "h": 0.5
+  },
+  "garden-bed-b": {
+   "w": 2.0,
+   "d": 1.4,
+   "h": 0.5
+  },
+  "beehive-skep": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.8
+  },
+  "washing-line": {
+   "w": 4.0,
+   "d": 0.3,
+   "h": 2.2
+  },
+  "signpost-a": {
+   "w": 1.2,
+   "d": 0.4,
+   "h": 2.4
+  },
+  "milestone-a": {
+   "w": 0.6,
+   "d": 0.4,
+   "h": 1.1
+  },
+  "picket-fence": {
+   "w": 3.4,
+   "d": 0.2,
+   "h": 1.1
+  },
+  "wattle-fence": {
+   "w": 3.4,
+   "d": 0.3,
+   "h": 1.2
+  },
+  "stonewall-low": {
+   "w": 3.4,
+   "d": 0.7,
+   "h": 1.0
+  },
+  "market-stall-a": {
+   "w": 3.0,
+   "d": 2.4,
+   "h": 2.8
+  },
+  "market-stall-b": {
+   "w": 3.0,
+   "d": 2.4,
+   "h": 2.8
+  },
+  "well-bucket-rope": {
+   "w": 0.4,
+   "d": 0.4,
+   "h": 0.5
+  },
+  "barn-a": {
+   "w": 8.0,
+   "d": 12.0,
+   "h": 7.0
+  },
+  "stable-a": {
+   "w": 7.0,
+   "d": 5.0,
+   "h": 4.0
+  },
+  "cottage-thatch-a": {
+   "w": 4.6,
+   "d": 5.0,
+   "h": 5.0
+  },
+  "cottage-thatch-b": {
+   "w": 4.6,
+   "d": 5.0,
+   "h": 5.0
+  },
+  "wagon-wreck-a": {
+   "w": 4.0,
+   "d": 2.0,
+   "h": 2.2
+  },
+  "wagon-burnt": {
+   "w": 4.0,
+   "d": 2.0,
+   "h": 2.0
+  },
+  "roadside-shrine-a": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 2.2
+  },
+  "gibbet-post": {
+   "w": 1.0,
+   "d": 1.0,
+   "h": 3.6
+  },
+  "campfire-ring": {
+   "w": 1.6,
+   "d": 1.6,
+   "h": 0.6
+  },
+  "crow-perch-post": {
+   "w": 0.4,
+   "d": 0.4,
+   "h": 1.6
+  },
+  "ash-tree-dead-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "ash-tree-dead-b": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "charred-stump": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 0.8
+  },
+  "basalt-columns-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 4.0
+  },
+  "ember-rock-a": {
+   "w": 2.5,
+   "d": 2.5,
+   "h": 2.0
+  },
+  "ember-rock-b": {
+   "w": 2.5,
+   "d": 2.5,
+   "h": 2.0
+  },
+  "slag-heap": {
+   "w": 5.0,
+   "d": 5.0,
+   "h": 2.5
+  },
+  "mine-cart": {
+   "w": 1.8,
+   "d": 1.0,
+   "h": 1.0
+  },
+  "ore-pile": {
+   "w": 2.0,
+   "d": 2.0,
+   "h": 1.0
+  },
+  "scorched-fence": {
+   "w": 3.4,
+   "d": 0.3,
+   "h": 1.6
+  },
+  "smelter-chimney": {
+   "w": 2.0,
+   "d": 2.0,
+   "h": 9.0
+  }
+ },
+ "maxTriangles": 10000,
+ "maxFileMB": 1.5,
+ "proportionTolerance": 1.1
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <h1>Structures Kit Generator</h1>
+    <div class="hint">Modular structure pieces (walls, roofs, chimneys, porches, scaffolds, gates), mine and forge works, shrines, wells and wagons, exported as GLB. Whole buildings come from the KayKit packs; this kit fills the gaps. See also the <a href="props-generator.html" data-offline-href="props-generator-offline.html">props generator</a> and the <a href="index.html" data-offline-href="glb-viewer-offline.html">GLB viewer &amp; optimizer</a>.</div>
+
+    <h2>Game</h2>
+    <div class="row"><label for="gameId">Game id</label><select id="gameId"></select></div>
+    <div class="hint" id="gameHint">Embers of Valdren objects from the missing-objects list. Picking one sets the type, the game palette, the exact target size from targets.json, the triangle budget and game-ready export settings.</div>
+    <div class="btns" style="margin-top:2px">
+      <button id="targetsBtn">Load targets.json…</button>
+      <input id="targetsFile" type="file" accept=".json,application/json" hidden>
+    </div>
+
+    <h2>Piece</h2>
+    <div class="row"><label for="category">Type</label>
+      <select id="category"></select></div>
+    <div class="row"><label for="seed">Seed</label><input id="seed" type="text" spellcheck="false"></div>
+    <div class="btns" style="margin-top:4px">
+      <button id="randomBtn" class="primary">Randomize</button>
+      <button id="colorsBtn">New colors</button>
+    </div>
+    <div class="hint">The same type and seed always give the same piece.</div>
+
+    <h2>Shape</h2>
+    <div class="row"><label for="fit">Scale</label>
+      <select id="fit"><option value="design">As designed (1 unit = 1 m)</option><option value="longest">Longest side</option><option value="height">Height</option></select></div>
+    <div class="row"><label for="size">Size</label><input id="size" type="range" min="-0.5" max="1.3" step="0.005"><span class="val" id="sizeVal"></span></div>
+    <div class="hint">As designed, pieces are built to real sizes (a door is 2.1 m high), so walls, corners and roofs of the same length and height fit together.</div>
+    <div id="variants"></div>
+    <div class="row"><label for="enchant">Glow (embers, lanterns, runes)</label><input id="enchant" type="checkbox"></div>
+
+    <h2>Colors</h2>
+    <div class="row"><label for="palette">Palette</label>
+      <select id="palette"><option value="random">Random for this seed</option><option value="field">Game: field and village</option><option value="ash">Game: ash country</option></select></div>
+    <div class="colors" id="colors"></div>
+
+    <h2>Output</h2>
+    <div class="row"><label for="style">Style</label>
+      <select id="style"><option value="lowpoly">Low-poly (faceted)</option><option value="smooth">Smooth</option></select></div>
+    <div class="row"><label for="detail">Detail</label>
+      <select id="detail"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+    <div class="row"><label for="combine">Combine parts per material</label><input id="combine" type="checkbox" checked></div>
+    <div class="hint">On: a few meshes (best for games and the optimizer). Off: every part is its own named mesh (easier to edit in Blender).</div>
+    <div class="row"><label for="anim">Include idle animation</label><input id="anim" type="checkbox" checked></div>
+    <div class="hint">Turning headframe and lift wheels, flickering fires and candles, where the piece has them.</div>
+    <div class="row"><label for="gameMats">Game materials</label><input id="gameMats" type="checkbox"></div>
+    <div class="hint">Flat colours as the game wants them: roughness 1, metallic 0, no transparency. Glow parts keep their emissive colour.</div>
+    <table class="stats">
+      <tbody>
+        <tr><td>Faces</td><td id="sF">–</td></tr>
+        <tr><td>Vertices</td><td id="sV">–</td></tr>
+        <tr><td>Parts</td><td id="sP">–</td></tr>
+        <tr><td>Size (W × H × D)</td><td id="sD">–</td></tr>
+        <tr><td>Target (W × H × D)</td><td id="sT">–</td></tr>
+        <tr><td>Triangle budget</td><td id="sB">–</td></tr>
+      </tbody>
+    </table>
+    <div class="row"><label for="fileName">File name</label><input id="fileName" type="text" spellcheck="false"></div>
+    <div class="btns">
+      <button id="downloadBtn" class="primary">Download GLB</button>
+      <button id="kitBtn">Download kit .zip</button>
+    </div>
+    <div class="hint" id="kitHint">Kit: the same piece once per option, for example every wall opening, as <code>name-door.glb</code>, <code>name-window.glb</code>…</div>
+    <div class="row" style="margin-top:10px"><label for="variantCount">Seed variants</label><input id="variantCount" type="number" min="2" max="12" value="3" style="width:60px">
+      <button id="variantsBtn">Download .zip</button></div>
+    <div class="hint">Same settings, different seeds: <code>name-a.glb</code>, <code>name-b.glb</code>… (an id ending in -a counts on from it).</div>
+    <div id="log"></div>
+  </aside>
+
+  <main id="main">
+    <div id="viewport"></div>
+    <div id="toolbar">
+      <label class="chk"><input id="rotate" type="checkbox" checked> Auto-rotate</label>
+      <label class="chk"><input id="bloom" type="checkbox" checked> Glow effect</label>
+      <label class="chk"><input id="wire" type="checkbox"> Wireframe</label>
+      <label class="chk"><input id="knight" type="checkbox" checked> 1.8 m figure</label>
+      <button id="fitBtn">Fit view</button>
+      <span id="propName"></span>
+    </div>
+    <div id="busy"><div class="spinner"></div><span id="busyText">Working…</span></div>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const $ = (id) => document.getElementById(id);
+const PI = Math.PI;
+
+// ---------- random ----------
+function hashSeed(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+  h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+function makeRng(str) {
+  let a = hashSeed(str);
+  const next = () => { // mulberry32
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  return {
+    next,
+    range: (lo, hi) => lo + (hi - lo) * next(),
+    int: (lo, hi) => lo + Math.floor(next() * (hi - lo + 1)),
+    pick: (arr) => arr[Math.floor(next() * arr.length)],
+    chance: (p) => next() < p,
+    // {a: 3, b: 1} -> 'a' three times as often as 'b'
+    weighted: (w) => {
+      const keys = Object.keys(w); let sum = 0; for (const k of keys) sum += w[k];
+      let x = next() * sum; for (const k of keys) { x -= w[k]; if (x < 0) return k; }
+      return keys[keys.length - 1];
+    },
+  };
+}
+const randomSeed = () => {
+  const words = ['ember', 'ash', 'oak', 'slate', 'soot', 'thatch', 'iron', 'moss', 'flint', 'cinder', 'beam', 'hearth', 'rafter', 'kiln', 'smoke', 'stone'];
+  const r = makeRng(String(Math.random()) + Date.now());
+  return r.pick(words) + '-' + r.pick(words) + '-' + r.int(10, 999);
+};
+
+// ---------- colors ----------
+const COLOR_KEYS = { plaster: 'Plaster', roof: 'Roof', thatch: 'Thatch', wood: 'Wood', stone: 'Stone', metal: 'Metal', paint: 'Paint', glow: 'Glow' };
+const hsl = (h, s, l) => '#' + new THREE.Color().setHSL(((h % 1) + 1) % 1, s, l, THREE.SRGBColorSpace).getHexString();
+function basePalette(r) {
+  return {
+    plaster: hsl(r.range(0.08, 0.14), r.range(0.15, 0.4), r.range(0.78, 0.88)),
+    roof: r.chance(0.6) ? hsl(r.range(0.98, 1.04), r.range(0.45, 0.6), r.range(0.36, 0.44)) : hsl(r.range(0.55, 0.65), r.range(0.08, 0.2), r.range(0.3, 0.4)),
+    thatch: hsl(r.range(0.11, 0.14), r.range(0.45, 0.6), r.range(0.52, 0.62)),
+    wood: hsl(r.range(0.06, 0.1), r.range(0.35, 0.5), r.range(0.2, 0.3)),
+    stone: hsl(r.range(0.05, 0.62), r.range(0.03, 0.1), r.range(0.42, 0.55)),
+    metal: r.pick(['#5a5856', '#6a6560', '#4f5257', '#6e6458']),
+    paint: hsl(r.next(), r.range(0.35, 0.55), r.range(0.32, 0.45)),
+    glow: hsl(r.range(0.04, 0.1), 0.95, 0.58),
+  };
+}
+
+// ---------- categories ----------
+// opt('Label', { value: ['Option label', weight] }) describes one variant dropdown.
+const opt = (label, values) => ({
+  label,
+  values: Object.fromEntries(Object.entries(values).map(([k, [l]]) => [k, l])),
+  w: Object.fromEntries(Object.entries(values).map(([k, [, w]]) => [k, w ?? 1])),
+});
+const GROUPS = { kit: 'Building kit modules', yard: 'Yard and street', work: 'Mine and forge works', sacred: 'Shrines and wells', carts: 'Carts and wagons', small: 'Small buildings (assembled)' };
+const ADJ = ['Old', 'Mossy', 'Sooted', 'Weathered', 'Sturdy', 'Crooked', 'Leaning', 'Patched', 'Ashen', 'Forgotten', 'Wardens\'', 'Miners\'', 'Pilgrims\'', 'Smiths\''];
+const OF = ['of Harrowmark', 'of Brightwater', 'of Oldsmoke', 'of Cinderreach', 'of Deepgate', 'of the Dead Road', 'of the Cinder Road', 'of the Ember Vale'];
+const MATERIAL = opt('Material', { stone: ['Stone', 3], plaster: ['Plaster and timber', 3], plank: ['Planks', 2], logs: ['Logs', 1] });
+const HEIGHT = opt('Height', { storey: ['One storey (2.8 m)', 3], tall: ['Tall (3.6 m)', 1] });
+const COVER = opt('Cover', { thatch: ['Thatch', 2], tiles: ['Clay tiles', 2], slate: ['Slate', 1], planks: ['Planks', 1], iron: ['Iron sheet', 1] });
+const metres = (...ns) => Object.fromEntries(ns.map((n, i) => [String(n), [n + ' m', i === 1 ? 2 : 1]]));
+
+// Each category: menu group, variant dropdowns (opts), size range in metres (longest side, used when the scale is
+// not "as designed"), chance of glowing details, the dropdown a kit .zip walks through, names and a builder.
+const CATS = {
+  wall: {
+    label: 'Wall module', group: 'kit', enchant: 0.1, size: [2, 4], kit: 'opening',
+    opts: { material: MATERIAL, opening: opt('Opening', { none: ['Plain', 2], door: ['Door', 2], window: ['Window', 2], windows: ['Two windows', 1], arch: ['Archway', 1] }),
+      length: opt('Length', metres(2, 3, 4)), height: HEIGHT, state: opt('State', { intact: ['Intact', 4], ruined: ['Ruined', 1], burnt: ['Burnt', 1] }) },
+    nouns: ['Wall', 'Wall Section', 'Wall Module'], build: buildWall,
+  },
+  corner: {
+    label: 'Corner post / pillar', group: 'kit', enchant: 0, size: [2.8, 3.6], kit: 'form',
+    opts: { material: MATERIAL, form: opt('Form', { square: ['Square corner', 3], pillar: ['Pillar', 1], round: ['Round turret', 1] }), height: HEIGHT },
+    nouns: ['Corner', 'Pillar', 'Post'], build: buildCorner,
+  },
+  roof: {
+    label: 'Roof', group: 'kit', enchant: 0, size: [3, 5], kit: 'shape',
+    opts: { shape: opt('Shape', { gable: ['Gable', 3], shed: ['Lean-to', 1], hip: ['Hipped', 1], cone: ['Round (cone)', 1] }), cover: COVER,
+      length: opt('Length (x)', metres(3, 4, 5)), span: opt('Span (z)', metres(3, 4, 5)),
+      pitch: opt('Pitch', { low: ['Low', 1], normal: ['Normal', 2], steep: ['Steep', 1] }), ends: opt('Gable ends', { open: ['Open', 1], plaster: ['Plaster', 2], planks: ['Planks', 1] }),
+      state: opt('State', { intact: ['Intact', 4], holed: ['Holed', 1], burnt: ['Burnt', 1] }) },
+    nouns: ['Roof', 'Roof Module', 'Rooftop'], build: buildRoof,
+  },
+  chimney: {
+    label: 'Chimney stack', group: 'kit', enchant: 0.15, size: [2.4, 4],
+    opts: { material: opt('Material', { stone: ['Stone', 2], brick: ['Brick', 2], plaster: ['Plastered', 1] }), top: opt('Top', { plain: ['Plain', 2], pots: ['Chimney pots', 2], cowl: ['Iron cowl', 1] }),
+      height: opt('Height', { short: ['Short (2.4 m)', 1], tall: ['Tall (4 m)', 1] }) },
+    nouns: ['Chimney', 'Flue', 'Stack'], build: buildChimney,
+  },
+  porch: {
+    label: 'Porch / awning', group: 'yard', enchant: 0.2, size: [2, 4],
+    opts: { kind: opt('Kind', { porch: ['Porch roof on posts', 2], deck: ['Porch with deck and rail', 1], awning: ['Cloth awning', 1] }), cover: opt('Cover', { planks: ['Planks', 1], tiles: ['Clay tiles', 1], thatch: ['Thatch', 1] }),
+      width: opt('Width', metres(2, 3, 4)) },
+    nouns: ['Porch', 'Awning', 'Canopy'], build: buildPorch,
+  },
+  stairs: {
+    label: 'Stairs / ladder', group: 'yard', enchant: 0, size: [1.2, 3],
+    opts: { kind: opt('Kind', { stone: ['Stone steps', 2], wood: ['Wooden stairs', 2], ladder: ['Ladder', 1] }), steps: opt('Steps', { 3: ['3', 1], 5: ['5', 2], 8: ['8', 1] }), rail: opt('Rail', { rail: ['Hand rail', 1], none: ['None', 1] }) },
+    nouns: ['Stair', 'Steps', 'Ladder'], build: buildStairs,
+  },
+  scaffold: {
+    label: 'Scaffold', group: 'yard', enchant: 0, size: [2.5, 6.5],
+    opts: { levels: opt('Levels', { 1: ['1', 1], 2: ['2', 2], 3: ['3', 1] }), kind: opt('Kind', { timber: ['Sawn timber', 1], poles: ['Lashed poles', 1] }), state: opt('State', { intact: ['Intact', 3], burnt: ['Burnt', 1] }) },
+    nouns: ['Scaffold', 'Staging', 'Frame'], build: buildScaffold,
+  },
+  platform: {
+    label: 'Deck / jetty / walkway', group: 'yard', enchant: 0.15, size: [3, 6],
+    opts: { kind: opt('Kind', { deck: ['Deck on posts', 2], jetty: ['Jetty', 1], walkway: ['Raised walkway', 1] }), length: opt('Length', metres(3, 4, 6)), state: opt('State', { intact: ['Intact', 3], broken: ['Broken planks', 1], burnt: ['Burnt', 1] }) },
+    nouns: ['Deck', 'Jetty', 'Walkway'], build: buildPlatform,
+  },
+  gateway: {
+    label: 'Gateway / arch', group: 'yard', enchant: 0.2, size: [3, 5],
+    opts: { kind: opt('Kind', { arch: ['Stone arch', 2], lychgate: ['Roofed timber gate', 1], gate: ['Palisade gate', 1] }), width: opt('Opening', metres(2, 3)), state: opt('State', { intact: ['Intact', 3], ruined: ['Ruined', 1] }) },
+    nouns: ['Gate', 'Archway', 'Gateway'], build: buildGateway,
+  },
+  palisade: {
+    label: 'Palisade module', group: 'yard', enchant: 0.1, size: [2, 4],
+    opts: { kind: opt('Kind', { pointed: ['Pointed logs', 2], planks: ['Split planks', 1] }), length: opt('Length', metres(2, 3, 4)), state: opt('State', { intact: ['Intact', 3], broken: ['Broken', 1], burnt: ['Burnt', 1] }) },
+    nouns: ['Palisade', 'Stockade', 'Log Wall'], build: buildPalisade,
+  },
+  headframe: {
+    label: 'Mine headframe', group: 'work', enchant: 0.3, size: [8, 10],
+    opts: { kind: opt('Kind', { timber: ['Timber', 2], iron: ['Iron', 1] }), wheels: opt('Wheels', { 1: ['One sheave', 2], 2: ['Two sheaves', 1] }), base: opt('Shaft', { collar: ['Stone collar', 1], open: ['Timber collar', 1] }) },
+    nouns: ['Headframe', 'Pithead', 'Winding Tower'], build: buildHeadframe,
+  },
+  liftcage: {
+    label: 'Lift cage', group: 'work', enchant: 0.2, size: [2.4, 4.8],
+    opts: { kind: opt('Cage', { barred: ['Barred', 2], frame: ['Open frame', 1], boxed: ['Planked', 1] }), guides: opt('Hoist', { posts: ['Guide posts and pulley', 2], hanging: ['Hanging on chains', 1] }) },
+    nouns: ['Lift', 'Cage', 'Hoist'], build: buildLiftCage,
+  },
+  forge: {
+    label: 'Forge', group: 'work', enchant: 0, size: [3, 5],
+    opts: { kind: opt('Kind', { shelter: ['Forge under a roof', 2], hearth: ['Hearth and chimney only', 1] }), fire: opt('Fire', { lit: ['Lit', 2], cold: ['Cold', 1] }) },
+    nouns: ['Forge', 'Smithy', 'Hearth'], build: buildForge,
+  },
+  furnace: {
+    label: 'Furnace / kiln', group: 'work', enchant: 0, size: [2, 4.5],
+    opts: { kind: opt('Kind', { bloomery: ['Bloomery', 1], blast: ['Stone blast furnace', 1], kiln: ['Dome kiln', 1] }), fire: opt('Fire', { lit: ['Lit', 2], cold: ['Cold', 1] }) },
+    nouns: ['Furnace', 'Kiln', 'Smelter'], build: buildFurnace,
+  },
+  mine: {
+    label: 'Mine entrance', group: 'work', enchant: 0.3, size: [3.5, 5],
+    opts: { kind: opt('Portal', { timber: ['Timber frame', 2], stone: ['Stone arch', 1] }), rails: opt('Rails', { rails: ['Rails', 1], none: ['None', 1] }) },
+    nouns: ['Adit', 'Mine Mouth', 'Drift'], build: buildMine,
+  },
+  shrine: {
+    label: 'Shrine', group: 'sacred', enchant: 0.3, size: [1.6, 3.2],
+    opts: { kind: opt('Kind', { wayside: ['Wayside niche', 3], post: ['Post shrine', 1], bellows: ['Bellows shrine', 1], anvil: ['Anvil shrine', 1], forge: ['Forge shrine', 1], waystone: ['Waystone canopy', 1] }),
+      lights: opt('Lights', { lit: ['Lit', 2], unlit: ['Unlit', 1] }), state: opt('State', { kept: ['Kept', 2], weathered: ['Weathered', 1] }) },
+    nouns: ['Shrine', 'Altar', 'Wayshrine'], build: buildShrine,
+  },
+  well: {
+    label: 'Well', group: 'sacred', enchant: 0.1, size: [1.2, 2.8],
+    opts: { kind: opt('Kind', { roofed: ['Roofed with winch', 2], boarded: ['Boarded over', 1], ruined: ['Ruined', 1] }), cover: opt('Roof', { tiles: ['Clay tiles', 1], thatch: ['Thatch', 1], planks: ['Planks', 1] }) },
+    nouns: ['Well', 'Wellhead', 'Spring'], build: buildWell,
+  },
+  wagon: {
+    label: 'Wagon / cart', group: 'carts', enchant: 0.15, size: [2, 4.2],
+    opts: { kind: opt('Kind', { wagon: ['Four-wheel wagon', 2], cart: ['Two-wheel cart', 2], handcart: ['Hand cart', 1] }), cover: opt('Cover', { none: ['None', 2], canvas: ['Canvas', 1], torn: ['Torn canvas', 1] }),
+      load: opt('Load', { empty: ['Empty', 1], crates: ['Crates', 1], sacks: ['Sacks', 1], hay: ['Hay', 1], brazier: ['Brazier', 1], ore: ['Ore', 1] }), state: opt('State', { intact: ['Intact', 3], wreck: ['Wrecked', 1], burnt: ['Burnt', 1] }) },
+    nouns: ['Wagon', 'Cart', 'Wain'], build: buildWagon,
+  },
+  minecart: {
+    label: 'Mine cart', group: 'carts', enchant: 0.1, size: [1.4, 2],
+    opts: { kind: opt('Body', { tub: ['Iron tub', 2], box: ['Wooden box', 1] }), load: opt('Load', { ore: ['Ore', 2], coal: ['Coal', 1], empty: ['Empty', 1] }), rails: opt('Rails', { none: ['None', 1], rails: ['Rail piece', 1] }) },
+    nouns: ['Mine Cart', 'Tub', 'Hutch'], build: buildMineCart,
+  },
+  building: {
+    label: 'Small building', group: 'small', enchant: 0, size: [3.5, 6],
+    opts: { kind: opt('Kind', { cottage: ['Cottage', 3], hut: ['Hut', 1], shelter: ['Open shelter', 1] }), walls: opt('Walls', { plaster: ['Plaster and timber', 3], stone: ['Stone', 2], plank: ['Planks', 1], logs: ['Logs', 1] }),
+      roof: opt('Roof', { thatch: ['Thatch', 2], tiles: ['Clay tiles', 2], slate: ['Slate', 1], planks: ['Planks', 1] }), chimney: opt('Chimney', { yes: ['Yes', 2], no: ['No', 1] }) },
+    nouns: ['Cottage', 'Hut', 'Dwelling'], build: buildBuilding,
+  },
+};
+
+// ---------- game ids (Embers of Valdren) ----------
+// Each id from the game's missing-objects list that suits structure pieces: which category and variants make it,
+// which game palette it uses, and whether it glows. Sizes come from targets.json; "box" is the fallback for ids
+// not in targets.json yet (estimates for the provisional section G Oldsmoke and Cinderreach pieces).
+const GAME_GROUPS = { B: 'Village and farm (B)', C: 'Dead Road and Cinder Road (C)', D: 'Ash and ember country (D)', G: 'Act 2 stand-ins (G, provisional sizes)' };
+const GAME_IDS = {
+  'cottage-thatch-b': { g: 'B', cat: 'building', opts: { kind: 'cottage', walls: 'plaster', roof: 'thatch', chimney: 'yes' }, pal: 'field' },
+  'wagon-wreck-a': { g: 'C', cat: 'wagon', opts: { kind: 'wagon', cover: 'torn', load: 'crates', state: 'wreck' }, pal: 'field' },
+  'wagon-burnt': { g: 'C', cat: 'wagon', opts: { kind: 'wagon', cover: 'none', load: 'empty', state: 'burnt' }, pal: 'ash', glow: true },
+  'roadside-shrine-a': { g: 'C', cat: 'shrine', opts: { kind: 'wayside', lights: 'lit', state: 'weathered' }, pal: 'field' },
+  'mine-cart': { g: 'D', cat: 'minecart', opts: { kind: 'tub', load: 'ore', rails: 'none' }, pal: 'ash' },
+  'headframe': { g: 'G', cat: 'headframe', opts: { kind: 'timber', wheels: '1', base: 'collar' }, pal: 'ash', box: { w: 5, d: 5, h: 9.5 } },
+  'lift-cage': { g: 'G', cat: 'liftcage', opts: { kind: 'barred', guides: 'posts' }, pal: 'ash', box: { w: 2.8, d: 2.0, h: 4.6 } },
+  'brazier-cart': { g: 'G', cat: 'wagon', opts: { kind: 'handcart', cover: 'none', load: 'brazier', state: 'intact' }, pal: 'ash', glow: true, box: { w: 2.4, d: 1.2, h: 1.7 } },
+  'shrine-weeping-bellows': { g: 'G', cat: 'shrine', opts: { kind: 'bellows', lights: 'lit', state: 'weathered' }, pal: 'ash', glow: true, box: { w: 2.4, d: 2.0, h: 2.4 } },
+  'shrine-hushed-anvil': { g: 'G', cat: 'shrine', opts: { kind: 'anvil', lights: 'lit', state: 'kept' }, pal: 'ash', box: { w: 2.2, d: 2.2, h: 1.6 } },
+  'shrine-forge': { g: 'G', cat: 'shrine', opts: { kind: 'forge', lights: 'lit', state: 'kept' }, pal: 'ash', glow: true, box: { w: 2.4, d: 1.4, h: 2.8 } },
+  'shrine-waystone': { g: 'G', cat: 'shrine', opts: { kind: 'waystone', lights: 'lit', state: 'kept' }, pal: 'ash', glow: true, box: { w: 1.8, d: 1.8, h: 3.4 } },
+  'cinder-boarded-well': { g: 'G', cat: 'well', opts: { kind: 'boarded', cover: 'planks' }, pal: 'ash', box: { w: 1.8, d: 1.8, h: 1.1 } },
+  'cinder-forge': { g: 'G', cat: 'forge', opts: { kind: 'shelter', fire: 'lit' }, pal: 'ash', box: { w: 4.6, d: 3.6, h: 4.4 } },
+  'cinder-smelter': { g: 'G', cat: 'furnace', opts: { kind: 'blast', fire: 'lit' }, pal: 'ash', box: { w: 3, d: 3, h: 4.5 } },
+  'oldsmoke-adit': { g: 'G', cat: 'mine', opts: { kind: 'timber', rails: 'rails' }, pal: 'ash', glow: true, box: { w: 4.5, d: 4.5, h: 3.6 } },
+};
+// The game's palette swatches (missing-objects list).
+const PALETTES = {
+  field: { plaster: '#e6dcc6', roof: '#a83a2c', thatch: '#d1b25a', wood: '#6b4a2b', stone: '#8a8578', metal: '#5f5b56', paint: '#5a7a8c', glow: '#ffb347' },
+  ash: { plaster: '#8d8780', roof: '#2b2b2b', thatch: '#6e5a3e', wood: '#4a3722', stone: '#5e5a55', metal: '#3e3a37', paint: '#6a3a2a', glow: '#ff5a0f' },
+};
+const TARGETS_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/src/env/targets.json';
+let TARGETS = JSON.parse(document.getElementById('embersTargets').textContent);
+const gameBox = (id) => TARGETS.objects?.[id] || GAME_IDS[id]?.box || null;
+// Triangle budget: small pieces 1,500, everything else about 4,500 (the game's face target).
+const gameBudget = (b) => b && b.h <= 1.6 && Math.max(b.w, b.d) <= 2 ? 1500 : 4500;
+// As the game checks it: the driver axis is the height, or the longest footprint side for long low pieces.
+const driverAxis = (b) => Math.max(b.w, b.d) > 1.8 * b.h ? (b.w >= b.d ? 'x' : 'z') : 'y';
+
+function makeName(cat, r) {
+  const C = CATS[cat], noun = r.pick(C.nouns), k = r.int(0, 2);
+  return k === 0 ? `${r.pick(ADJ)} ${noun}` : k === 1 ? `${noun} ${r.pick(OF)}` : `${r.pick(ADJ)} ${noun} ${r.pick(OF)}`;
+}
+
+// Everything that defines a piece. The geometry is a pure function of these traits.
+function rollTraits(cat, seed) {
+  const C = CATS[cat], r = makeRng(cat + '|' + seed);
+  const t = { category: cat, seed, opts: {}, fit: 'design' };
+  for (const [slot, o] of Object.entries(C.opts)) t.opts[slot] = r.weighted(o.w);
+  t.enchanted = r.chance(C.enchant);
+  t.size = +r.range(...C.size).toFixed(2);
+  t.colors = basePalette(r);
+  t.name = makeName(cat, r);
+  return t;
+}
+
+// ---------- geometry helpers ----------
+// Tube along a smooth curve whose radius goes from r0 to r1 (r1 = 0 makes a point), with a cap at the base.
+function taperTube(points, r0, r1, tubular, radial) {
+  const curve = new THREE.CatmullRomCurve3(points);
+  const fr = curve.computeFrenetFrames(tubular, false);
+  const pos = [], uv = [], idx = [];
+  const P = new THREE.Vector3();
+  for (let i = 0; i <= tubular; i++) {
+    const u = i / tubular; curve.getPointAt(u, P);
+    const N = fr.normals[i], B = fr.binormals[i], r = r0 + (r1 - r0) * u;
+    for (let j = 0; j <= radial; j++) {
+      const v = (j / radial) * PI * 2, s = Math.sin(v), c = -Math.cos(v); // same convention as THREE.TubeGeometry
+      pos.push(P.x + r * (c * N.x + s * B.x), P.y + r * (c * N.y + s * B.y), P.z + r * (c * N.z + s * B.z));
+      uv.push(j / radial, u);
+    }
+  }
+  for (let i = 0; i < tubular; i++) for (let j = 0; j < radial; j++) {
+    const a = i * (radial + 1) + j, b = (i + 1) * (radial + 1) + j;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const c0 = curve.getPointAt(0), center = pos.length / 3;
+  pos.push(c0.x, c0.y, c0.z); uv.push(0.5, 0);
+  for (let j = 0; j < radial; j++) idx.push(center, j + 1, j);
+  if (r1 > 0) { // tip cap
+    const c1 = curve.getPointAt(1), tip = pos.length / 3, last = tubular * (radial + 1);
+    pos.push(c1.x, c1.y, c1.z); uv.push(0.5, 1);
+    for (let j = 0; j < radial; j++) idx.push(tip, last + j, last + j + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const UP = V(0, 1, 0);
+// Profile [[radius, y], ...] listed bottom to top, so normals face outwards.
+const lathe = (pts, seg, phi = PI * 2) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(Math.max(r, 0), y)), seg, 0, phi);
+function hash3(x, y, z, s) {
+  const h = Math.sin(Math.round(x * 1e4) * 0.1271 + Math.round(y * 1e4) * 0.3117 + Math.round(z * 1e4) * 0.0747 + s * 13.37) * 43758.5453;
+  return h - Math.floor(h);
+}
+// Lumpy faceted boulder. Displacement is a function of position, so the shared corners stay closed.
+function rock(radius, detail, salt) {
+  const g = new THREE.IcosahedronGeometry(radius, detail);
+  const p = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    v.multiplyScalar(0.82 + 0.36 * hash3(v.x / radius, v.y / radius, v.z / radius, salt));
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+// Dome (upper half sphere) with a lumpy surface and a flat base ring at y = 0.
+function lumpyDome(radius, w, h, salt, amount = 0.2) {
+  const g = new THREE.SphereGeometry(radius, w, h, 0, PI * 2, 0, PI / 2);
+  const p = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    if (v.y > 1e-4) v.multiplyScalar(1 - amount / 2 + amount * hash3(v.x / radius, v.y / radius, v.z / radius, salt));
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+// Solid whose bottom face is the rectangle a ({x, z} half sizes at height y) and whose top face is b: one band of a
+// hipped roof, a tapered chimney or a furnace stack.
+function frustum(a, b) {
+  const g = new THREE.BoxGeometry(1, 1, 1), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const f = p.getY(i) > 0 ? b : a;
+    p.setXYZ(i, Math.sign(p.getX(i)) * f.x, f.y, Math.sign(p.getZ(i)) * f.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+// Teardrop flame, base at y = 0.
+const flameGeo = (w, h, seg) => lathe([[0, 0], [w * 0.55, h * 0.12], [w * 0.6, h * 0.3], [w * 0.42, h * 0.58], [w * 0.16, h * 0.84], [0, h]], seg);
+const shapeOf = (pts) => new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
+
+// ---------- materials ----------
+function makeMaterials(t) {
+  const c = t.colors, ash = t.palette === 'ash';
+  const std = (name, o) => Object.assign(new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0 }), { name }, o);
+  const col = (h) => new THREE.Color(h);
+  const shade = (h, f) => col(h).multiplyScalar(f);
+  return {
+    plaster: std('Plaster', { color: col(c.plaster), roughness: 0.95 }),
+    soot: std('Sooted', { color: col(c.plaster).lerp(col('#1c1714'), 0.6), roughness: 1 }),
+    roof: std('Roof', { color: col(c.roof) }),
+    roof2: std('RoofDark', { color: shade(c.roof, 0.8) }),
+    slate: std('Slate', { color: col(c.stone).lerp(col('#3c4350'), 0.6) }),
+    slate2: std('SlateDark', { color: col(c.stone).lerp(col('#3c4350'), 0.6).multiplyScalar(0.8) }),
+    thatch: std('Thatch', { color: col(c.thatch), roughness: 1 }),
+    thatch2: std('ThatchDark', { color: shade(c.thatch, 0.82), roughness: 1 }),
+    wood: std('Wood', { color: col(c.wood) }),
+    wood2: std('WoodDark', { color: shade(c.wood, 0.65), roughness: 0.9 }),
+    woodCut: std('WoodCut', { color: col(c.wood).lerp(col('#f0d9a8'), 0.55), roughness: 0.9 }),
+    stone: std('Stone', { color: col(c.stone), roughness: 0.95 }),
+    stone2: std('StoneDark', { color: shade(c.stone, 0.78), roughness: 0.95 }),
+    brick: std('Brick', { color: col('#9a4a32').lerp(col(c.roof), 0.3), roughness: 0.95 }),
+    brick2: std('BrickDark', { color: col('#9a4a32').lerp(col(c.roof), 0.3).multiplyScalar(0.75), roughness: 0.95 }),
+    clay: std('Clay', { color: col('#a8744a').lerp(col(c.stone), 0.25), roughness: 1 }),
+    iron: std('Iron', { color: col(c.metal), metalness: 0.6, roughness: 0.55 }),
+    rust: std('Rust', { color: col(c.metal).lerp(col('#7a4a2a'), 0.55), metalness: 0.3, roughness: 0.8 }),
+    gold: std('Gilt', { color: col('#d8a93a'), metalness: 0.8, roughness: 0.35 }),
+    paint: std('Paint', { color: col(c.paint) }),
+    canvas: std('Canvas', { color: col(c.paint).lerp(col('#e8dcc0'), 0.75), roughness: 1, side: THREE.DoubleSide }),
+    leather: std('Leather', { color: col('#5a3a24'), roughness: 0.8 }),
+    rope: std('Rope', { color: col('#a3875a'), roughness: 1 }),
+    moss: std('Moss', { color: col(ash ? '#4f4b46' : '#5a8c44'), roughness: 1 }),
+    hay: std('Hay', { color: col(c.thatch).lerp(col('#e0c870'), 0.3), roughness: 1 }),
+    water: std('Water', { color: col('#1f3a4a'), roughness: 0.2 }),
+    wax: std('Wax', { color: col('#efe4c8'), roughness: 0.6 }),
+    dark: std('Dark', { color: col('#120e0c'), roughness: 1 }),
+    char: std('Charred', { color: col('#1c1714'), roughness: 1 }),
+    char2: std('CharredGrey', { color: col('#3a3430'), roughness: 1 }),
+    glow: std('Glow', { color: col(c.glow), emissive: col(c.glow), emissiveIntensity: 2.5, roughness: 0.5 }),
+    fire: std('Fire', { color: col('#ff8a2a'), emissive: col('#ff7a1a'), emissiveIntensity: 3, roughness: 1 }),
+    fireCore: std('FireCore', { color: col('#fff0b3'), emissive: col('#ffe080'), emissiveIntensity: 3.5, roughness: 1 }),
+  };
+}
+
+// ---------- builder ----------
+// Every category builds in metres (base at y = 0, front facing +Z, long walls along X). Afterwards the piece is set
+// on the ground with its footprint centred and scaled: not at all (as designed), to the game's target box, or so
+// that its longest side (or height) is t.size metres. Parts that animate go in their own nodes (direct children of
+// the root): "Spin" nodes turn about one axis, "Flame" nodes flicker in scale.
+function buildProp(t) {
+  const C = CATS[t.category], r = makeRng(t.category + '|' + t.seed + '|shape');
+  const D = { low: 0.5, medium: 1, high: 1.8 }[t.detail || 'medium'];
+  const seg = (n) => Math.max(3, Math.round(n * D));
+  const M = makeMaterials(t);
+  const root = new THREE.Group(); root.name = 'Structure';
+  const body = new THREE.Group(); body.name = 'Body'; root.add(body);
+  const anims = [];
+  let partNo = 0;
+  const add = (parent, name, geo, mat, p = [0, 0, 0], rot = [0, 0, 0], s = [1, 1, 1]) => {
+    const m = new THREE.Mesh(geo, mat); m.name = name || 'Part' + (++partNo);
+    m.position.set(...(p.isVector3 ? p.toArray() : p)); m.rotation.set(...rot);
+    m.scale.set(...(typeof s === 'number' ? [s, s, s] : s));
+    parent.add(m); return m;
+  };
+  const group = (parent, name, p = [0, 0, 0], rot = [0, 0, 0]) => {
+    const g = new THREE.Group(); g.name = name; g.position.set(...(p.isVector3 ? p.toArray() : p)); g.rotation.set(...rot); parent.add(g); return g;
+  };
+  const x = {
+    t, o: t.opts, r, M, D, seg, body, add, group,
+    sphere: (rad, w = 16, h = 10) => new THREE.SphereGeometry(rad, seg(w), seg(h)),
+    cyl: (rt, rb, h, rad = 12, open = false) => new THREE.CylinderGeometry(rt, rb, h, rad <= 6 ? rad : seg(rad), 1, open), // up to 6 sides is a deliberate polygon
+    box: (w, h, d) => new THREE.BoxGeometry(Math.max(w, 1e-3), Math.max(h, 1e-3), Math.max(d, 1e-3)),
+    cone: (rad, h, n = 12) => new THREE.ConeGeometry(rad, h, n <= 6 ? n : seg(n)),
+    lathe: (pts, n = 16, phi) => lathe(pts, seg(n), phi),
+    rock: (rad, salt) => rock(rad, (D >= 1.5 ? 1 : 0) + (rad > 0.4 ? 1 : 0), salt ?? r.next() * 100),
+    extrude: (shape, depth) => new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: seg(10) }).translate(0, 0, -depth / 2),
+    // Box between two corners.
+    bx: (parent, name, mat, x0, y0, z0, x1, y1, z1, rot) =>
+      add(parent, name, x.box(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)), mat, [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2], rot),
+    // Square beam (w x d section) from point a to point b.
+    beam: (parent, name, a, b, w, d, mat) => {
+      const dir = b.clone().sub(a), len = dir.length();
+      const m = add(parent, name, x.box(w, len, d), mat, a.clone().add(b).multiplyScalar(0.5));
+      m.quaternion.setFromUnitVectors(UP, dir.normalize());
+      return m;
+    },
+    // Round pole from a to b.
+    pole: (parent, name, a, b, ra, rb = ra, mat, radial = 6) => {
+      const dir = b.clone().sub(a), len = dir.length();
+      const m = add(parent, name, new THREE.CylinderGeometry(rb, ra, len, radial <= 6 ? radial : seg(radial)), mat, a.clone().add(b).multiplyScalar(0.5));
+      m.quaternion.setFromUnitVectors(UP, dir.normalize());
+      return m;
+    },
+    // Spoked wheel in the XY plane (axle along Z) centred at p: rim, iron tyre, spokes and hub.
+    wheel: (parent, name, p, R, mats = {}, spokes = 8, rot = [0, 0, 0]) => {
+      const g = group(parent, name, p, rot), tube = Math.max(0.025, R * 0.09);
+      const rim = mats.rim || M.wood2, tyre = mats.tyre || M.iron;
+      if (mats.arc !== undefined) { // broken wheel: part of the rim
+        add(g, 'Rim', new THREE.TorusGeometry(R, tube, seg(4), seg(18), mats.arc), rim);
+      } else {
+        add(g, 'Rim', new THREE.TorusGeometry(R, tube, seg(4), seg(18)), rim);
+        if (tyre) add(g, 'Tyre', new THREE.TorusGeometry(R + tube * 0.6, tube * 0.55, seg(3), seg(18)), tyre);
+      }
+      for (let i = 0; i < spokes; i++) {
+        const a = (i / spokes) * PI * 2; if (mats.arc !== undefined && a > mats.arc) continue;
+        add(g, 'Spoke', x.box(tube * 0.7, R, tube * 0.6), rim, [Math.cos(a) * R / 2, Math.sin(a) * R / 2, 0], [0, 0, a - PI / 2]);
+      }
+      add(g, 'Hub', x.cyl(R * 0.18, R * 0.18, tube * 3.2, 8), mats.hub || rim, [0, 0, 0], [PI / 2, 0, 0]);
+      return g;
+    },
+    // Node that spins about a local axis in the idle animation (turns = full turns per loop, negative = backwards).
+    spin: (p, axis = 'x', turns = 1) => {
+      const g = group(root, anims.some((a) => a.kind === 'spin') ? 'Spin' + (anims.length + 1) : 'Spin', p);
+      anims.push({ kind: 'spin', node: g, axis, turns }); return g;
+    },
+    // Node at the base of a flame; it flickers in the idle animation.
+    flicker: (p) => {
+      const n = anims.filter((a) => a.kind === 'flicker').length;
+      const g = group(root, 'Flame' + (n + 1), p);
+      anims.push({ kind: 'flicker', node: g, phase: n * 1.7 + r.next() }); return g;
+    },
+    // A flame (outer fire + bright core) inside a flicker node.
+    flame: (p, w, h) => {
+      const g = x.flicker(p);
+      add(g, 'Flame', flameGeo(w, h, seg(10)), M.fire);
+      add(g, 'FlameCore', flameGeo(w * 0.5, h * 0.55, seg(8)), M.fireCore, [0, h * 0.02, 0]);
+      return g;
+    },
+    // Candle standing at p (base), lit or not.
+    candle: (parent, p, h = 0.14, lit = true) => {
+      add(parent, 'Candle', x.cyl(0.025, 0.028, h, 8), M.wax, [p.x, p.y + h / 2, p.z]);
+      if (lit) { parent.updateWorldMatrix(true, false); x.flame(V(p.x, p.y + h, p.z).applyMatrix4(parent.matrixWorld), 0.035, 0.08); }
+    },
+    // Iron lantern hanging from a hook at p (top); its core glows.
+    lantern: (parent, p) => {
+      add(parent, 'LanternHook', x.cyl(0.008, 0.008, 0.12, 4), M.iron, [p.x, p.y - 0.06, p.z]);
+      add(parent, 'LanternCap', x.cone(0.09, 0.08, 4), M.iron, [p.x, p.y - 0.16, p.z], [0, PI / 4, 0]);
+      add(parent, 'LanternLight', x.box(0.1, 0.14, 0.1), M.glow, [p.x, p.y - 0.27, p.z]);
+      add(parent, 'LanternBase', x.box(0.13, 0.03, 0.13), M.iron, [p.x, p.y - 0.355, p.z]);
+    },
+    // Glowing embers scattered around p (burnt pieces with glow on).
+    embers: (parent, p, n, spread = 0.3) => {
+      if (!t.enchanted) return;
+      for (let i = 0; i < n; i++) add(parent, 'Ember', x.box(0.06, 0.03, 0.05), M.glow, [p.x + r.range(-spread, spread), p.y + r.range(0, 0.04), p.z + r.range(-spread, spread)], [0, r.next() * PI, 0]);
+    },
+  };
+  C.build(x);
+
+  if (t.style === 'lowpoly') root.traverse((o) => {
+    if (!o.isMesh) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
+    g.computeVertexNormals(); if (g !== o.geometry) o.geometry.dispose(); o.geometry = g;
+  });
+  root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+  // footprint centre to the origin, lowest point at y 0, then scale: as designed, to the game's target box, or so
+  // that the longest side (or the height) is t.size metres
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root, true), shift = V(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+  for (const ch of root.children) ch.position.add(shift);
+  const sz = box.getSize(new THREE.Vector3());
+  const k = t.box ? fitToBox(sz, t.box) : t.fit === 'design' ? V(1, 1, 1) : t.fit === 'scale' ? V(t.scale.x, t.scale.y, t.scale.z) // kit pieces share one factor
+    : V(1, 1, 1).multiplyScalar(t.size / (t.fit === 'height' ? sz.y : Math.max(sz.x, sz.y, sz.z)));
+  root.scale.copy(k);
+  root.userData = { scale: k, dims: sz.multiply(k) };
+  return { root, body, anims, materials: M };
+}
+
+// Scale factors that bring a piece of size sz to the target box: uniform on the driver axis, then the other axes
+// stretched towards the target (at most 1.6x either way, so the shape stays recognisable).
+function fitToBox(sz, b) {
+  const tgt = { x: b.w, y: b.h, z: b.d }, drv = driverAxis(b), k = tgt[drv] / sz[drv];
+  const clamp = (f) => Math.min(1.6, Math.max(1 / 1.6, f));
+  return V(...['x', 'y', 'z'].map((a) => a === drv ? k : k * clamp(tgt[a] / (sz[a] * k))));
+}
+
+// ---------- building kit: walls ----------
+const WALL_T = { stone: 0.4, plaster: 0.25, plank: 0.14, logs: 0.3 };
+const WALL_H = { storey: 2.8, tall: 3.6 };
+// Solid parts of a wall [-L/2, L/2] x [0, H] around its openings, as vertical strips split at every opening edge and
+// at the given cuts; top(x) caps each strip (ruined walls). Arched openings get narrow strips under the arch.
+function wallRects(L, H, holes, cuts, top) {
+  const xs = [-L / 2, L / 2, ...cuts];
+  for (const h of holes) {
+    xs.push(h.x0, h.x1);
+    if (h.r) for (let i = 1; i < 8; i++) xs.push(h.x0 + ((h.x1 - h.x0) * i) / 8);
+  }
+  const s = [...new Set(xs.map((v) => +Math.min(L / 2, Math.max(-L / 2, v)).toFixed(5)))].sort((a, b) => a - b);
+  const out = [];
+  for (let i = 0; i + 1 < s.length; i++) {
+    const a = s[i], b = s[i + 1]; if (b - a < 1e-3) continue;
+    const m = (a + b) / 2;
+    let iv = [[0, Math.min(H, top(m))]];
+    for (const h of holes) {
+      if (m <= h.x0 || m >= h.x1) continue;
+      let y1 = h.y1;
+      if (h.r) { const d = a <= h.cx && b >= h.cx ? 0 : Math.min(Math.abs(a - h.cx), Math.abs(b - h.cx)); y1 += Math.sqrt(Math.max(0, h.r * h.r - d * d)); }
+      iv = iv.flatMap(([p, q]) => [[p, Math.min(q, h.y0)], [Math.max(p, y1), q]]).filter(([p, q]) => q - p > 1e-3);
+    }
+    for (const [p, q] of iv) out.push({ x0: a, x1: b, y0: p, y1: q });
+  }
+  return out;
+}
+// x ranges where the wall is solid over the whole band [ya, yb] (merged across strips).
+function solidSpans(rects, ya, yb) {
+  const xs = rects.filter((q) => q.y0 <= ya + 1e-4 && q.y1 >= yb - 1e-4).map((q) => [q.x0, q.x1]).sort((a, b) => a[0] - b[0]);
+  const out = [];
+  for (const [a, b] of xs) { const l = out[out.length - 1]; if (l && a <= l[1] + 1e-4) l[1] = Math.max(l[1], b); else out.push([a, b]); }
+  return out;
+}
+// Openings of a wall of length L: a door, one or two windows, or an archway.
+function wallHoles(L, opening, r) {
+  const off = L >= 3 ? r.range(-0.12, 0.12) * (L - 2) : 0;
+  if (opening === 'door') return [{ kind: 'door', x0: off - 0.5, x1: off + 0.5, y0: 0, y1: 2.1 }];
+  if (opening === 'window') return [{ kind: 'window', x0: off - 0.4, x1: off + 0.4, y0: 1.0, y1: 1.8 }];
+  if (opening === 'windows') return [-1, 1].map((s) => ({ kind: 'window', x0: (s * L) / 4 - 0.35, x1: (s * L) / 4 + 0.35, y0: 1.0, y1: 1.75 }));
+  if (opening === 'arch') { const w2 = Math.min(0.75, L / 2 - 0.3); return [{ kind: 'arch', x0: -w2, x1: w2, y0: 0, y1: 1.85, r: w2, cx: 0 }]; }
+  return [];
+}
+
+// One wall module in the parent's frame: along X from -L/2 to L/2 (flat ends, so modules tile), front face at
+// z = +T/2, base at y 0. holes may be given directly (gateways); state is intact, ruined or burnt.
+function wallPiece(x, parent, { L, H, material, opening = 'none', holes, state = 'intact', door = true }) {
+  const { r, M, add, bx, D } = x;
+  const T = WALL_T[material], burnt = state === 'burnt', ruined = state === 'ruined';
+  holes = holes || wallHoles(L, opening, r);
+  // a jagged top for ruined walls (and a little for burnt timber)
+  const nT = Math.max(2, Math.ceil(L / 0.35)), tops = [];
+  if (ruined || (burnt && material !== 'stone')) {
+    let h = r.chance(0.5) ? H : H * r.range(0.45, 0.7);
+    for (let i = 0; i < nT; i++) {
+      h = Math.min(H, Math.max(H * 0.25, h + r.range(-0.45, 0.4) * (ruined ? 1 : 0.5)));
+      tops.push(ruined ? h : Math.max(h, H * 0.72));
+    }
+    if (ruined) tops[r.int(0, nT - 1)] = H; // one stretch still stands full height
+  }
+  const top = (xm) => tops.length ? tops[Math.min(nT - 1, Math.max(0, Math.floor(((xm + L / 2) / L) * nT)))] : H;
+  const cuts = [];
+  if (tops.length) for (let i = 1; i < nT; i++) cuts.push(-L / 2 + (L * i) / nT);
+  const plankW = 0.22;
+  if (material === 'plank') for (let i = 1; i < Math.round(L / plankW); i++) cuts.push(-L / 2 + (L * i) / Math.round(L / plankW));
+  const rects = wallRects(L, H, holes, cuts, top);
+  const timber = burnt ? M.char : M.wood2;
+
+  if (material === 'logs') {
+    const nC = Math.max(3, Math.round(H / (T * 0.95))), step = H / nC;
+    for (let i = 0; i < nC; i++) {
+      const ya = i * step, yb = ya + step;
+      for (const [a, b] of solidSpans(rects, ya, yb)) {
+        const m = add(parent, 'Log', x.cyl(step * 0.52, step * 0.52, b - a, 7), burnt ? (r.chance(0.5) ? M.char : M.char2) : i % 2 ? M.wood : M.wood2, [(a + b) / 2, ya + step / 2, 0], [0, 0, PI / 2]);
+        m.scale.z = T / step;
+      }
+    }
+  } else {
+    for (const q of rects) {
+      const strip = Math.round((q.x0 + L / 2) / plankW);
+      let mat = { stone: M.stone, plaster: M.plaster, plank: strip % 2 ? M.wood : M.wood2 }[material];
+      if (burnt) mat = material === 'plaster' ? M.soot : material === 'plank' && r.chance(0.6) ? M.char : M.char2;
+      if (burnt && material === 'plank' && q.x0 > -L / 2 + 0.2 && q.x1 < L / 2 - 0.2 && r.chance(0.15)) continue; // a burnt-out plank
+      const dz = material === 'plank' ? r.range(-0.012, 0.012) : 0;
+      bx(parent, material === 'plank' ? 'Plank' : 'WallBody', mat, q.x0, q.y0, -T / 2 + dz, q.x1, q.y1, T / 2 + dz);
+    }
+  }
+
+  if (material === 'stone') {
+    for (const [a, b] of solidSpans(rects, 0, 0.3)) bx(parent, 'Plinth', burnt ? M.char2 : M.stone2, a, 0, -T / 2 - 0.04, b, 0.3, T / 2 + 0.04);
+    const n = Math.round(L * H * 2.2 * D);
+    for (let i = 0; i < n; i++) {
+      const w = r.range(0.22, 0.42), h = r.range(0.12, 0.2), cx = r.range(-L / 2 + w / 2, L / 2 - w / 2), cy = r.range(0.35 + h / 2, H - h / 2), s = r.chance(0.5) ? 1 : -1;
+      if (!solidSpans(rects, cy - h / 2, cy + h / 2).some(([a, b]) => a <= cx - w / 2 && b >= cx + w / 2)) continue;
+      bx(parent, 'Stone', burnt ? M.char2 : r.chance(0.5) ? M.stone2 : M.stone, cx - w / 2, cy - h / 2, s * T / 2, cx + w / 2, cy + h / 2, s * (T / 2 + 0.03));
+    }
+    for (const h of holes) {
+      const hc = (h.x0 + h.x1) / 2, stone = burnt ? M.char2 : M.stone2;
+      if (h.r) { // voussoirs round the arch
+        const nV = Math.max(5, Math.round(7 * Math.min(1.4, D)));
+        for (let i = 0; i <= nV; i++) {
+          const a = (i / nV) * PI, px = h.cx + Math.cos(a) * (h.r + 0.13), py = h.y1 + Math.sin(a) * (h.r + 0.13);
+          if (top(px) < py + 0.12) continue;
+          add(parent, 'Voussoir', x.box(((PI * (h.r + 0.13)) / nV) * 0.9, 0.26, T + 0.04), stone, [px, py, 0], [0, 0, a - PI / 2]);
+        }
+      } else if (top(hc) >= h.y1 + 0.22) bx(parent, 'Lintel', stone, Math.max(-L / 2, h.x0 - 0.12), h.y1, -T / 2 - 0.02, Math.min(L / 2, h.x1 + 0.12), h.y1 + 0.22, T / 2 + 0.02);
+      if (h.kind === 'window') bx(parent, 'Sill', stone, h.x0 - 0.08, h.y0 - 0.08, -T / 2, h.x1 + 0.08, h.y0, T / 2 + 0.06);
+    }
+    if (ruined) {
+      for (const q of rects) if (q.y1 < H - 0.05 && q.y1 > 0.4 && r.chance(0.45)) bx(parent, 'Moss', M.moss, q.x0, q.y1, -T / 2 + 0.02, q.x1, q.y1 + 0.04, T / 2 - 0.02);
+    }
+  } else if (material === 'plaster') {
+    const tb = (a, b, ya, yb, name = 'Timber') => {
+      for (const s of [1, -1]) bx(parent, name, timber, a, ya, s * T / 2, b, yb, s * (T / 2 + 0.04));
+    };
+    const rows = [[0, 0.2], [H - 0.18, H], [1.25, 1.37]];
+    if (H > 3) rows.push([2.75, 2.87]);
+    for (const [ya, yb] of rows) for (const [a, b] of solidSpans(rects, ya, yb)) tb(a, b, ya, yb, 'Beam');
+    const posts = [-L / 2 + 0.08, L / 2 - 0.08];
+    for (const h of holes) for (const p of [h.x0 - 0.08, h.x1 + 0.08]) if (Math.abs(p) < L / 2 - 0.2) posts.push(p);
+    posts.sort((a, b) => a - b);
+    for (let i = 0; i + 1 < posts.length; i++) {
+      const gap = posts[i + 1] - posts[i];
+      if (gap > 1.4) { const n = Math.floor(gap / 1.1); for (let k = 1; k <= n; k++) posts.push(posts[i] + (gap * k) / (n + 1)); }
+    }
+    posts.sort((a, b) => a - b);
+    for (const p of posts) {
+      let iv = [[0, Math.min(top(p - 0.08), top(p + 0.08))]];
+      for (const h of holes) if (p + 0.08 > h.x0 && p - 0.08 < h.x1) iv = iv.flatMap(([a, b]) => [[a, Math.min(b, h.y0)], [Math.max(a, h.r ? H : h.y1), b]]).filter(([a, b]) => b - a > 0.05);
+      for (const [a, b] of iv) tb(p - 0.08, p + 0.08, a, b, 'Post');
+    }
+    if (!tops.length) for (let i = 0; i + 1 < posts.length; i++) {
+      const a = posts[i] + 0.08, b = posts[i + 1] - 0.08;
+      if (b - a < 0.6 || holes.some((h) => h.x1 > a && h.x0 < b) || i % 2) continue;
+      for (const s of [1, -1]) x.beam(parent, 'Brace', V(a, 0.2, s * (T / 2 + 0.02)), V(b, 1.25, s * (T / 2 + 0.02)), 0.12, 0.04, timber);
+    }
+  } else if (material === 'plank') {
+    for (const s of [-1, 1]) bx(parent, 'FramePost', timber, s * L / 2 - s * 0.14, 0, -T / 2 - 0.03, s * L / 2, top(s * (L / 2 - 0.07)), T / 2 + 0.03);
+    for (const ya of [0.3, H - 0.45]) for (const [a, b] of solidSpans(rects, ya, ya + 0.12)) bx(parent, 'Batten', timber, a, ya, -T / 2 - 0.04, b, ya + 0.12, -T / 2);
+  }
+  // frames, doors and windows
+  for (const h of holes) {
+    if (h.kind === 'arch') continue;
+    if (material !== 'stone') {
+      const fr = timber, fz0 = -T / 2 - 0.02, fz1 = T / 2 + 0.03;
+      for (const sx of [h.x0 - 0.08, h.x1]) { const ty = Math.min(top(sx + 0.04), h.y1 + 0.08); if (ty > h.y0 + 0.2) bx(parent, 'Frame', fr, sx, h.y0, fz0, sx + 0.08, ty, fz1); }
+      if (top((h.x0 + h.x1) / 2) >= h.y1 + 0.08) bx(parent, 'Header', fr, h.x0 - 0.08, h.y1, fz0, h.x1 + 0.08, h.y1 + 0.1, fz1);
+      if (h.kind === 'window') bx(parent, 'Sill', fr, h.x0 - 0.1, h.y0 - 0.06, fz0, h.x1 + 0.1, h.y0, fz1 + 0.03);
+    }
+    if (ruined || top((h.x0 + h.x1) / 2) < h.y1) continue;
+    const w = h.x1 - h.x0, hc = (h.x0 + h.x1) / 2;
+    if (h.kind === 'door' && door) {
+      const zd = T / 2 - Math.min(0.1, T * 0.35) - 0.03, n = 4;
+      for (let i = 0; i < n; i++) {
+        if (burnt && r.chance(0.35)) continue;
+        bx(parent, 'DoorPlank', burnt ? M.char : i % 2 ? M.wood : M.wood2, h.x0 + 0.02 + ((w - 0.04) * i) / n, 0.02, zd - 0.03, h.x0 + 0.02 + ((w - 0.04) * (i + 1)) / n - 0.006, h.y1 - 0.02, zd + 0.03);
+      }
+      if (!burnt) {
+        for (const y of [0.45, 1.6]) bx(parent, 'DoorBand', M.iron, h.x0 + 0.06, y, zd + 0.03, h.x1 - 0.06, y + 0.06, zd + 0.045);
+        add(parent, 'DoorRing', new THREE.TorusGeometry(0.045, 0.01, x.seg(4), x.seg(10)), M.iron, [h.x1 - 0.17, 1.0, zd + 0.06]);
+      }
+    } else if (h.kind === 'window') {
+      bx(parent, 'WindowPane', M.dark, h.x0, h.y0, -0.01, h.x1, h.y1, 0.01);
+      if (!burnt) {
+        bx(parent, 'Mullion', timber, hc - 0.03, h.y0, -0.04, hc + 0.03, h.y1, 0.04);
+        bx(parent, 'Transom', timber, h.x0, (h.y0 + h.y1) / 2 - 0.03, -0.04, h.x1, (h.y0 + h.y1) / 2 + 0.03, 0.04);
+        if (material !== 'stone' && h.x0 - w / 2 - 0.12 > -L / 2 && h.x1 + w / 2 + 0.12 < L / 2) for (const s of [-1, 1]) {
+          const sx = s < 0 ? h.x0 - 0.1 - w / 2 : h.x1 + 0.1;
+          bx(parent, 'Shutter', M.paint, sx, h.y0, T / 2 + 0.03, sx + w / 2, h.y1, T / 2 + 0.07);
+        }
+      }
+    }
+  }
+  if (ruined) {
+    for (let i = 0, n = r.int(3, 6); i < n; i++) {
+      const s = r.chance(0.5) ? 1 : -1, px = r.range(-L / 2 + 0.3, L / 2 - 0.3);
+      if (material === 'stone') add(parent, 'Rubble', x.rock(r.range(0.12, 0.22)), r.chance(0.5) ? M.stone : M.stone2, [px, 0.08, s * (T / 2 + r.range(0.1, 0.3))], [0, 0, 0], [1, 0.6, 1]);
+      else add(parent, 'FallenBoard', x.box(r.range(0.6, 1.2), 0.04, 0.2), M.wood2, [px, 0.03 + i * 0.01, s * (T / 2 + r.range(0.15, 0.35))], [0, r.range(-0.6, 0.6), 0]);
+    }
+  }
+  if (burnt) for (let i = 0; i < 3; i++) x.embers(parent, V(r.range(-L / 2 + 0.3, L / 2 - 0.3), 0.02, (r.chance(0.5) ? 1 : -1) * (T / 2 + 0.15)), 3, 0.15);
+  return { T };
+}
+
+function buildWall(x) {
+  const { o, body } = x;
+  wallPiece(x, body, { L: +o.length, H: WALL_H[o.height], material: o.material, opening: o.opening, state: o.state });
+}
+
+function buildCorner(x) {
+  const { o, r, M, add, bx, body } = x;
+  const H = WALL_H[o.height], T = WALL_T[o.material];
+  const mat = { stone: M.stone, plaster: M.plaster, plank: M.wood2, logs: M.wood }[o.material];
+  if (o.form === 'square') {
+    if (o.material === 'logs') { // crossing log ends, as where two log walls meet
+      const nC = Math.max(3, Math.round(H / (T * 0.95))), step = H / nC, len = T * 2.2;
+      for (let i = 0; i < nC; i++) {
+        const m = add(body, 'LogEnd', x.cyl(step * 0.52, step * 0.52, len, 7), i % 2 ? M.wood : M.wood2, [0, step * (i + 0.5), 0], i % 2 ? [0, 0, PI / 2] : [PI / 2, 0, 0]);
+        m.scale.z = i % 2 ? T / step : 1; if (!(i % 2)) m.scale.x = T / step;
+        add(body, 'LogCut', x.cyl(step * 0.4, step * 0.4, 0.02, 7), M.woodCut, i % 2 ? [len / 2, step * (i + 0.5), 0] : [0, step * (i + 0.5), len / 2], i % 2 ? [0, 0, PI / 2] : [PI / 2, 0, 0]);
+      }
+    } else {
+      bx(body, 'Corner', mat, -T / 2, 0, -T / 2, T / 2, H, T / 2);
+      if (o.material === 'stone') {
+        bx(body, 'Plinth', M.stone2, -T / 2 - 0.04, 0, -T / 2 - 0.04, T / 2 + 0.04, 0.3, T / 2 + 0.04);
+        for (let y = 0.35, i = 0; y < H - 0.2; y += 0.3, i++) { // quoins, alternating long and short
+          const lx = i % 2 ? 0.35 : 0.22;
+          bx(body, 'Quoin', M.stone2, -T / 2 - 0.02, y, T / 2 - lx, T / 2 + 0.02, y + 0.26, T / 2 + 0.02);
+        }
+      } else if (o.material === 'plaster') {
+        for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) bx(body, 'CornerTimber', M.wood2, sx * (T / 2 - 0.14), 0, sz * (T / 2 - 0.14), sx * (T / 2 + 0.03), H, sz * (T / 2 + 0.03));
+      } else bx(body, 'CornerBoard', M.wood, -T / 2 - 0.03, 0, -T / 2 - 0.03, T / 2 + 0.03, H, T / 2 + 0.03);
+    }
+  } else if (o.form === 'pillar') {
+    const P = Math.max(0.3, T + 0.16), stone = o.material === 'stone';
+    const m1 = stone ? M.stone2 : M.stone, m2 = stone ? M.stone : o.material === 'plaster' ? M.plaster : M.wood;
+    bx(body, 'Base', m1, -P / 2 - 0.1, 0, -P / 2 - 0.1, P / 2 + 0.1, 0.3, P / 2 + 0.1);
+    bx(body, 'Shaft', m2, -P / 2, 0.3, -P / 2, P / 2, H - 0.25, P / 2);
+    bx(body, 'Capital', stone ? M.stone2 : M.wood2, -P / 2 - 0.1, H - 0.25, -P / 2 - 0.1, P / 2 + 0.1, H, P / 2 + 0.1);
+    if (!stone) for (const s of [-1, 1]) x.beam(body, 'Brace', V(s * P / 2, H - 0.85, 0), V(s * (P / 2 + 0.5), H - 0.25, 0), 0.1, 0.1, M.wood2);
+  } else {
+    const R = Math.max(0.45, (T + 0.3) * 0.75), stone = o.material === 'stone';
+    add(body, 'Turret', x.cyl(R, R * 1.05, H, 10), stone ? M.stone : o.material === 'plaster' ? M.plaster : M.wood, [0, H / 2, 0]);
+    add(body, 'Corbel', x.cyl(R + 0.08, R, 0.2, 10), stone ? M.stone2 : M.wood2, [0, H - 0.1, 0]);
+    add(body, 'TurretRoof', x.cone(R + 0.18, (R + 0.18) * 1.8, 10), r.chance(0.5) ? M.roof : M.slate, [0, H + (R + 0.18) * 0.9, 0]);
+    add(body, 'Finial', x.sphere(0.06, 8, 6), M.iron, [0, H + (R + 0.18) * 1.8 + 0.04, 0]);
+    if (stone) for (let y = 0.6; y < H - 0.4; y += 0.5) add(body, 'Course', x.cyl(R + 0.015, R + 0.015, 0.05, 10), M.stone2, [0, y, 0]);
+  }
+}
+
+// ---------- building kit: roofs ----------
+const PITCH = { low: 25, normal: 38, steep: 50 };
+// A roof over a W (x) by D (z) footprint in the parent's frame: ridge along X, eaves overhanging by oh, the lowest
+// eave at y 0. Returns the height of the apex (R) and where the roof crosses the wall planes (wallY).
+function roofPiece(x, parent, { W, D, shape, cover, pitch, ends = 'open', state = 'intact', oh = 0.35 }) {
+  const { r, M, add, bx, D: det } = x;
+  const a = (pitch * PI) / 180, ta = Math.tan(a), burnt = state === 'burnt', holed = state !== 'intact';
+  const coverMat = (i) => burnt && r.chance(0.55) ? (r.chance(0.5) ? M.char : M.char2)
+    : { thatch: i % 2 ? M.thatch2 : M.thatch, tiles: i % 2 ? M.roof2 : M.roof, slate: i % 2 ? M.slate2 : M.slate, planks: i % 2 ? M.wood2 : M.wood, iron: i % 3 ? M.rust : M.iron }[cover];
+  const timber = burnt ? M.char : M.wood2;
+  const th = { thatch: 0.26, tiles: 0.05, slate: 0.05, planks: 0.05, iron: 0.03 }[cover];
+  const X0 = W / 2 + oh, E = D / 2 + oh;
+  if (shape === 'gable' || shape === 'shed') {
+    const slopes = shape === 'gable' ? [{ z0: 0, z1: E }, { z0: 0, z1: -E }] : [{ z0: -E, z1: E }];
+    const Lh = Math.abs(slopes[0].z1 - slopes[0].z0), R = Lh * ta, S = Lh / Math.cos(a);
+    const cw = { thatch: S / 3, tiles: 0.3, slate: 0.32, planks: S, iron: S }[cover];
+    const nC = Math.max(holed ? 4 : 1, Math.round(S / cw));
+    const pw = { thatch: holed ? 0.8 : 2 * X0, tiles: det >= 1 ? 0.36 : 0.75, slate: 0.5, planks: 0.24, iron: 0.9 }[cover];
+    const nP = Math.max(1, Math.round((2 * X0) / pw));
+    slopes.forEach(({ z0, z1 }, si) => {
+      const sg = Math.sign(z1 - z0), n = V(0, Math.cos(a), sg * Math.sin(a));
+      const hole = holed && (si === 0 || r.chance(0.5)) ? { s0: r.range(0.15, 0.45) * S, x0: r.range(-X0 * 0.7, X0 * 0.1), w: r.range(0.8, 1.5) * (burnt ? 1.5 : 1) } : null;
+      if (hole) hole.s1 = hole.s0 + r.range(0.3, 0.5) * S;
+      for (let i = 0; i < nC; i++) {
+        const s = ((i + 0.5) * S) / nC, len = (S / nC) * (nC > 1 ? 1.1 : 1);
+        for (let j = 0; j < nP; j++) {
+          const xa = -X0 + (2 * X0 * j) / nP, xb = xa + (2 * X0) / nP, xc = (xa + xb) / 2;
+          if (hole && s > hole.s0 && s < hole.s1 && xc > hole.x0 && xc < hole.x0 + hole.w) continue;
+          const p = V(xc, R - s * Math.sin(a), z0 + sg * s * Math.cos(a)).addScaledVector(n, th / 2 + (i % 2) * 0.004);
+          const gap = nP > 1 && cover !== 'thatch' ? 0.012 : 0;
+          add(parent, 'RoofCourse', x.box(xb - xa - gap, th, len), coverMat(i + j * (cover === 'tiles' || cover === 'slate' ? (r.chance(0.3) ? 1 : 0) : 1)), p, [sg * a, 0, 0]);
+        }
+      }
+      // rafters under the cover, visible at the eaves and through holes
+      const nR = Math.max(2, Math.round((2 * X0) / 0.6));
+      for (let k = 0; k <= nR; k++) {
+        const xr = -X0 + 0.06 + ((2 * X0 - 0.12) * k) / nR;
+        x.beam(parent, 'Rafter', V(xr, R, z0).addScaledVector(n, -0.06), V(xr, 0, z1).addScaledVector(n, -0.06), 0.08, 0.12, timber);
+      }
+      if (holed) for (let k = 1; k < 4; k++) { // battens across the rafters
+        const s = (S * k) / 4;
+        add(parent, 'Batten', x.box(2 * X0, 0.03, 0.06), timber, V(0, R - s * Math.sin(a), z0 + sg * s * Math.cos(a)).addScaledVector(n, 0.015), [sg * a, 0, 0]);
+      }
+    });
+    const zr = slopes[0].z0, apex = R + th / Math.cos(a);
+    add(parent, 'RidgeBeam', x.box(2 * X0, 0.16, 0.16), timber, [0, R - 0.1, zr]);
+    if (shape === 'gable') {
+      if (cover === 'thatch') add(parent, 'RidgeCap', x.cyl(0.2, 0.2, 2 * X0 + 0.1, 7), M.thatch2, [0, apex - 0.08, 0], [0, 0, PI / 2]);
+      else if (cover === 'iron') add(parent, 'RidgeCap', x.cyl(0.07, 0.07, 2 * X0, 6), M.iron, [0, apex, 0], [0, 0, PI / 2]);
+      else add(parent, 'RidgeCap', x.box(2 * X0 + 0.04, 0.1, 0.24), cover === 'tiles' ? M.roof2 : cover === 'slate' ? M.slate2 : M.wood2, [0, apex, 0]);
+    } else bx(parent, 'Fascia', timber, -X0, R - 0.25, -E - 0.04, X0, R + th, -E + 0.04);
+    if (ends !== 'open') { // gable infill at both ends, from the wall top up under the roof
+      const wy = oh * ta;
+      const pts = shape === 'gable' ? [[D / 2, wy], [-D / 2, wy], [0, R - 0.06]] : [[-D / 2, wy], [D / 2, wy], [-D / 2, R - oh * ta - 0.04]];
+      // shape coordinates are (-z, y): rotated a quarter turn about Y they land in the end plane
+      const geo = x.extrude(shapeOf(pts.map(([z, y]) => [-z, y])), 0.12);
+      for (const s of [-1, 1]) add(parent, 'GableEnd', geo.clone(), burnt ? M.soot : ends === 'plaster' ? M.plaster : M.wood, [s * (W / 2 - 0.06), 0, 0], [0, PI / 2, 0]);
+      geo.dispose();
+      if (ends === 'planks') for (const s of [-1, 1]) for (let z = -D / 2 + 0.3; z < D / 2 - 0.1; z += 0.35) {
+        const hz = shape === 'gable' ? R - Math.abs(z) * ta : R - (z + E) * ta;
+        if (hz - wy > 0.2) bx(parent, 'GableBatten', timber, s * (W / 2 - 0.01), wy, z - 0.03, s * (W / 2 + 0.01), hz - 0.08, z + 0.03);
+      }
+    }
+    return { R: apex, wallY: oh * ta };
+  }
+  if (shape === 'hip') {
+    const R = Math.min(X0, E) * ta, rx = Math.max(0.02, X0 - E), rz = Math.max(0.02, E - X0);
+    const nB = { thatch: 3, tiles: 6, slate: 6, planks: 4, iron: 3 }[cover], lip = cover === 'thatch' ? 0.12 : 0.05;
+    for (let i = 0; i < nB; i++) {
+      const f0 = i / nB, f1 = (i + 1) / nB;
+      const at = (f) => ({ x: X0 + (rx - X0) * f, z: E + (rz - E) * f, y: R * f });
+      const b0 = at(f0), b1 = at(f1);
+      add(parent, 'RoofBand', frustum({ x: b0.x + lip, z: b0.z + lip, y: b0.y }, b1), coverMat(i));
+    }
+    if (rx > 0.05 || rz > 0.05) add(parent, 'RidgeCap', x.cyl(0.09, 0.09, 2 * Math.max(rx, rz) + 0.1, 6), cover === 'tiles' ? M.roof2 : cover === 'thatch' ? M.thatch2 : M.iron, [0, R + 0.03, 0], rx > rz ? [0, 0, PI / 2] : [PI / 2, 0, 0]);
+    add(parent, 'Finial', x.cone(0.08, 0.3, 5), M.wood2, [rx > 0.05 ? rx : 0, R + 0.15, rz > 0.05 ? rz : 0]);
+    return { R: R + 0.1, wallY: oh * ta };
+  }
+  // cone
+  const R0 = Math.max(W, D) / 2 + oh, Ht = R0 * Math.tan(Math.max(a, (40 * PI) / 180));
+  const nB = { thatch: 3, tiles: 5, slate: 5, planks: 4, iron: 3 }[cover], lip = cover === 'thatch' ? 0.12 : 0.05;
+  for (let i = 0; i < nB; i++) {
+    const r0 = R0 * (1 - i / nB), r1 = Math.max(0.03, R0 * (1 - (i + 1) / nB)), h = Ht / nB;
+    add(parent, 'RoofTier', x.cyl(r1, r0 + lip, h, 12), coverMat(i), [0, (i + 0.5) * h, 0]);
+  }
+  add(parent, 'Finial', x.cone(0.07, 0.35, 5), M.wood2, [0, Ht + 0.15, 0]);
+  return { R: Ht + 0.3, wallY: oh * Math.tan(Math.max(a, (40 * PI) / 180)) };
+}
+
+function buildRoof(x) {
+  const { o, body } = x;
+  roofPiece(x, body, { W: +o.length, D: +o.span, shape: o.shape, cover: o.cover, pitch: PITCH[o.pitch], ends: o.ends, state: o.state });
+}
+
+// A chimney stack standing on y 0 in the parent's frame.
+function chimneyPiece(x, parent, { material, top, H, w = 0.8, d = 0.6, p = V(0, 0, 0) }) {
+  const { r, M, add, bx } = x;
+  const g = x.group(parent, 'Chimney', p);
+  if (material === 'stone') {
+    for (let y = 0, i = 0; y < H - 0.01; y += 0.3, i++) {
+      const j = () => r.range(-0.03, 0.03), h = Math.min(0.3, H - y);
+      bx(g, 'Course', i % 2 ? M.stone2 : M.stone, -w / 2 + j(), y, -d / 2 + j(), w / 2 + j(), y + h, d / 2 + j());
+    }
+  } else {
+    bx(g, 'Stack', material === 'brick' ? M.brick : M.plaster, -w / 2, 0, -d / 2, w / 2, H, d / 2);
+    if (material === 'brick') for (let y = 0.5; y < H - 0.3; y += 0.5) bx(g, 'BrickBand', M.brick2, -w / 2 - 0.015, y, -d / 2 - 0.015, w / 2 + 0.015, y + 0.07, d / 2 + 0.015);
+    else bx(g, 'StackBase', M.stone, -w / 2 - 0.03, 0, -d / 2 - 0.03, w / 2 + 0.03, Math.min(0.6, H * 0.3), d / 2 + 0.03);
+  }
+  bx(g, 'Soot', M.char2, -w / 2 - 0.005, H - 0.35, -d / 2 - 0.005, w / 2 + 0.005, H - 0.05, d / 2 + 0.005);
+  bx(g, 'Cap', material === 'brick' ? M.brick2 : M.stone2, -w / 2 - 0.07, H - 0.05, -d / 2 - 0.07, w / 2 + 0.07, H + 0.08, d / 2 + 0.07);
+  bx(g, 'Flue', M.dark, -w / 2 + 0.14, H + 0.08, -d / 2 + 0.12, w / 2 - 0.14, H + 0.09, d / 2 - 0.12);
+  if (top === 'pots') {
+    const n = w > 0.7 ? 2 : 1;
+    for (let i = 0; i < n; i++) add(g, 'Pot', x.cyl(0.08, 0.1, 0.32, 8), M.clay, [n === 1 ? 0 : (i - 0.5) * w * 0.5, H + 0.24, 0]);
+  } else if (top === 'cowl') {
+    for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) bx(g, 'CowlPost', M.iron, sx * (w / 2 - 0.05) - 0.015, H + 0.08, sz * (d / 2 - 0.05) - 0.015, sx * (w / 2 - 0.05) + 0.015, H + 0.35, sz * (d / 2 - 0.05) + 0.015);
+    add(g, 'Cowl', x.cone(Math.max(w, d) * 0.62, 0.25, 4), M.iron, [0, H + 0.47, 0], [0, PI / 4, 0], [1, 1, d / w]);
+  }
+  if (x.t.enchanted) add(g, 'Embers', x.box(w - 0.3, 0.02, d - 0.26), M.glow, [0, H + 0.1, 0]);
+  return g;
+}
+function buildChimney(x) {
+  const { o, body } = x;
+  chimneyPiece(x, body, { material: o.material, top: o.top, H: o.height === 'tall' ? 4 : 2.4 });
+}
+
+// A flame whose base is at p in the parent's frame (flames live in root-level nodes so they can flicker).
+function flameIn(x, parent, p, w, h) {
+  parent.updateWorldMatrix(true, false);
+  return x.flame(p.clone().applyMatrix4(parent.matrixWorld), w, h);
+}
+// Glowing coals (lit) or dead ones in a bowl of radius R at height y.
+function coals(x, parent, p, R, lit, flame = true) {
+  const { r, M, add } = x;
+  const n = Math.max(4, Math.round(9 * x.D));
+  for (let i = 0; i < n; i++) {
+    const a = r.next() * PI * 2, d = Math.sqrt(r.next()) * R * 0.8;
+    add(parent, 'Coal', x.rock(r.range(0.05, 0.09)), lit && r.chance(0.6) ? M.glow : M.char, [p.x + Math.cos(a) * d, p.y + 0.03, p.z + Math.sin(a) * d]);
+  }
+  if (lit && flame) flameIn(x, parent, p.clone().add(V(0, 0.02, 0)), R * 0.9, R * 2.2);
+}
+
+// ---------- yard and street ----------
+function buildPorch(x) {
+  const { o, r, M, add, bx, body } = x;
+  const W = +o.width, Dp = 1.8, H = 2.4;
+  bx(body, 'Ledger', M.wood2, -W / 2, H + 0.25, -Dp / 2, W / 2, H + 0.45, -Dp / 2 + 0.12); // fixed to the house wall behind
+  for (const s of [-1, 1]) {
+    const px = s * (W / 2 - 0.12);
+    if (o.kind === 'awning') {
+      x.pole(body, 'Pole', V(px, 0, Dp / 2 - 0.1), V(px, H, Dp / 2 - 0.1), 0.045, 0.04, M.wood2);
+      x.pole(body, 'GuyRope', V(px, H, Dp / 2 - 0.1), V(px + s * 0.25, 0, Dp / 2 + 0.9), 0.01, 0.01, M.rope, 4);
+      add(body, 'Peg', x.box(0.05, 0.2, 0.05), M.wood, [px + s * 0.25, 0.08, Dp / 2 + 0.9]);
+    } else {
+      bx(body, 'Post', M.wood2, px - 0.08, 0, Dp / 2 - 0.3, px + 0.08, H, Dp / 2 - 0.14);
+      add(body, 'PostBase', x.box(0.26, 0.12, 0.26), M.stone, [px, 0.06, Dp / 2 - 0.22]);
+      x.beam(body, 'Brace', V(px, H - 0.55, Dp / 2 - 0.22), V(px - s * 0.45, H - 0.02, Dp / 2 - 0.22), 0.08, 0.08, M.wood2);
+    }
+  }
+  if (o.kind === 'awning') {
+    const a = Math.atan2(0.38, Dp), S = Math.hypot(Dp, 0.38), nS = Math.max(4, Math.round(W / 0.45));
+    for (let i = 0; i < nS; i++) {
+      const xa = -W / 2 + (W * i) / nS, w = W / nS;
+      add(body, 'AwningStripe', x.box(w, 0.02, S), i % 2 ? M.paint : M.canvas, [xa + w / 2, H + 0.23, 0], [a, 0, 0]);
+      add(body, 'Valance', x.box(w - 0.02, 0.22, 0.02), i % 2 ? M.canvas : M.paint, [xa + w / 2, H - 0.05, Dp / 2 + 0.06]);
+    }
+    bx(body, 'FrontBar', M.wood2, -W / 2 + 0.05, H - 0.03, Dp / 2 - 0.13, W / 2 - 0.05, H + 0.05, Dp / 2 - 0.05);
+  } else {
+    const g = x.group(body, 'PorchRoof', [0, H + 0.02, 0.05]);
+    roofPiece(x, g, { W: W - 0.4, D: Dp - 0.3, shape: 'shed', cover: o.cover, pitch: o.cover === 'thatch' ? 30 : 20, oh: 0.2 });
+    bx(body, 'Plate', M.wood2, -W / 2, H - 0.1, Dp / 2 - 0.3, W / 2, H + 0.04, Dp / 2 - 0.14);
+  }
+  if (o.kind === 'deck') {
+    bx(body, 'DeckFrame', M.wood2, -W / 2, 0, -Dp / 2, W / 2, 0.22, Dp / 2);
+    const n = Math.round(W / 0.2);
+    for (let i = 0; i < n; i++) bx(body, 'DeckPlank', i % 2 ? M.wood : M.wood2, -W / 2 + (W * i) / n + 0.005, 0.22, -Dp / 2, -W / 2 + (W * (i + 1)) / n - 0.005, 0.27, Dp / 2);
+    for (const s of [-1, 1]) {
+      bx(body, 'RailSide', M.wood2, s * (W / 2 - 0.12) - 0.04, 0.95, -Dp / 2, s * (W / 2 - 0.12) + 0.04, 1.02, Dp / 2 - 0.3);
+      for (let z = -Dp / 2 + 0.25; z < Dp / 2 - 0.3; z += 0.3) bx(body, 'Baluster', M.wood, s * (W / 2 - 0.12) - 0.025, 0.27, z - 0.025, s * (W / 2 - 0.12) + 0.025, 0.95, z + 0.025);
+    }
+    for (const s of [-1, 1]) { // front rail with a gap for the steps
+      const a = s * (W / 2 - 0.12), b = s * 0.45;
+      bx(body, 'RailFront', M.wood2, Math.min(a, b), 0.95, Dp / 2 - 0.26, Math.max(a, b), 1.02, Dp / 2 - 0.18);
+      for (let xx = Math.min(a, b) + 0.15; xx < Math.max(a, b) - 0.05; xx += 0.3) bx(body, 'Baluster', M.wood, xx - 0.025, 0.27, Dp / 2 - 0.25, xx + 0.025, 0.95, Dp / 2 - 0.19);
+    }
+    for (let i = 0; i < 2; i++) bx(body, 'Step', M.wood, -0.45, 0, Dp / 2 + 0.3 * (1 - i) - 0.3, 0.45, 0.09 + i * 0.09, Dp / 2 + 0.3 * (1 - i));
+  }
+  if (x.t.enchanted) x.lantern(body, V(W / 2 - 0.45, H - 0.08, Dp / 2 - 0.22));
+}
+
+function buildStairs(x) {
+  const { o, M, add, bx, body } = x;
+  const n = +o.steps, rise = 0.2, run = 0.3, Wd = 1.2, z0 = (n * run) / 2; // lowest step at the front (+z)
+  if (o.kind === 'stone') {
+    for (let i = 0; i < n; i++) {
+      bx(body, 'StoneStep', i % 2 ? M.stone2 : M.stone, -Wd / 2, 0, z0 - (i + 1) * run, Wd / 2, rise * (i + 1), z0 - i * run);
+      bx(body, 'Nosing', M.stone2, -Wd / 2, rise * (i + 1) - 0.04, z0 - i * run - 0.06, Wd / 2, rise * (i + 1), z0 - i * run + 0.02);
+    }
+    if (o.rail === 'rail') for (const s of [-1, 1]) for (let i = 0; i < n; i++)
+      bx(body, 'Cheek', M.stone2, s * Wd / 2, 0, z0 - (i + 1) * run, s * (Wd / 2 + 0.25), rise * (i + 1) + 0.35, z0 - i * run);
+  } else if (o.kind === 'wood') {
+    for (const s of [-1, 1]) x.beam(body, 'Stringer', V(s * (Wd / 2 - 0.04), 0.06, z0), V(s * (Wd / 2 - 0.04), n * rise, z0 - n * run), 0.08, 0.22, M.wood2);
+    for (let i = 0; i < n; i++) bx(body, 'Tread', i % 2 ? M.wood : M.wood2, -Wd / 2 + 0.08, rise * (i + 1) - 0.05, z0 - (i + 1) * run - 0.02, Wd / 2 - 0.08, rise * (i + 1), z0 - i * run + 0.02);
+    if (o.rail === 'rail') for (const s of [-1, 1]) {
+      const xr = s * (Wd / 2 + 0.03);
+      bx(body, 'RailPost', M.wood2, xr - 0.04, 0, z0 - 0.12, xr + 0.04, 1.0, z0 - 0.04);
+      bx(body, 'RailPost', M.wood2, xr - 0.04, 0, z0 - n * run, xr + 0.04, n * rise + 0.95, z0 - n * run + 0.08);
+      x.beam(body, 'HandRail', V(xr, 0.95, z0 - 0.08), V(xr, n * rise + 0.9, z0 - n * run + 0.04), 0.06, 0.06, M.wood);
+    }
+  } else {
+    const Ht = n * rise + 0.6, lean = (75 * PI) / 180, dz = Ht / Math.tan(lean);
+    for (const s of [-1, 1]) x.beam(body, 'LadderRail', V(s * 0.24, 0, dz / 2), V(s * 0.24, Ht, -dz / 2), 0.06, 0.05, M.wood2);
+    for (let y = 0.3; y < Ht - 0.1; y += 0.3) add(body, 'Rung', x.cyl(0.022, 0.022, 0.48, 6), M.wood, [0, y, dz / 2 - (y / Ht) * dz], [0, 0, PI / 2]);
+    if (o.rail === 'rail') add(body, 'LadderLashing', x.box(0.6, 0.04, 0.06), M.rope, [0, Ht - 0.15, -dz / 2 + (0.15 / Ht) * dz]);
+  }
+}
+
+function buildScaffold(x) {
+  const { o, r, M, add, bx, body } = x;
+  const n = +o.levels, W = 2.4, Dd = 1.2, lh = 2.0, burnt = o.state === 'burnt', poles = o.kind === 'poles';
+  const wood = () => burnt ? (r.chance(0.6) ? M.char : M.char2) : r.chance(0.5) ? M.wood : M.wood2;
+  const Ht = n * lh + 1.0;
+  const corners = [[-W / 2, -Dd / 2], [W / 2, -Dd / 2], [-W / 2, Dd / 2], [W / 2, Dd / 2]];
+  for (const [cx, cz] of corners) {
+    const h = burnt && r.chance(0.3) ? Ht * r.range(0.55, 0.85) : Ht;
+    if (poles) x.pole(body, 'Standard', V(cx, 0, cz), V(cx + r.range(-0.05, 0.05), h, cz + r.range(-0.05, 0.05)), 0.065, 0.05, wood());
+    else bx(body, 'Standard', wood(), cx - 0.06, 0, cz - 0.06, cx + 0.06, h, cz + 0.06);
+    add(body, 'BasePad', x.box(0.3, 0.05, 0.3), M.wood2, [cx, 0.025, cz]);
+  }
+  const bar = (a, b, name) => poles ? x.pole(body, name, a, b, 0.04, 0.04, wood()) : x.beam(body, name, a, b, 0.08, 0.1, wood());
+  for (let l = 1; l <= n; l++) {
+    const y = l * lh;
+    for (const cz of [-Dd / 2, Dd / 2]) bar(V(-W / 2 - 0.1, y, cz), V(W / 2 + 0.1, y, cz), 'Ledger');
+    for (const cx of [-W / 2, W / 2]) bar(V(cx, y, -Dd / 2 - 0.1), V(cx, y, Dd / 2 + 0.1), 'Transom');
+    const np = 5;
+    for (let i = 0; i < np; i++) {
+      if (burnt && r.chance(0.35)) continue;
+      const z = -Dd / 2 + 0.1 + ((Dd - 0.2) * (i + 0.5)) / np;
+      bx(body, 'Board', wood(), -W / 2 - 0.15, y + 0.05, z - 0.09, W / 2 + 0.15, y + 0.1, z + 0.09);
+    }
+    if (poles) for (const [cx, cz] of corners) add(body, 'Lashing', x.cyl(0.075, 0.075, 0.12, 6), M.rope, [cx, y, cz]);
+    // a cross brace on the back and on the sides of each level
+    bar(V(-W / 2, y - lh, -Dd / 2), V(W / 2, y, -Dd / 2), 'Brace');
+    const sx = l % 2 ? -W / 2 : W / 2;
+    bar(V(sx, y - lh, -Dd / 2), V(sx, y, Dd / 2), 'Brace');
+  }
+  bar(V(-W / 2, Ht - 0.1, Dd / 2), V(W / 2, Ht - 0.1, Dd / 2), 'GuardRail');
+  bar(V(-W / 2, Ht - 0.1, -Dd / 2), V(W / 2, Ht - 0.1, -Dd / 2), 'GuardRail');
+  // ladder up the front of the right-hand bay
+  for (const s of [-1, 1]) x.beam(body, 'LadderRail', V(W / 2 - 0.45 + s * 0.2, 0, Dd / 2 + 0.12), V(W / 2 - 0.45 + s * 0.2, n * lh + 0.9, Dd / 2 + 0.12), 0.05, 0.05, wood());
+  for (let y = 0.3; y < n * lh + 0.8; y += 0.3) add(body, 'Rung', x.cyl(0.02, 0.02, 0.4, 5), wood(), [W / 2 - 0.45, y, Dd / 2 + 0.12], [0, 0, PI / 2]);
+  if (burnt) x.embers(body, V(0, 0.02, 0), 6, 1);
+}
+
+function buildPlatform(x) {
+  const { o, r, M, add, bx, body } = x;
+  const L = +o.length, kind = o.kind, broken = o.state === 'broken', burnt = o.state === 'burnt';
+  const Dd = kind === 'deck' ? 2.4 : kind === 'jetty' ? 1.6 : 1.2, H = kind === 'deck' ? 0.6 : kind === 'jetty' ? 1.0 : 2.2;
+  const wood = (i = 0) => burnt ? (r.chance(0.6) ? M.char : M.char2) : i % 2 ? M.wood : M.wood2;
+  const nx = Math.max(2, Math.round(L / 1.5) + 1);
+  for (let i = 0; i < nx; i++) for (const s of [-1, 1]) {
+    const px = -L / 2 + 0.1 + ((L - 0.2) * i) / (nx - 1), pz = s * (Dd / 2 - 0.1);
+    const lean = broken && i === 1 && s > 0 ? 0.12 : 0;
+    if (kind === 'jetty') x.pole(body, 'Pile', V(px, 0, pz), V(px + lean, H + 0.1, pz), 0.11, 0.1, wood(), 7);
+    else bx(body, 'Post', wood(1), px - 0.08, 0, pz - 0.08, px + 0.08, H - 0.12, pz + 0.08);
+  }
+  for (const s of [-1, 1]) bx(body, 'Joist', wood(1), -L / 2, H - 0.26, s * (Dd / 2 - 0.1) - 0.07, L / 2, H - 0.06, s * (Dd / 2 - 0.1) + 0.07);
+  const np = Math.round(L / 0.24);
+  for (let i = 0; i < np; i++) {
+    if ((broken || burnt) && i > 1 && i < np - 2 && r.chance(broken ? 0.15 : 0.25)) continue;
+    const xa = -L / 2 + (L * i) / np + 0.006, xb = -L / 2 + (L * (i + 1)) / np - 0.006;
+    bx(body, 'Plank', wood(i), xa, H - 0.06, -Dd / 2 + r.range(-0.03, 0), xb, H, Dd / 2 + r.range(0, 0.03));
+  }
+  if (broken) for (let i = 0; i < 2; i++) add(body, 'FallenPlank', x.box(0.22, 0.05, Dd), wood(i), [r.range(-L / 3, L / 3), 0.03 + i * 0.05, r.range(-0.2, 0.2)], [0, r.range(-0.5, 0.5), 0]);
+  if (kind === 'walkway') for (const s of [-1, 1]) {
+    const z = s * (Dd / 2 - 0.05);
+    for (let i = 0; i < nx; i++) { const px = -L / 2 + 0.1 + ((L - 0.2) * i) / (nx - 1); bx(body, 'RailPost', wood(1), px - 0.04, H, z - 0.04, px + 0.04, H + 1.0, z + 0.04); }
+    bx(body, 'Rail', wood(), -L / 2 + 0.05, H + 0.92, z - 0.05, L / 2 - 0.05, H + 1.0, z + 0.05);
+    x.pole(body, 'RopeRail', V(-L / 2 + 0.1, H + 0.5, z), V(L / 2 - 0.1, H + 0.5, z), 0.015, 0.015, M.rope, 4);
+    for (let i = 0; i + 1 < nx; i++) { // cross bracing between the tall posts
+      const a = -L / 2 + 0.1 + ((L - 0.2) * i) / (nx - 1), b = -L / 2 + 0.1 + ((L - 0.2) * (i + 1)) / (nx - 1);
+      x.beam(body, 'Brace', V(a, 0.2, z), V(b, H - 0.3, z), 0.06, 0.06, wood(1));
+    }
+  }
+  if (kind === 'jetty') {
+    x.pole(body, 'MooringPost', V(L / 2 - 0.15, 0, Dd / 2 - 0.1), V(L / 2 - 0.15, H + 0.7, Dd / 2 - 0.1), 0.1, 0.09, wood(1), 7);
+    add(body, 'MooringRope', new THREE.TorusGeometry(0.12, 0.025, x.seg(4), x.seg(10)), M.rope, [L / 2 - 0.15, H + 0.45, Dd / 2 - 0.1], [PI / 2, 0, 0]);
+  }
+  if (x.t.enchanted && kind !== 'deck') x.lantern(body, V(-L / 2 + 0.1, H + (kind === 'walkway' ? 1.0 : 0.6), Dd / 2 + 0.05));
+  if (burnt) x.embers(body, V(0, 0.02, 0), 6, L / 3);
+}
+
+function buildGateway(x) {
+  const { o, r, M, add, bx, body } = x;
+  const wO = +o.width, ruined = o.state === 'ruined';
+  if (o.kind === 'arch') {
+    const L = wO + 1.4, spring = 2.3, H = spring + wO / 2 + 0.45;
+    wallPiece(x, body, { L, H, material: 'stone', state: ruined ? 'ruined' : 'intact', holes: [{ kind: 'arch', x0: -wO / 2, x1: wO / 2, y0: 0, y1: spring, r: wO / 2, cx: 0 }] });
+    if (!ruined) {
+      bx(body, 'Coping', M.stone2, -L / 2 - 0.05, H, -0.25, L / 2 + 0.05, H + 0.15, 0.25);
+      add(body, 'Keystone', x.box(0.3, 0.4, 0.48), M.stone2, [0, spring + wO / 2 + 0.12, 0]);
+    }
+    if (x.t.enchanted) for (const s of [-1, 1]) x.lantern(body, V(s * (wO / 2 + 0.35), spring - 0.2, 0.32));
+  } else if (o.kind === 'lychgate') {
+    const H = 2.4, Dd = 1.3, half = wO / 2 + 0.12;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const tilt = ruined && sx > 0 && sz > 0 ? 0.1 : 0;
+      add(body, 'Post', x.box(0.18, H, 0.18), M.wood2, [sx * half, H / 2, sz * (Dd / 2 - 0.12)], [tilt, 0, 0]);
+      add(body, 'PostBase', x.box(0.3, 0.15, 0.3), M.stone, [sx * half, 0.075, sz * (Dd / 2 - 0.12)]);
+    }
+    for (const sz of [-1, 1]) bx(body, 'TieBeam', M.wood2, -half - 0.2, H - 0.05, sz * (Dd / 2 - 0.12) - 0.09, half + 0.2, H + 0.12, sz * (Dd / 2 - 0.12) + 0.09);
+    for (const sx of [-1, 1]) bx(body, 'CrossBeam', M.wood2, sx * half - 0.09, H - 0.05, -Dd / 2, sx * half + 0.09, H + 0.12, Dd / 2);
+    for (const sx of [-1, 1]) x.beam(body, 'Brace', V(sx * half, H - 0.6, Dd / 2 - 0.12), V(sx * (half - 0.5), H - 0.05, Dd / 2 - 0.12), 0.08, 0.08, M.wood2);
+    const g = x.group(body, 'GateRoof', [0, H + 0.12, 0]);
+    roofPiece(x, g, { W: wO + 0.5, D: Dd, shape: 'gable', cover: r.pick(['tiles', 'planks', 'slate']), pitch: 40, state: ruined ? 'holed' : 'intact', oh: 0.3 });
+    if (x.t.enchanted) x.lantern(body, V(0, H - 0.05, Dd / 2 - 0.12));
+  } else {
+    const H = 3.2, half = wO / 2 + 0.22;
+    for (const s of [-1, 1]) {
+      add(body, 'GatePost', x.cyl(0.2, 0.22, H, 8), M.wood, [s * half, H / 2, 0]);
+      add(body, 'PostCap', x.cone(0.22, 0.35, 8), M.wood2, [s * half, H + 0.17, 0]);
+    }
+    add(body, 'Lintel', x.cyl(0.16, 0.16, wO + 0.9, 8), M.wood2, [0, H - 0.3, 0], [0, 0, PI / 2]);
+    const leaf = (s, fallen) => {
+      const g = fallen ? x.group(body, 'GateLeaf', [s * wO / 4, 0.12, 0.9], [-PI / 2, 0, r.range(-0.3, 0.3)]) : x.group(body, 'GateLeaf', [s * wO / 2, 0, 0.05], [0, s * r.range(0.1, 0.5), 0]);
+      const n = Math.max(3, Math.round(wO / 2 / 0.2)), lw = wO / 2 / n;
+      for (let i = 0; i < n; i++) {
+        const lx = -s * (lw / 2 + i * lw), h = 2.3 + r.range(-0.08, 0.08);
+        add(g, 'LeafLog', x.cyl(lw * 0.48, lw * 0.5, h, 6), i % 2 ? M.wood : M.wood2, [lx, h / 2 + 0.05, 0]);
+        add(g, 'LeafPoint', x.cone(lw * 0.48, 0.25, 6), M.wood2, [lx, h + 0.17, 0]);
+      }
+      for (const y of [0.5, 1.8]) add(g, 'LeafBar', x.box(wO / 2, 0.12, 0.08), M.wood2, [-s * wO / 4, y, -lw * 0.55]);
+    };
+    leaf(-1, false); leaf(1, ruined);
+    if (x.t.enchanted) for (const s of [-1, 1]) x.lantern(body, V(s * (half + 0.22), 2.4, 0));
+  }
+}
+
+function buildPalisade(x) {
+  const { o, r, M, add, bx, body } = x;
+  const L = +o.length, broken = o.state === 'broken', burnt = o.state === 'burnt';
+  const n = Math.round(L / 0.28), dia = L / n, H = 2.6;
+  for (let i = 0; i < n; i++) {
+    const end = i === 0 || i === n - 1;
+    if (broken && !end && r.chance(0.12)) continue;
+    const cx = -L / 2 + dia * (i + 0.5), short = (broken || burnt) && !end && r.chance(0.35);
+    const h = short ? H * r.range(0.45, 0.8) : H + r.range(-0.12, 0.12);
+    const mat = burnt ? (r.chance(0.6) ? M.char : M.char2) : i % 2 ? M.wood : M.wood2;
+    if (o.kind === 'planks') bx(body, 'Plank', mat, cx - dia / 2 + 0.006, 0, -0.05, cx + dia / 2 - 0.006, h, 0.05);
+    else add(body, 'Log', x.cyl(dia / 2, dia / 2, h, 7), mat, [cx, h / 2, 0]);
+    if (!short && o.kind === 'pointed') add(body, 'Point', x.cone(dia / 2, 0.36, 7), burnt ? M.char : M.wood2, [cx, h + 0.18, 0]);
+    if (short && burnt) x.embers(body, V(cx, h, 0), 1, 0.05);
+  }
+  const zb = o.kind === 'planks' ? -0.09 : -dia / 2 - 0.05;
+  for (const y of [0.5, 2.0]) bx(body, 'Rail', burnt ? M.char : M.wood2, -L / 2 + 0.02, y, zb - 0.08, L / 2 - 0.02, y + 0.14, zb + 0.04);
+  if (o.kind === 'planks') bx(body, 'TopRail', M.wood2, -L / 2, H - 0.1, -0.08, L / 2, H + 0.02, 0.08);
+}
+
+// ---------- mine and forge works ----------
+function buildHeadframe(x) {
+  const { o, r, M, add, bx, body } = x;
+  const iron = o.kind === 'iron', mat = iron ? M.iron : M.wood, mat2 = iron ? M.rust : M.wood2, sec = iron ? 0.16 : 0.28;
+  const Wf = 4, Df = 3.2, Ht = 8, top = (sx, sz) => V(sx * 0.7, Ht, sz * 0.55), foot = (sx, sz) => V(sx * Wf / 2, 0, sz * Df / 2);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    x.beam(body, 'Leg', foot(sx, sz), top(sx, sz), sec, sec, mat);
+    add(body, 'Footing', x.box(sec + 0.3, 0.3, sec + 0.3), M.stone, [sx * Wf / 2, 0.15, sz * Df / 2]);
+  }
+  // back stays down to the winding house side (-z)
+  for (const sx of [-1, 1]) {
+    x.beam(body, 'BackStay', V(sx * 0.7, Ht - 0.4, -0.55), V(sx * 1.1, 0, -Df / 2 - 1.6), sec, sec, mat);
+    add(body, 'Footing', x.box(sec + 0.3, 0.3, sec + 0.3), M.stone, [sx * 1.1, 0.15, -Df / 2 - 1.6]);
+  }
+  const lerp = (a, b, f) => a.clone().lerp(b, f);
+  for (const f of [0.3, 0.62]) {
+    const P = (sx, sz) => lerp(foot(sx, sz), top(sx, sz), f);
+    for (const sz of [-1, 1]) x.beam(body, 'Tie', P(-1, sz), P(1, sz), sec * 0.7, sec * 0.7, mat2);
+    for (const sx of [-1, 1]) x.beam(body, 'Tie', P(sx, -1), P(sx, 1), sec * 0.7, sec * 0.7, mat2);
+  }
+  for (const sx of [-1, 1]) for (const [f0, f1] of [[0, 0.3], [0.3, 0.62], [0.62, 1]]) { // X braces on the sides
+    const P = (sz, f) => lerp(foot(sx, sz), top(sx, sz), f);
+    x.beam(body, 'XBrace', P(-1, f0), P(1, f1), sec * 0.5, sec * 0.5, mat2);
+    x.beam(body, 'XBrace', P(1, f0), P(-1, f1), sec * 0.5, sec * 0.5, mat2);
+  }
+  // sheave deck, railing and wheels
+  bx(body, 'SheaveDeck', mat2, -1.0, Ht, -0.85, 1.0, Ht + 0.14, 0.85);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(body, 'RailPost', mat2, sx * 0.95 - 0.04, Ht + 0.14, sz * 0.8 - 0.04, sx * 0.95 + 0.04, Ht + 1.0, sz * 0.8 + 0.04);
+  for (const sz of [-1, 1]) bx(body, 'Rail', mat2, -0.98, Ht + 0.92, sz * 0.8 - 0.03, 0.98, Ht + 1.0, sz * 0.8 + 0.03);
+  const nW = +o.wheels, R = 1.05, yc = Ht + 0.14 + R * 0.75;
+  for (let i = 0; i < nW; i++) {
+    const wx = nW === 1 ? 0 : (i - 0.5) * 0.7;
+    for (const s of [-1, 1]) bx(body, 'Bearing', M.iron, wx + s * 0.16 - 0.06, Ht + 0.14, -0.14, wx + s * 0.16 + 0.06, yc + 0.08, 0.14);
+    const sp = x.spin(V(wx, yc, 0), 'x', i % 2 ? -1 : 1);
+    x.wheel(sp, 'Sheave', V(0, 0, 0), R, { rim: M.iron, tyre: M.rust, hub: M.iron }, 8, [0, PI / 2, 0]);
+    // hoist rope down the shaft (front of the wheel) and back to the winding house
+    x.pole(body, 'HoistRope', V(wx, yc, R - 0.02), V(wx, 0.3, R - 0.02), 0.025, 0.025, M.rope, 5);
+    x.pole(body, 'WindingRope', V(wx, yc + R - 0.02, 0), V(wx * 1.5, 0.9, -Df / 2 - 1.5), 0.025, 0.025, M.rope, 5);
+  }
+  // shaft collar under the rope
+  const sz0 = R - 0.02;
+  if (o.base === 'collar') {
+    for (const [a, b, c, d] of [[-1.1, 1.1, -1.1, -0.7], [-1.1, 1.1, 0.7, 1.1], [-1.1, -0.7, -0.7, 0.7], [0.7, 1.1, -0.7, 0.7]])
+      bx(body, 'Collar', M.stone, a, 0, sz0 + c, b, 0.6, sz0 + d);
+    bx(body, 'Shaft', M.dark, -0.7, 0, sz0 - 0.7, 0.7, 0.45, sz0 + 0.7);
+  } else {
+    for (const s of [-1, 1]) {
+      bx(body, 'CollarBeam', M.wood2, -0.9, 0, sz0 + s * 0.75 - 0.12, 0.9, 0.3, sz0 + s * 0.75 + 0.12);
+      bx(body, 'CollarBeam', M.wood2, s * 0.75 - 0.12, 0, sz0 - 0.63, s * 0.75 + 0.12, 0.3, sz0 + 0.63);
+    }
+    bx(body, 'Shaft', M.dark, -0.63, 0, sz0 - 0.63, 0.63, 0.02, sz0 + 0.63);
+  }
+  // ladder up to the deck
+  const lx = -0.25, lz = -0.55;
+  for (const s of [-1, 1]) bx(body, 'LadderRail', mat2, lx + s * 0.2 - 0.025, 0, lz - 0.025, lx + s * 0.2 + 0.025, Ht + 0.9, lz + 0.025);
+  for (let y = 0.3; y < Ht + 0.2; y += 0.35) add(body, 'Rung', x.cyl(0.018, 0.018, 0.4, 5), mat2, [lx, y, lz], [0, 0, PI / 2]);
+  if (x.t.enchanted) for (const s of [-1, 1]) x.lantern(body, V(s * 0.95, Ht, 0.85));
+}
+
+function buildLiftCage(x) {
+  const { o, r, M, add, bx, body } = x;
+  const cw = 1.6, ch = 2.3, frame = M.iron;
+  bx(body, 'CageFloor', o.kind === 'boxed' ? M.wood2 : M.iron, -cw / 2, 0, -cw / 2, cw / 2, 0.1, cw / 2);
+  bx(body, 'CageRoof', M.iron, -cw / 2 - 0.04, ch, -cw / 2 - 0.04, cw / 2 + 0.04, ch + 0.08, cw / 2 + 0.04);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(body, 'CornerPost', frame, sx * cw / 2 - 0.05, 0.1, sz * cw / 2 - 0.05, sx * cw / 2 + 0.05, ch, sz * cw / 2 + 0.05);
+  for (const y of [0.1, 1.1, ch - 0.06]) for (const s of [-1, 1]) {
+    bx(body, 'Rail', frame, -cw / 2, y, s * cw / 2 - 0.035, cw / 2, y + 0.06, s * cw / 2 + 0.035);
+    bx(body, 'Rail', frame, s * cw / 2 - 0.035, y, -cw / 2, s * cw / 2 + 0.035, y + 0.06, cw / 2);
+  }
+  const sides = [[0, -1], [-1, 0], [1, 0]]; // back, left, right; the front is the gate
+  if (o.kind === 'barred' || o.kind === 'boxed') for (const [sx, sz] of sides) for (let i = 1; i < 8; i++) {
+    const u = -cw / 2 + (cw * i) / 8, y0 = o.kind === 'boxed' ? 1.1 : 0.1;
+    if (sx) bx(body, 'Bar', frame, sx * cw / 2 - 0.015, y0, u - 0.015, sx * cw / 2 + 0.015, ch, u + 0.015);
+    else bx(body, 'Bar', frame, u - 0.015, y0, sz * cw / 2 - 0.015, u + 0.015, ch, sz * cw / 2 + 0.015);
+  }
+  if (o.kind === 'boxed') for (const [sx, sz] of sides) for (let i = 0; i < 4; i++) {
+    const y = 0.1 + i * 0.25;
+    if (sx) bx(body, 'Board', i % 2 ? M.wood : M.wood2, sx * cw / 2 - 0.03, y, -cw / 2, sx * cw / 2 + 0.03, y + 0.24, cw / 2);
+    else bx(body, 'Board', i % 2 ? M.wood : M.wood2, -cw / 2, y, sz * cw / 2 - 0.03, cw / 2, y + 0.24, sz * cw / 2 + 0.03);
+  }
+  // gate: a few bars across the front, half open
+  const gate = x.group(body, 'Gate', [-cw / 2 + 0.05, 0, cw / 2 + 0.03], [0, -r.range(0.2, 0.7), 0]);
+  for (let i = 0; i < 4; i++) bx(gate, 'GateBar', frame, (i * cw * 0.5) / 4, 0.15, -0.012, (i * cw * 0.5) / 4 + 0.025, 1.9, 0.012);
+  for (const y of [0.3, 1.8]) bx(gate, 'GateRail', frame, 0, y, -0.015, cw * 0.4, y + 0.05, 0.015);
+  // chains to a hook and the hoist rope
+  const hookY = ch + 0.6;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) x.pole(body, 'Chain', V(sx * (cw / 2 - 0.08), ch + 0.08, sz * (cw / 2 - 0.08)), V(0, hookY, 0), 0.015, 0.015, M.iron, 4);
+  add(body, 'Hook', new THREE.TorusGeometry(0.09, 0.025, x.seg(4), x.seg(10)), M.iron, [0, hookY + 0.06, 0]);
+  if (o.guides === 'posts') {
+    const H = ch + 2.0, px = cw / 2 + 0.35;
+    for (const s of [-1, 1]) {
+      bx(body, 'GuidePost', M.wood2, s * px - 0.13, 0, -0.13, s * px + 0.13, H, 0.13);
+      bx(body, 'Sill', M.wood2, s * px - 0.18, 0, -cw / 2 - 0.2, s * px + 0.18, 0.18, cw / 2 + 0.2);
+      bx(body, 'GuideRail', M.iron, s * (cw / 2 + 0.18), 0.1, -0.04, s * (cw / 2 + 0.22), H - 0.3, 0.04);
+      x.beam(body, 'Brace', V(s * px, 0.15, -cw / 2 - 0.1), V(s * px, 1.3, -0.12), 0.1, 0.1, M.wood2);
+    }
+    bx(body, 'HeadBeam', M.wood2, -px - 0.2, H, -0.15, px + 0.2, H + 0.25, 0.15);
+    const sp = x.spin(V(0, H - 0.4, 0), 'z', 1);
+    x.wheel(sp, 'Pulley', V(0, 0, 0), 0.32, { rim: M.iron, tyre: null, hub: M.iron }, 6);
+    bx(body, 'PulleyHanger', M.iron, -0.03, H - 0.4, -0.08, 0.03, H, 0.08);
+    x.pole(body, 'HoistRope', V(-0.3, hookY + 0.12, 0), V(-0.3, H - 0.4, 0), 0.02, 0.02, M.rope, 5);
+    x.pole(body, 'HoistRope', V(0.3, H - 0.4, 0), V(0.3, 0.6, 0), 0.02, 0.02, M.rope, 5);
+    add(body, 'Counterweight', x.box(0.2, 0.4, 0.2), M.iron, [0.3, 0.4, 0]);
+    if (x.t.enchanted) x.lantern(body, V(px + 0.2, H, 0.18));
+  } else {
+    x.pole(body, 'HoistRope', V(0, hookY + 0.12, 0), V(0, hookY + 1.4, 0), 0.025, 0.025, M.rope, 5);
+    if (x.t.enchanted) x.lantern(body, V(0, ch + 0.08 - 0.02, cw / 2 - 0.15));
+  }
+}
+
+// Anvil standing on y0 at p (body along X).
+function anvil(x, parent, p, s = 1) {
+  const { M, add } = x;
+  add(parent, 'AnvilFoot', frustum({ x: 0.16 * s, z: 0.12 * s, y: 0 }, { x: 0.09 * s, z: 0.07 * s, y: 0.18 * s }), M.iron, p);
+  add(parent, 'AnvilBody', x.box(0.42 * s, 0.12 * s, 0.16 * s), M.iron, [p.x, p.y + 0.24 * s, p.z]);
+  add(parent, 'AnvilHorn', x.cone(0.07 * s, 0.24 * s, 6), M.iron, [p.x + 0.33 * s, p.y + 0.26 * s, p.z], [0, 0, -PI / 2]);
+}
+function buildForge(x) {
+  const { o, r, M, add, bx, body } = x;
+  const lit = o.fire === 'lit', shelter = o.kind === 'shelter';
+  const hx = shelter ? -0.8 : 0, hz = shelter ? -0.7 : 0;
+  // hearth: stone block with a fire bed, hood and chimney
+  bx(body, 'Hearth', M.stone, hx - 0.8, 0, hz - 0.5, hx + 0.8, 0.85, hz + 0.5);
+  bx(body, 'HearthRim', M.stone2, hx - 0.85, 0.85, hz - 0.55, hx + 0.85, 0.95, hz + 0.55);
+  bx(body, 'FireBed', M.dark, hx - 0.4, 0.94, hz - 0.3, hx + 0.4, 0.96, hz + 0.3);
+  coals(x, body, V(hx, 0.95, hz), 0.35, lit);
+  for (const s of [-1, 1]) bx(body, 'HoodPost', M.stone2, hx + s * 0.75 - 0.08, 0.95, hz - 0.5, hx + s * 0.75 + 0.08, 1.7, hz - 0.3);
+  add(body, 'Hood', frustum({ x: 0.85, z: 0.45, y: 0 }, { x: 0.38, z: 0.3, y: 0.7 }), M.brick, [hx, 1.7, hz - 0.1]);
+  chimneyPiece(x, body, { material: 'stone', top: 'plain', H: 4.2 - 2.4, w: 0.72, d: 0.56, p: V(hx, 2.4, hz - 0.1) });
+  if (lit) add(body, 'ChimneyGlow', x.box(0.4, 0.02, 0.28), M.glow, [hx, 4.29, hz - 0.1]);
+  // bellows beside the hearth
+  const bg = x.group(body, 'Bellows', [hx - 1.25, 0.55, hz], [0, 0, 0.1]);
+  bx(bg, 'BellowsStand', M.wood2, -0.25, -0.55, -0.2, 0.25, -0.05, 0.2);
+  add(bg, 'BellowsBoard', x.box(0.8, 0.04, 0.45), M.wood, [0, 0.0, 0]);
+  add(bg, 'BellowsBoard', x.box(0.8, 0.04, 0.45), M.wood, [0, 0.22, 0], [0, 0, -0.12]);
+  add(bg, 'BellowsLeather', frustum({ x: 0.36, z: 0.2, y: 0.02 }, { x: 0.36, z: 0.2, y: 0.2 }), M.leather);
+  add(bg, 'Nozzle', x.cone(0.06, 0.3, 6), M.iron, [0.52, 0.06, 0], [0, 0, -PI / 2]);
+  // anvil on a stump, quench trough
+  const ax = shelter ? 0.9 : 1.3, az = shelter ? 0.5 : 0.4;
+  add(body, 'AnvilStump', x.cyl(0.24, 0.27, 0.5, 9), M.wood, [ax, 0.25, az]);
+  add(body, 'StumpTop', x.cyl(0.235, 0.235, 0.02, 9), M.woodCut, [ax, 0.505, az]);
+  anvil(x, body, V(ax, 0.51, az));
+  add(body, 'Hammer', x.box(0.05, 0.05, 0.3), M.wood2, [ax - 0.05, 0.84, az + 0.12], [0, 0.4, 0]);
+  add(body, 'HammerHead', x.box(0.12, 0.06, 0.06), M.iron, [ax + 0.0, 0.84, az + 0.26]);
+  const tx = shelter ? 0.9 : -1.6, tz = shelter ? -0.9 : 0.9;
+  bx(body, 'TroughBase', M.wood2, tx - 0.5, 0, tz - 0.25, tx + 0.5, 0.08, tz + 0.25);
+  for (const s of [-1, 1]) {
+    bx(body, 'TroughSide', M.wood, tx - 0.5, 0.08, tz + s * 0.25 - 0.04, tx + 0.5, 0.55, tz + s * 0.25 + 0.04);
+    bx(body, 'TroughEnd', M.wood, tx + s * 0.5 - 0.04, 0.08, tz - 0.25, tx + s * 0.5 + 0.04, 0.55, tz + 0.25);
+  }
+  bx(body, 'Water', M.water, tx - 0.46, 0.08, tz - 0.21, tx + 0.46, 0.45, tz + 0.21);
+  if (shelter) {
+    const W = 4, Dd = 3, H = 2.4;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(body, 'Post', M.wood2, sx * (W / 2 - 0.1) - 0.1, 0, sz * (Dd / 2 - 0.1) - 0.1, sx * (W / 2 - 0.1) + 0.1, H, sz * (Dd / 2 - 0.1) + 0.1);
+    for (const sz of [-1, 1]) bx(body, 'Plate', M.wood2, -W / 2, H - 0.05, sz * (Dd / 2 - 0.1) - 0.1, W / 2, H + 0.12, sz * (Dd / 2 - 0.1) + 0.1);
+    const g = x.group(body, 'ForgeRoof', [0, H + 0.12 - 0.35 * Math.tan((32 * PI) / 180), 0]);
+    roofPiece(x, g, { W, D: Dd, shape: 'gable', cover: x.t.palette === 'ash' ? 'iron' : r.pick(['planks', 'tiles', 'slate']), pitch: 32, ends: 'open' });
+    // tool rack on the back posts
+    bx(body, 'ToolRack', M.wood2, 0.2, 1.5, -Dd / 2 + 0.05, 1.7, 1.58, -Dd / 2 + 0.12);
+    for (let i = 0; i < 4; i++) add(body, 'Tongs', x.box(0.03, 0.55, 0.02), M.iron, [0.4 + i * 0.35, 1.25, -Dd / 2 + 0.15], [0, 0, r.range(-0.1, 0.1)]);
+  }
+}
+
+function buildFurnace(x) {
+  const { o, r, M, add, bx, body } = x;
+  const lit = o.fire === 'lit';
+  if (o.kind === 'bloomery') {
+    add(body, 'Furnace', x.lathe([[0.75, 0], [0.8, 0.25], [0.62, 1.2], [0.36, 1.85], [0.28, 2.0], [0.2, 2.0]], 12), M.clay);
+    add(body, 'Throat', x.cyl(0.2, 0.2, 0.02, 10), lit ? M.glow : M.dark, [0, 2.0, 0]);
+    bx(body, 'Mouth', lit ? M.glow : M.dark, -0.2, 0.05, 0.62, 0.2, 0.42, 0.82);
+    bx(body, 'MouthArch', M.stone2, -0.28, 0.42, 0.66, 0.28, 0.52, 0.86);
+    add(body, 'Tuyere', x.cyl(0.07, 0.07, 0.6, 8), M.clay, [-0.85, 0.45, 0], [0, 0, PI / 2 - 0.3]);
+    for (let i = 0; i < 9; i++) { const a = (i / 9) * PI * 2 + 0.3; add(body, 'RingStone', x.rock(0.14), M.stone, [Math.cos(a) * 0.95, 0.07, Math.sin(a) * 0.95], [0, 0, 0], [1, 0.6, 1]); }
+    if (lit) flameIn(x, body, V(0, 2.0, 0), 0.22, 0.5);
+  } else if (o.kind === 'blast') {
+    add(body, 'Stack', frustum({ x: 1.3, z: 1.3, y: 0 }, { x: 0.85, z: 0.85, y: 3.8 }), M.stone);
+    for (const y of [0.9, 2.0, 3.0]) {
+      const f = y / 3.8, h = 1.3 + (0.85 - 1.3) * f + 0.03;
+      add(body, 'IronBand', frustum({ x: h, z: h, y }, { x: h - 0.01, z: h - 0.01, y: y + 0.12 }), M.iron);
+    }
+    add(body, 'Crown', frustum({ x: 0.95, z: 0.95, y: 3.8 }, { x: 0.95, z: 0.95, y: 4.1 }), M.stone2);
+    bx(body, 'Charge', lit ? M.glow : M.dark, -0.55, 4.1, -0.55, 0.55, 4.11, 0.55);
+    bx(body, 'TapArch', M.stone2, -0.5, 0, 1.2, 0.5, 1.1, 1.38);
+    bx(body, 'TapHole', lit ? M.glow : M.dark, -0.3, 0.1, 1.36, 0.3, 0.8, 1.4);
+    bx(body, 'SlagRun', lit ? M.glow : M.char2, -0.15, 0, 1.38, 0.15, 0.04, 2.0);
+    for (const s of [-1, 1]) add(body, 'Tuyere', x.cyl(0.08, 0.08, 0.8, 8), M.iron, [s * 1.35, 0.7, 0], [0, 0, PI / 2 + s * 0.25]);
+    if (lit) flameIn(x, body, V(0, 4.1, 0), 0.4, 0.6);
+  } else {
+    add(body, 'KilnBase', x.cyl(1.3, 1.35, 0.35, 12), M.stone, [0, 0.175, 0]);
+    add(body, 'Dome', lumpyDome(1.2, x.seg(12), x.seg(6), r.next() * 100, 0.06), M.brick, [0, 0.35, 0], [0, 0, 0], [1, 1.05, 1]);
+    add(body, 'Flue', x.cyl(0.18, 0.22, 0.6, 8), M.brick2, [0, 1.6, 0]);
+    bx(body, 'Door', lit ? M.glow : M.dark, -0.3, 0.35, 1.02, 0.3, 0.95, 1.12);
+    add(body, 'DoorArch', new THREE.TorusGeometry(0.34, 0.07, x.seg(4), x.seg(10), PI), M.brick2, [0, 0.95, 1.05]);
+    for (const s of [-1, 1]) bx(body, 'DoorJamb', M.brick2, s * 0.34 - 0.07, 0.35, 0.98, s * 0.34 + 0.07, 0.95, 1.12);
+    for (let i = 0; i < 4; i++) add(body, 'Firewood', x.cyl(0.06, 0.06, 0.9, 6), M.wood, [1.3 + (i % 2) * 0.13, 0.07 + Math.floor(i / 2) * 0.12, 0.6], [PI / 2, 0, 0]);
+    if (lit) flameIn(x, body, V(0, 1.9, 0), 0.14, 0.35);
+  }
+}
+
+function buildMine(x) {
+  const { o, r, M, add, bx, body } = x;
+  // hillside the adit cuts into
+  add(body, 'Hillside', lumpyDome(2.2, x.seg(12), x.seg(6), r.next() * 100, 0.25), M.stone, [0, 0, -1.0], [0, 0, 0], [1.05, 1.35, 0.75]);
+  for (let i = 0; i < 4; i++) add(body, 'Boulder', x.rock(r.range(0.25, 0.45)), M.stone2, [r.pick([-1, 1]) * r.range(1.4, 2.0), 0.15, r.range(-0.2, 0.6)], [0, 0, 0], [1, 0.7, 1]);
+  bx(body, 'Tunnel', M.dark, -0.85, 0, -1.0, 0.85, 2.2, 0.15);
+  if (o.kind === 'timber') {
+    for (const s of [-1, 1]) {
+      bx(body, 'Leg', M.wood, s * 0.95 - 0.13, 0, 0.0, s * 0.95 + 0.13, 2.3, 0.26);
+      bx(body, 'InnerLeg', M.wood2, s * 0.9 - 0.1, 0, -0.75, s * 0.9 + 0.1, 2.2, -0.55);
+    }
+    bx(body, 'Cap', M.wood, -1.3, 2.3, -0.02, 1.3, 2.58, 0.28);
+    bx(body, 'InnerCap', M.wood2, -1.0, 2.2, -0.77, 1.0, 2.4, -0.53);
+    for (let i = 0; i < 5; i++) bx(body, 'Lagging', i % 2 ? M.wood : M.wood2, -1.2 + i * 0.5, 2.58, -0.4, -0.78 + i * 0.5, 2.66, 0.3);
+    add(body, 'Sign', x.box(0.8, 0.28, 0.04), M.wood2, [0, 2.75, 0.3], [0, 0, r.range(-0.08, 0.08)]);
+  } else {
+    const g = x.group(body, 'Portal', [0, 0, 0.05]);
+    wallPiece(x, g, { L: 2.9, H: 2.9, material: 'stone', holes: [{ kind: 'arch', x0: -0.85, x1: 0.85, y0: 0, y1: 1.6, r: 0.85, cx: 0 }] });
+  }
+  if (o.rails === 'rails') {
+    for (const s of [-1, 1]) bx(body, 'Rail', M.iron, s * 0.42 - 0.03, 0.08, -0.9, s * 0.42 + 0.03, 0.14, 2.4);
+    for (let z = -0.7; z < 2.4; z += 0.5) bx(body, 'Sleeper', M.wood2, -0.62, 0, z - 0.09, 0.62, 0.08, z + 0.09);
+  }
+  if (x.t.enchanted) {
+    bx(body, 'LanternPost', M.wood2, 1.25, 0, 0.55, 1.37, 1.9, 0.67);
+    bx(body, 'LanternArm', M.wood2, 1.0, 1.82, 0.55, 1.37, 1.9, 0.67);
+    x.lantern(body, V(1.08, 1.82, 0.61));
+  }
+}
+
+// ---------- shrines and wells ----------
+function buildShrine(x) {
+  const { o, r, M, add, bx, body } = x;
+  const lit = o.lights === 'lit', old = o.state === 'weathered';
+  const rune = lit || x.t.enchanted ? M.glow : M.stone2;
+  const moss = (x0, y, z0, x1, z1) => { if (old) bx(body, 'Moss', M.moss, x0, y, z0, x1, y + 0.03, z1); };
+  if (o.kind === 'wayside') {
+    bx(body, 'Step', M.stone2, -0.6, 0, -0.6, 0.6, 0.2, 0.6);
+    const y0 = 0.2, H = 1.5, w = 0.8, d = 0.6, nb = y0 + 0.75, nt = nb + 0.5;
+    bx(body, 'Back', M.stone, -w / 2, y0, -d / 2, w / 2, y0 + H, -d / 2 + 0.2);
+    for (const s of [-1, 1]) bx(body, 'Cheek', M.stone, s * w / 2 - s * 0.15, y0, -d / 2 + 0.2, s * w / 2, y0 + H, d / 2);
+    bx(body, 'Below', M.stone, -w / 2 + 0.15, y0, -d / 2 + 0.2, w / 2 - 0.15, nb, d / 2);
+    bx(body, 'Above', M.stone, -w / 2 + 0.15, nt, -d / 2 + 0.2, w / 2 - 0.15, y0 + H, d / 2);
+    bx(body, 'NicheBack', M.stone2, -w / 2 + 0.15, nb, -d / 2 + 0.19, w / 2 - 0.15, nt, -d / 2 + 0.21);
+    bx(body, 'Ledge', M.stone2, -w / 2 - 0.04, nb - 0.06, -d / 2 + 0.2, w / 2 + 0.04, nb, d / 2 + 0.06);
+    const g = x.group(body, 'ShrineRoof', [0, y0 + H, 0]);
+    roofPiece(x, g, { W: w, D: d, shape: 'gable', cover: old ? 'slate' : r.pick(['tiles', 'slate']), pitch: 40, oh: 0.12 });
+    add(body, 'Icon', x.cyl(0.11, 0.11, 0.02, 12), M.gold, [0, nb + 0.28, -d / 2 + 0.23], [PI / 2, 0, 0]);
+    for (const cx of [-0.13, 0.13]) x.candle(body, V(cx, nb, -0.02), 0.12, lit);
+    add(body, 'OfferingBowl', x.lathe([[0, 0], [0.1, 0.01], [0.13, 0.07], [0.12, 0.08]], 10), M.clay, [0.2, 0.2, 0.42]);
+    for (let i = 0; i < 3; i++) add(body, 'Flower', x.sphere(0.03, 6, 4), M.paint, [-0.3 + i * 0.07, 0.24, 0.45]);
+    moss(-0.6, 0.2, 0.3, -0.1, 0.6); moss(-w / 2, y0 + H - 0.01, -d / 2, 0, -d / 2 + 0.2);
+    if (old) add(body, 'Fallen', x.rock(0.1), M.stone2, [0.5, 0.25, -0.4], [0, 0, 0], [1, 0.6, 1]);
+  } else if (o.kind === 'post') {
+    add(body, 'Base', x.rock(0.3), M.stone, [0, 0.1, 0], [0, 0, 0], [1.2, 0.5, 1.2]);
+    bx(body, 'Post', M.wood2, -0.09, 0, -0.09, 0.09, 1.55, 0.09);
+    bx(body, 'Box', M.wood, -0.27, 1.55, -0.2, 0.27, 2.05, 0.2);
+    bx(body, 'BoxInside', M.dark, -0.2, 1.6, 0.0, 0.2, 2.0, 0.21);
+    add(body, 'Icon', x.cyl(0.09, 0.09, 0.02, 12), M.gold, [0, 1.82, 0.21], [PI / 2, 0, 0]);
+    const g = x.group(body, 'ShrineRoof', [0, 2.05, 0]);
+    roofPiece(x, g, { W: 0.54, D: 0.4, shape: 'gable', cover: 'planks', pitch: 45, oh: 0.1 });
+    if (lit) x.candle(body, V(0, 1.6, 0.12), 0.1, true);
+    for (const s of [-1, 1]) x.beam(body, 'Brace', V(0, 1.2, 0), V(s * 0.25, 1.55, 0), 0.05, 0.05, M.wood2);
+  } else if (o.kind === 'bellows') {
+    bx(body, 'Plinth', M.stone2, -1.0, 0, -0.8, 1.0, 0.35, 0.8);
+    bx(body, 'Plinth', M.stone, -0.7, 0.35, -0.55, 0.7, 0.85, 0.55);
+    const g = x.group(body, 'GreatBellows', [-0.05, 0.85, 0]);
+    add(g, 'BellowsBoard', x.box(1.3, 0.07, 0.8), M.wood2, [0, 0.05, 0]);
+    add(g, 'BellowsBoard', x.box(1.3, 0.07, 0.8), M.wood2, [0, 0.55, 0], [0, 0, -0.18]);
+    add(g, 'BellowsLeather', frustum({ x: 0.6, z: 0.36, y: 0.08 }, { x: 0.6, z: 0.36, y: 0.5 }), M.leather);
+    for (const y of [0.2, 0.36]) add(g, 'LeatherFold', x.box(1.22, 0.04, 0.76), M.leather, [-0.02, y, 0]);
+    add(g, 'Nozzle', x.cone(0.11, 0.55, 6), M.iron, [0.88, 0.12, 0], [0, 0, -PI / 2]);
+    add(g, 'Handle', x.box(0.5, 0.05, 0.06), M.wood, [-0.85, 0.62, 0], [0, 0, -0.18]);
+    // the "tears": glowing drops from the nozzle into a bowl on the step
+    add(body, 'TearBowl', x.lathe([[0, 0], [0.18, 0.02], [0.22, 0.12], [0.2, 0.14]], 10), M.iron, [1.0 - 0.05, 0.35, 0.0]);
+    for (let i = 0; i < 3; i++) add(body, 'Tear', x.sphere(0.035, 6, 4), lit ? M.glow : M.iron, [0.98, 0.95 - i * 0.18, 0], [0, 0, 0], [1, 1.5, 1]);
+    if (lit) add(body, 'TearPool', x.cyl(0.18, 0.18, 0.01, 10), M.glow, [0.95, 0.47, 0]);
+    for (const sz of [-1, 1]) x.candle(body, V(-0.8, 0.35, sz * 0.6), 0.16, lit);
+    moss(-1.0, 0.35, -0.8, -0.6, 0.8);
+  } else if (o.kind === 'anvil') {
+    add(body, 'Dais', x.cyl(1.05, 1.1, 0.25, 12), M.stone2, [0, 0.125, 0]);
+    add(body, 'Dais', x.cyl(0.7, 0.72, 0.25, 12), M.stone, [0, 0.375, 0]);
+    add(body, 'AnvilStump', x.cyl(0.26, 0.3, 0.45, 9), M.wood2, [0, 0.725, 0]);
+    anvil(x, body, V(0, 0.95, 0), 1.3);
+    add(body, 'Cloth', x.box(0.28, 0.32, 0.02), M.paint, [0, 1.12, 0.13]);
+    add(body, 'Hammer', x.box(0.05, 0.05, 0.42), M.wood, [0.25, 0.53, 0.45], [0, 0.6, 0]);
+    add(body, 'HammerHead', x.box(0.16, 0.08, 0.08), M.iron, [0.38, 0.53, 0.62]);
+    for (const s of [-1, 1]) {
+      bx(body, 'ChainPost', M.stone, s * 0.85 - 0.08, 0.25, -0.08, s * 0.85 + 0.08, 0.95, 0.08);
+      x.pole(body, 'Chain', V(s * 0.85, 0.9, 0), V(s * 0.2, 1.2, 0), 0.015, 0.015, M.iron, 4);
+    }
+    for (let i = 0; i < 4; i++) { const a = PI / 4 + (i * PI) / 2; x.candle(body, V(Math.cos(a) * 0.55, 0.5, Math.sin(a) * 0.55), 0.14, lit); }
+  } else if (o.kind === 'forge') {
+    bx(body, 'Base', M.stone2, -1.15, 0, -0.65, 1.15, 0.2, 0.65);
+    for (const s of [-1, 1]) {
+      bx(body, 'Pillar', M.stone, s * 0.85 - 0.2, 0.2, -0.2, s * 0.85 + 0.2, 2.25, 0.2);
+      bx(body, 'PillarCap', M.stone2, s * 0.85 - 0.25, 2.25, -0.25, s * 0.85 + 0.25, 2.35, 0.25);
+    }
+    bx(body, 'Lintel', M.stone2, -1.15, 2.35, -0.25, 1.15, 2.65, 0.25);
+    for (let i = -2; i <= 2; i++) add(body, 'LintelRune', x.box(0.12, 0.14, 0.02), rune, [i * 0.35, 2.5, 0.26]);
+    bx(body, 'Altar', M.stone, -0.55, 0.2, -0.35, 0.55, 0.95, 0.35);
+    add(body, 'Brazier', x.lathe([[0, 0], [0.3, 0.02], [0.42, 0.18], [0.4, 0.2]], 10), M.iron, [0, 0.95, 0]);
+    coals(x, body, V(0, 1.05, 0), 0.32, lit);
+    add(body, 'HangingHammer', x.box(0.04, 0.4, 0.04), M.wood2, [0, 2.1, 0]);
+    add(body, 'HangingHammerHead', x.box(0.2, 0.09, 0.09), M.iron, [0, 1.88, 0]);
+    for (const s of [-1, 1]) add(body, 'Tongs', x.box(0.03, 0.7, 0.02), M.iron, [s * 0.6, 0.55, 0.37], [0, 0, s * 0.15]);
+  } else { // waystone under a canopy
+    bx(body, 'Platform', M.stone2, -0.9, 0, -0.9, 0.9, 0.2, 0.9);
+    add(body, 'Waystone', frustum({ x: 0.3, z: 0.2, y: 0 }, { x: 0.22, z: 0.15, y: 2.0 }), M.stone, [0, 0.2, 0]);
+    add(body, 'StoneTip', frustum({ x: 0.22, z: 0.15, y: 0 }, { x: 0.05, z: 0.08, y: 0.25 }), M.stone, [0, 2.2, 0]);
+    for (let i = 0; i < 4; i++) add(body, 'Rune', x.box(0.16, 0.12, 0.02), rune, [0, 0.7 + i * 0.32, 0.205 - (i * 0.05) / 2], [-0.02, 0, 0]);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(body, 'CanopyPost', M.wood2, sx * 0.72 - 0.07, 0.2, sz * 0.72 - 0.07, sx * 0.72 + 0.07, 2.65, sz * 0.72 + 0.07);
+    for (const sz of [-1, 1]) bx(body, 'CanopyBeam', M.wood2, -0.85, 2.65, sz * 0.72 - 0.07, 0.85, 2.78, sz * 0.72 + 0.07);
+    const g = x.group(body, 'CanopyRoof', [0, 2.78, 0]);
+    roofPiece(x, g, { W: 1.45, D: 1.45, shape: 'hip', cover: r.pick(['slate', 'planks', 'tiles']), pitch: 35, oh: 0.15 });
+    if (lit) for (const s of [-1, 1]) x.candle(body, V(s * 0.45, 0.2, 0.5), 0.14, true);
+    moss(-0.9, 0.2, 0.4, -0.3, 0.9);
+  }
+}
+
+function buildWell(x) {
+  const { o, r, M, add, bx, body } = x;
+  const Ro = 0.75, Ri = 0.55, H = 0.8, ruined = o.kind === 'ruined';
+  const ring = [[Ro, 0], [Ro, H], [Ri, H], [Ri, 0.02], [Ro, 0]];
+  add(body, 'WellRing', x.lathe(ring, 14, ruined ? PI * 1.45 : PI * 2), M.stone, [0, 0, 0], [0, ruined ? 0.6 : 0, 0]);
+  const n = Math.round(10 * x.D);
+  for (let i = 0; i < n; i++) { // stone blocks on the ring
+    const a = (i / n) * PI * 2, y = 0.15 + (i % 3) * 0.22;
+    if (ruined && (a + 0.6) % (PI * 2) > PI * 1.45) continue;
+    add(body, 'RingStone', x.box(0.3, 0.16, 0.06), i % 2 ? M.stone2 : M.stone, [Math.sin(a) * (Ro + 0.01), y, Math.cos(a) * (Ro + 0.01)], [0, a, 0]);
+  }
+  add(body, 'Water', x.cyl(Ri, Ri, 0.02, 12), o.kind === 'boarded' ? M.dark : M.water, [0, 0.35, 0]);
+  if (o.kind === 'roofed') {
+    for (const s of [-1, 1]) {
+      bx(body, 'Post', M.wood2, s * 0.85 - 0.08, 0, -0.08, s * 0.85 + 0.08, 2.0, 0.08);
+      x.beam(body, 'Brace', V(s * 0.85, 0, -0.6), V(s * 0.85, 0.9, -0.05), 0.07, 0.07, M.wood2);
+    }
+    bx(body, 'Crossbeam', M.wood2, -1.0, 2.0, -0.09, 1.0, 2.15, 0.09);
+    add(body, 'Winch', x.cyl(0.08, 0.08, 1.6, 8), M.wood, [0, 1.25, 0], [0, 0, PI / 2]);
+    add(body, 'Crank', x.box(0.04, 0.3, 0.04), M.iron, [0.95, 1.15, 0]);
+    add(body, 'CrankHandle', x.box(0.2, 0.04, 0.04), M.iron, [1.05, 1.02, 0]);
+    add(body, 'RopeCoil', x.cyl(0.11, 0.11, 0.3, 8), M.rope, [-0.1, 1.25, 0], [0, 0, PI / 2]);
+    x.pole(body, 'Rope', V(-0.1, 1.15, 0), V(-0.1, 0.72, 0), 0.012, 0.012, M.rope, 4);
+    add(body, 'Bucket', x.cyl(0.13, 0.11, 0.24, 9), M.wood, [-0.1, 0.6, 0]);
+    add(body, 'BucketBand', x.cyl(0.135, 0.135, 0.03, 9), M.iron, [-0.1, 0.66, 0]);
+    const g = x.group(body, 'WellRoof', [0, 2.15, 0]);
+    roofPiece(x, g, { W: 1.8, D: 1.2, shape: 'gable', cover: o.cover, pitch: 40, oh: 0.25 });
+    if (x.t.enchanted) x.lantern(body, V(0.6, 2.0, 0.1));
+  } else if (o.kind === 'boarded') {
+    for (let i = 0; i < 5; i++) {
+      const z = -0.6 + i * 0.3;
+      add(body, 'Board', x.box(1.75, 0.06, 0.26), i % 2 ? M.wood : M.wood2, [r.range(-0.05, 0.05), H + 0.03 + (i % 2) * 0.01, z], [0, r.range(-0.08, 0.08), 0]);
+    }
+    for (const s of [-1, 1]) add(body, 'CrossBoard', x.box(0.2, 0.06, 1.6), M.wood2, [s * 0.45, H + 0.1, 0], [0, s * 0.35, 0]);
+    add(body, 'Chain', x.box(0.04, 0.04, 1.5), M.iron, [0, H + 0.15, 0], [0, 0.9, 0]);
+    add(body, 'Padlock', x.box(0.1, 0.12, 0.05), M.iron, [0.2, H + 0.14, 0.25]);
+    if (x.t.enchanted) add(body, 'WarningRune', x.box(0.3, 0.02, 0.2), M.glow, [-0.2, H + 0.11, -0.1]);
+  } else {
+    add(body, 'BrokenPost', x.box(0.16, 1.1, 0.16), M.wood2, [0.85, 0.55, 0], [0, 0, 0.25]);
+    add(body, 'FallenPost', x.box(0.16, 1.8, 0.16), M.wood2, [-0.9, 0.08, 0.6], [PI / 2, 0, 0.4]);
+    for (let i = 0; i < 4; i++) add(body, 'Rubble', x.rock(r.range(0.12, 0.2)), M.stone2, [Math.sin(PI * 1.7 + i * 0.25) * 1.0, 0.07, Math.cos(PI * 1.7 + i * 0.25) * 1.0], [0, 0, 0], [1, 0.6, 1]);
+  }
+}
+
+// ---------- carts and wagons ----------
+function buildWagon(x) {
+  const { o, r, M, add, bx, body } = x;
+  const burnt = o.state === 'burnt', wreck = o.state === 'wreck';
+  const K = { wagon: { L: 3.0, W: 1.4, R: 0.5, y: 0.78 }, cart: { L: 2.0, W: 1.3, R: 0.65, y: 0.9 }, handcart: { L: 1.4, W: 0.95, R: 0.38, y: 0.62 } }[o.kind];
+  const { L, W, R } = K, y0 = K.y + 0.08;
+  const wd = (i = 0) => burnt ? (r.chance(0.6) ? M.char : M.char2) : i % 2 ? M.wood : M.wood2;
+  const cart = x.group(body, 'Cart');
+  if (wreck) cart.rotation.set(0.14, 0, -0.1); // sags towards the missing front wheel (+x, +z)
+  bx(cart, 'Bed', wd(1), -L / 2, K.y, -W / 2, L / 2, y0, W / 2);
+  for (const s of [-1, 1]) for (let j = 0; j < 2; j++) {
+    if (burnt && r.chance(0.35)) continue;
+    const short = wreck && s > 0 && j === 1 ? r.range(0.4, 0.7) : 1;
+    bx(cart, 'SideBoard', wd(j), -L / 2, y0 + j * 0.19, s * W / 2 - s * 0.05, -L / 2 + L * short, y0 + j * 0.19 + 0.18, s * W / 2);
+  }
+  for (const s of o.kind === 'handcart' ? [1] : [-1, 1]) for (let j = 0; j < 2; j++) {
+    if (burnt && r.chance(0.35)) continue;
+    bx(cart, 'EndBoard', wd(j + 1), s * L / 2 - s * 0.05, y0 + j * 0.19, -W / 2 + 0.05, s * L / 2, y0 + j * 0.19 + 0.18, W / 2 - 0.05);
+  }
+  for (let px = -L / 2 + 0.15; px <= L / 2 - 0.1; px += 0.7) for (const s of [-1, 1]) bx(cart, 'Stake', wd(1), px - 0.03, K.y - 0.04, s * W / 2 - 0.01, px + 0.03, y0 + 0.4, s * W / 2 + 0.04);
+  for (const s of [-1, 1]) bx(cart, 'Frame', wd(1), -L / 2 + 0.05, K.y - 0.12, s * W / 3 - 0.05, L / 2 - 0.05, K.y, s * W / 3 + 0.05);
+  // axles and wheels
+  const axles = o.kind === 'wagon' ? [L / 2 - 0.55, -L / 2 + 0.55] : o.kind === 'cart' ? [0] : [L / 4];
+  axles.forEach((ax, ai) => {
+    add(cart, 'Axle', x.cyl(0.05, 0.05, W + 0.32, 6), M.iron, [ax, R, 0], [PI / 2, 0, 0]);
+    for (const s of [-1, 1]) {
+      bx(cart, 'Bolster', wd(1), ax - 0.08, R, s * W / 3 - 0.06, ax + 0.08, K.y - 0.1, s * W / 3 + 0.06);
+      const missing = wreck && ai === 0 && s > 0;
+      if (missing) { x.wheel(body, 'LooseWheel', V(L / 2 - 0.4, 0.06, W / 2 + 0.55), R, { rim: wd(1), tyre: M.iron }, o.kind === 'handcart' ? 6 : 8, [PI / 2, 0, 0.3]); continue; }
+      const broken = burnt && r.chance(0.4);
+      x.wheel(cart, 'Wheel', V(ax, R, s * (W / 2 + 0.1)), R, broken ? { rim: wd(1), arc: PI * r.range(1.1, 1.5) } : { rim: wd(1), tyre: burnt ? M.char2 : M.iron }, o.kind === 'handcart' ? 6 : 8, [0, 0, r.next() * PI]);
+    }
+  });
+  if (o.kind === 'handcart') { // handles and legs at the back
+    for (const s of [-1, 1]) {
+      x.beam(cart, 'Handle', V(-L / 2 + 0.3, y0 - 0.02, s * (W / 2 - 0.08)), V(-L / 2 - 0.75, 0.9, s * (W / 2 - 0.05)), 0.06, 0.06, wd(1));
+      bx(cart, 'Leg', wd(1), -L / 2 + 0.08, 0, s * (W / 2 - 0.12) - 0.03, -L / 2 + 0.16, K.y, s * (W / 2 - 0.12) + 0.03);
+    }
+  } else if (o.kind === 'cart') {
+    if (!burnt) for (const s of [-1, 1]) x.beam(cart, 'Shaft', V(L / 2 - 0.3, K.y - 0.05, s * 0.45), V(L / 2 + (wreck ? 0.7 : 1.4), 0.08, s * 0.4), 0.07, 0.07, wd(1));
+  } else if (!burnt) {
+    const tip = wreck ? V(L / 2 + 0.6, 0.06, 0.2) : V(L / 2 + 1.0, 0.1, 0);
+    x.beam(cart, 'Tongue', V(L / 2 - 0.55, R, 0), tip, 0.08, 0.08, wd(1));
+    if (wreck) add(body, 'BrokenTongue', x.box(0.08, 0.06, 0.6), wd(1), [L / 2 + 0.2, 0.03, W / 2 + 0.3], [0, 0.8, 0]);
+  }
+  // canvas cover on hoops
+  const hy = y0 + 0.38, hoops = Math.max(3, Math.round(L / 0.8));
+  if (o.cover !== 'none' || burnt) for (let i = 0; i < hoops; i++) {
+    if (o.cover === 'none' && !burnt) break;
+    const hx = -L / 2 + 0.15 + ((L - 0.3) * i) / (hoops - 1), arc = burnt ? PI * r.range(0.35, 0.8) : PI;
+    add(cart, 'Hoop', new THREE.TorusGeometry(W / 2, 0.025, x.seg(3), x.seg(12), arc), burnt ? M.char : M.wood2, [hx, hy, 0], [0, PI / 2, 0]);
+  }
+  if (o.cover !== 'none' && !burnt) {
+    const nS = 3, Ls = (L - 0.2) / nS;
+    for (let i = 0; i < nS; i++) {
+      const torn = o.cover === 'torn';
+      if (torn && i === 1) continue;
+      const len = torn && i === 2 ? PI * 0.55 : PI;
+      add(cart, 'Canvas', new THREE.CylinderGeometry(W / 2 + 0.03, W / 2 + 0.03, Ls + 0.02, x.seg(12), 1, true, 0, len), M.canvas, [-L / 2 + 0.1 + Ls * (i + 0.5), hy, 0], [0, 0, PI / 2]);
+    }
+    if (o.cover === 'torn') for (let i = 0; i < 3; i++) add(cart, 'Tatter', x.box(0.12, r.range(0.3, 0.5), 0.01), M.canvas, [-L / 2 + 0.1 + Ls * 1.1 + i * 0.25, hy + 0.2, W / 2 - 0.05], [0.3, 0, r.range(-0.3, 0.3)]);
+  }
+  // load
+  if (o.load === 'crates') {
+    const n = o.kind === 'handcart' ? 1 : 3;
+    for (let i = 0; i < n; i++) {
+      const s = r.range(0.42, 0.55), px = n === 1 ? 0 : -L / 2 + 0.45 + i * (L - 0.9) / (n - 1);
+      add(cart, 'Crate', x.box(s, s, s), wd(i), [px, y0 + s / 2, r.range(-0.15, 0.15)], [0, r.range(-0.3, 0.3), 0]);
+      add(cart, 'CrateBand', x.box(s + 0.02, 0.06, s + 0.02), M.wood2, [px, y0 + s * 0.8, 0], [0, 0, 0]);
+    }
+    if (wreck) add(body, 'SpilledCrate', x.box(0.45, 0.45, 0.45), M.wood, [-0.2, 0.22, W / 2 + 0.7], [0.1, 0.6, 0.3]);
+  } else if (o.load === 'sacks') {
+    for (let i = 0; i < 4; i++) add(cart, 'Sack', x.sphere(0.3, 8, 6), M.canvas, [-L / 2 + 0.4 + (i % 2) * (L - 0.8), y0 + 0.18 + Math.floor(i / 2) * 0.15, (i - 1.5) * 0.15], [0, r.next(), 0], [1.1, 0.65, 0.8]);
+  } else if (o.load === 'hay') {
+    add(cart, 'Hay', lumpyDome(W / 2, x.seg(12), x.seg(6), r.next() * 100, 0.18), M.hay, [0, y0, 0], [0, 0, 0], [(L / 2 - 0.1) / (W / 2), 1.3, 0.95]);
+  } else if (o.load === 'brazier') {
+    add(cart, 'BrazierPost', x.cyl(0.06, 0.08, 0.35, 6), M.iron, [0, y0 + 0.17, 0]);
+    add(cart, 'Brazier', x.lathe([[0, 0], [0.22, 0.02], [0.36, 0.18], [0.34, 0.22]], 10), M.iron, [0, y0 + 0.33, 0]);
+    for (let i = 0; i < 4; i++) { const a = (i / 4) * PI * 2 + 0.4; x.beam(cart, 'BrazierLeg', V(Math.cos(a) * 0.32, y0, Math.sin(a) * 0.32), V(Math.cos(a) * 0.2, y0 + 0.36, Math.sin(a) * 0.2), 0.03, 0.03, M.iron); }
+    coals(x, cart, V(0, y0 + 0.47, 0), 0.3, true);
+  } else if (o.load === 'ore') {
+    for (let i = 0; i < 8; i++) add(cart, 'Ore', x.rock(r.range(0.14, 0.22)), r.chance(0.3) ? M.rust : M.stone2, [r.range(-L / 2 + 0.25, L / 2 - 0.25), y0 + 0.12 + r.range(0, 0.12), r.range(-W / 2 + 0.25, W / 2 - 0.25)]);
+  }
+  if (burnt) x.embers(cart, V(0, y0, 0), 6, L / 3);
+}
+
+function buildMineCart(x) {
+  const { o, r, M, add, bx, body } = x;
+  const L = 1.3, W = 0.8, yb = 0.32, yt = 0.95, iron = o.kind === 'tub';
+  for (const s of [-1, 1]) bx(body, 'Chassis', M.iron, -L / 2 + 0.05, 0.2, s * 0.28 - 0.05, L / 2 - 0.05, yb, s * 0.28 + 0.05);
+  for (const ax of [-0.42, 0.42]) {
+    add(body, 'Axle', x.cyl(0.03, 0.03, W + 0.05, 6), M.iron, [ax, 0.17, 0], [PI / 2, 0, 0]);
+    for (const s of [-1, 1]) {
+      add(body, 'Wheel', x.cyl(0.17, 0.17, 0.07, 10), M.iron, [ax, 0.17, s * 0.4], [PI / 2, 0, 0]);
+      add(body, 'Flange', x.cyl(0.2, 0.2, 0.02, 10), M.rust, [ax, 0.17, s * 0.355], [PI / 2, 0, 0]);
+    }
+  }
+  if (iron) {
+    add(body, 'Tub', frustum({ x: L / 2 - 0.1, z: W / 2 - 0.08, y: yb }, { x: L / 2, z: W / 2, y: yt }), M.rust);
+    for (const s of [-1, 1]) {
+      bx(body, 'Rim', M.iron, -L / 2 - 0.02, yt - 0.05, s * W / 2 - 0.03, L / 2 + 0.02, yt + 0.02, s * W / 2 + 0.03);
+      bx(body, 'Rim', M.iron, s * L / 2 - 0.03, yt - 0.05, -W / 2, s * L / 2 + 0.03, yt + 0.02, W / 2);
+      for (const px of [-0.3, 0.3]) add(body, 'Strap', x.box(0.05, yt - yb, 0.02), M.iron, [px, (yb + yt) / 2, s * (W / 2 - 0.03)], [s * 0.13, 0, 0]);
+    }
+  } else {
+    for (const s of [-1, 1]) {
+      bx(body, 'Side', M.wood, -L / 2, yb, s * W / 2 - s * 0.06, L / 2, yt, s * W / 2);
+      bx(body, 'End', M.wood2, s * L / 2 - s * 0.06, yb, -W / 2 + 0.06, s * L / 2, yt, W / 2 - 0.06);
+      for (const sz of [-1, 1]) bx(body, 'CornerIron', M.iron, s * L / 2 - 0.05, yb, sz * W / 2 - 0.05, s * L / 2 + 0.01, yt + 0.01, sz * W / 2 + 0.01);
+    }
+    bx(body, 'Floor', M.wood2, -L / 2, yb, -W / 2, L / 2, yb + 0.06, W / 2);
+  }
+  bx(body, 'Inside', M.dark, -L / 2 + 0.06, yt - 0.01, -W / 2 + 0.06, L / 2 - 0.06, yt - 0.005, W / 2 - 0.06);
+  for (const s of [-1, 1]) add(body, 'Coupling', new THREE.TorusGeometry(0.05, 0.015, x.seg(3), x.seg(8)), M.iron, [s * (L / 2 + 0.07), 0.26, 0], [PI / 2, 0, 0]);
+  if (o.load !== 'empty') {
+    const n = Math.round(10 * Math.min(1.4, x.D));
+    for (let i = 0; i < n; i++) {
+      const mat = o.load === 'coal' ? (x.t.enchanted && r.chance(0.3) ? M.glow : r.chance(0.5) ? M.dark : M.char2) : r.chance(0.3) ? M.rust : M.stone2;
+      add(body, o.load === 'coal' ? 'Coal' : 'Ore', x.rock(r.range(0.11, 0.18)), mat, [r.range(-L / 2 + 0.2, L / 2 - 0.2), yt - 0.02 + r.range(0, 0.12), r.range(-W / 2 + 0.18, W / 2 - 0.18)]);
+    }
+  }
+  if (o.rails === 'rails') {
+    for (const s of [-1, 1]) bx(body, 'Rail', M.iron, -1.2, 0, s * 0.4 - 0.025, 1.2, 0.06, s * 0.4 + 0.025);
+    for (let px = -1.05; px < 1.2; px += 0.5) bx(body, 'Sleeper', M.wood2, px - 0.08, -0.06, -0.6, px + 0.08, 0, 0.6);
+  }
+}
+
+// ---------- small buildings, assembled from the kit ----------
+function buildBuilding(x) {
+  const { o, r, M, add, bx, body, t } = x;
+  const oh = 0.35, kind = o.kind;
+  // footprint (walls), matched to the target box when there is one
+  let [W, Dd] = kind === 'cottage' ? [5, 4] : kind === 'hut' ? [3, 2.6] : [4, 2.6];
+  if (t.box && kind === 'cottage') [W, Dd] = [Math.max(2.6, t.box.w - 2 * oh), Math.max(2.6, t.box.d - 2 * oh)];
+  const H = kind === 'cottage' ? 2.6 : 2.3, T = WALL_T[o.walls];
+  const walls = kind === 'shelter'
+    ? [{ L: W, p: [0, 0, -Dd / 2 + T / 2], ry: PI, opening: 'none' }]
+    : [{ L: W, p: [0, 0, Dd / 2 - T / 2], ry: 0, opening: 'door' },
+      { L: W, p: [0, 0, -Dd / 2 + T / 2], ry: PI, opening: kind === 'cottage' ? 'windows' : 'none' },
+      { L: Dd - 2 * T, p: [W / 2 - T / 2, 0, 0], ry: PI / 2, opening: 'window' },
+      { L: Dd - 2 * T, p: [-W / 2 + T / 2, 0, 0], ry: -PI / 2, opening: kind === 'cottage' ? 'window' : 'none' }];
+  for (const w of walls) wallPiece(x, x.group(body, 'Wall', w.p, [0, w.ry, 0]), { L: w.L, H, material: o.walls, opening: w.opening });
+  if (kind === 'shelter') {
+    for (const s of [-1, 1]) bx(body, 'Post', M.wood2, s * (W / 2 - 0.1) - 0.1, 0, Dd / 2 - 0.3, s * (W / 2 - 0.1) + 0.1, H, Dd / 2 - 0.1);
+    bx(body, 'Plate', M.wood2, -W / 2, H - 0.15, Dd / 2 - 0.3, W / 2, H, Dd / 2 - 0.1);
+    bx(body, 'Bench', M.wood, -1.0, 0.75, -Dd / 2 + T + 0.05, 1.0, 0.82, -Dd / 2 + T + 0.6);
+    for (const s of [-1, 1]) bx(body, 'BenchLeg', M.wood2, s * 0.9 - 0.04, 0, -Dd / 2 + T + 0.1, s * 0.9 + 0.04, 0.75, -Dd / 2 + T + 0.55);
+  }
+  const alongX = W >= Dd || kind === 'shelter', Wr = alongX ? W : Dd, Dr = alongX ? Dd : W;
+  const shape = kind === 'cottage' ? 'gable' : kind === 'shelter' ? 'shed' : r.pick(['gable', 'shed']);
+  const ends = { plaster: 'plaster', stone: 'plaster', plank: 'planks', logs: 'planks' }[o.walls];
+  const g = x.group(body, 'Roof', [0, 0, 0], [0, alongX ? 0 : PI / 2, 0]);
+  const res = roofPiece(x, g, { W: Wr, D: Dr, shape, cover: o.roof, pitch: o.roof === 'thatch' ? PITCH.steep : PITCH.normal, ends, oh });
+  g.position.y = H - res.wallY;
+  if (o.chimney === 'yes' && kind !== 'shelter') {
+    const a = Wr / 2 - 0.5, apex = H - res.wallY + res.R;
+    chimneyPiece(x, body, { material: o.walls === 'stone' ? 'stone' : r.pick(['stone', 'brick']), top: r.pick(['plain', 'pots']), H: apex + 0.45, w: 0.7, d: 0.6, p: alongX ? V(a, 0, shape === 'shed' ? -Dr / 2 + 0.6 : 0) : V(0, 0, -a) });
+  }
+}
+
+// ---------- viewer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+$('viewport').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x121420);
+scene.fog = new THREE.Fog(0x121420, 8, 20);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.6;
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 400);
+camera.position.set(4, 3, 6.5);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.autoRotateSpeed = 1.0;
+const key = new THREE.DirectionalLight(0xffffff, 1.6);
+key.position.set(2.5, 5, 3); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 0.05, far: 30 });
+const rim = new THREE.DirectionalLight(0xe8a33d, 1.0); rim.position.set(-3, 2.5, -3);
+scene.add(key, key.target, rim, new THREE.HemisphereLight(0x8090ff, 0x201810, 0.4));
+const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 64), new THREE.MeshStandardMaterial({ color: 0x1b1e2b, roughness: 1 }));
+ground.rotation.x = -PI / 2; ground.receiveShadow = true; scene.add(ground);
+const grid = new THREE.PolarGridHelper(4, 16, 8, 64, 0x2c3145, 0x23273a); grid.position.y = 0.001; scene.add(grid);
+// 1.8 m scale figure (the game's knight height) and the target box of the chosen game id
+const knight = new THREE.Group(); knight.visible = true; scene.add(knight);
+{
+  const m = new THREE.MeshStandardMaterial({ color: 0x5a6070, roughness: 0.9 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.95, 4, 12), m); body.position.y = 0.2 + 0.475 + 0.05; body.scale.z = 0.7;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), m); head.position.y = 1.8 - 0.17;
+  knight.add(body, head);
+}
+const targetBox = new THREE.Box3Helper(new THREE.Box3(), 0xe8a33d); targetBox.visible = false; scene.add(targetBox);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.45, 0.9);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+function resize() {
+  const el = $('viewport'), w = el.clientWidth, h = Math.max(1, el.clientHeight);
+  renderer.setSize(w, h, false); composer.setSize(w, h);
+  renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%';
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe($('viewport'));
+resize();
+
+// Idle animation, shared by the preview and the export: one loop of ANIM_PERIOD seconds.
+const ANIM_PERIOD = 6;
+const flickerScale = (time, phase) => {
+  const w = (n) => Math.sin((2 * PI * n * time) / ANIM_PERIOD + phase * n);
+  return [1 - 0.05 * w(9), 1 + 0.1 * w(7) + 0.05 * w(13), 1 - 0.05 * w(11)];
+};
+const AXES = { x: V(1, 0, 0), y: V(0, 1, 0), z: V(0, 0, 1) };
+function poseAnims(anims, time) {
+  for (const a of anims) {
+    if (a.kind === 'spin') a.node.quaternion.setFromAxisAngle(AXES[a.axis], (time / ANIM_PERIOD) * a.turns * PI * 2);
+    else a.node.scale.set(...flickerScale(time, a.phase));
+  }
+}
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.1);
+  if (state.current) poseAnims(state.current.anims, clock.elapsedTime);
+  controls.autoRotate = $('rotate').checked;
+  controls.update(dt);
+  if ($('bloom').checked) composer.render(); else renderer.render(scene, camera);
+});
+
+function fitView() {
+  const c = state.current; if (!c) return;
+  const box = new THREE.Box3().setFromObject(c.root);
+  if (knight.visible) box.union(new THREE.Box3().setFromObject(knight));
+  const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(size.y, Math.hypot(size.x, size.z) * 0.85) / 2;
+  const dist = radius / Math.tan((camera.fov * PI) / 360) * 1.75;
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  if (!isFinite(dir.x) || dir.y < 0.05) dir.set(0.5, 0.35, 1).normalize();
+  controls.target.copy(center); camera.position.copy(center).addScaledVector(dir, dist);
+  camera.near = dist / 100; camera.far = dist * 50; camera.updateProjectionMatrix();
+  const s = Math.max(size.x, size.y, size.z) * 1.2;
+  key.position.copy(center).add(V(0.5, 1, 0.6).multiplyScalar(s * 2)); key.target.position.copy(center);
+  Object.assign(key.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: s * 0.05, far: s * 6 }); key.shadow.camera.updateProjectionMatrix();
+  // keep the floor grid in proportion to the piece
+  const g = Math.max(0.5, Math.max(size.x, size.z) * 1.6); grid.scale.setScalar(g / 4);
+  scene.fog.near = dist * 2.5; scene.fog.far = dist * 7;
+}
+
+// ---------- state / UI ----------
+const state = { traits: null, current: null, busy: false };
+const fmtInt = (n) => n.toLocaleString();
+const fmtBytes = (b) => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
+const fmtLen = (m) => m < 1 ? (m * 100).toFixed(m < 0.1 ? 1 : 0) + ' cm' : m.toFixed(2) + ' m';
+function log(msg, cls = '') {
+  const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = msg;
+  $('log').appendChild(d); $('log').scrollTop = 1e9;
+}
+const triCount = (g) => (g.index ? g.index.count : g.attributes.position.count) / 3 | 0;
+function meshesOf(root) { const out = []; root.traverse((o) => { if (o.isMesh) out.push(o); }); return out; }
+function disposeBuilt(c) { for (const m of meshesOf(c.root)) m.geometry.dispose(); for (const m of Object.values(c.materials)) m.dispose(); }
+
+$('gameId').add(new Option('None (free design)', ''));
+for (const [gk, glabel] of Object.entries(GAME_GROUPS)) {
+  const og = document.createElement('optgroup'); og.label = glabel;
+  for (const [id, d] of Object.entries(GAME_IDS)) if (d.g === gk) og.appendChild(new Option(id, id));
+  $('gameId').appendChild(og);
+}
+for (const [gid, glabel] of Object.entries(GROUPS)) {
+  const og = document.createElement('optgroup'); og.label = glabel;
+  for (const [id, c] of Object.entries(CATS)) if (c.group === gid) og.appendChild(new Option(c.label, id));
+  $('category').appendChild(og);
+}
+for (const [k, label] of Object.entries(COLOR_KEYS)) {
+  const l = document.createElement('label'); l.textContent = label;
+  const inp = document.createElement('input'); inp.type = 'color'; inp.id = 'c_' + k; l.appendChild(inp); $('colors').appendChild(l);
+  inp.addEventListener('input', scheduleRebuild);
+}
+// One dropdown per variant slot of the current category (ids "opt_<slot>").
+function buildVariantUI(cat) {
+  const box = $('variants'); box.textContent = '';
+  for (const [slot, o] of Object.entries(CATS[cat].opts)) {
+    const row = document.createElement('div'); row.className = 'row';
+    const l = document.createElement('label'); l.htmlFor = 'opt_' + slot; l.textContent = o.label;
+    const sel = document.createElement('select'); sel.id = 'opt_' + slot;
+    for (const [v, label] of Object.entries(o.values)) sel.add(new Option(label, v));
+    sel.addEventListener('change', scheduleRebuild);
+    row.append(l, sel); box.appendChild(row);
+  }
+  box.dataset.cat = cat;
+}
+const setSize = (m) => { $('size').value = Math.log10(m); updateLabels(); };
+const getSize = () => +Math.pow(10, Number($('size').value)).toFixed(3);
+function updateLabels() { $('sizeVal').textContent = state.traits?.box ? 'target' : $('fit').value === 'design' ? '1:1' : fmtLen(getSize()); }
+
+function writeUI(t) {
+  $('gameId').value = t.gameId || '';
+  $('category').value = t.category; $('seed').value = t.seed;
+  $('fit').value = t.fit || 'design'; $('palette').value = t.palette || 'random';
+  $('fit').disabled = !!t.box; $('size').disabled = !!t.box || $('fit').value === 'design';
+  $('fileName').value = t.gameId || t.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+  if ($('variants').dataset.cat !== t.category) buildVariantUI(t.category);
+  for (const [slot, v] of Object.entries(t.opts)) $('opt_' + slot).value = v;
+  setSize(t.size);
+  $('enchant').checked = t.enchanted;
+  for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).value = t.colors[k];
+  const kit = CATS[t.category].kit;
+  $('kitBtn').disabled = !kit || !!t.gameId;
+  $('kitHint').textContent = kit ? `Kit: this piece once per ${CATS[t.category].opts[kit].label.toLowerCase()} option (${Object.keys(CATS[t.category].opts[kit].values).join(', ')}), as <name>-<option>.glb in one .zip, all at the same scale.`
+    : 'Kit: walls (every opening), corners (every form) and roofs (every shape) can be downloaded as a set.';
+}
+function readUI() {
+  const t = { ...state.traits, opts: {}, colors: {} };
+  for (const slot of Object.keys(CATS[t.category].opts)) t.opts[slot] = $('opt_' + slot).value;
+  t.fit = $('fit').value; t.palette = $('palette').value;
+  if (!t.box && t.fit !== 'design') t.size = getSize();
+  t.enchanted = $('enchant').checked;
+  for (const k of Object.keys(COLOR_KEYS)) t.colors[k] = $('c_' + k).value;
+  Object.assign(t, outputSettings());
+  return t;
+}
+const outputSettings = () => ({ style: $('style').value, detail: $('detail').value });
+
+function disposeCurrent() {
+  const c = state.current; if (!c) return;
+  scene.remove(c.root); disposeBuilt(c);
+  state.current = null;
+}
+function rebuild({ fit = false } = {}) {
+  const t = state.traits;
+  disposeCurrent();
+  const c = buildProp(t);
+  state.current = c; scene.add(c.root);
+  applyWire();
+  let f = 0, v = 0; const ms = meshesOf(c.root);
+  for (const m of ms) { f += triCount(m.geometry); v += m.geometry.attributes.position.count; }
+  const d = c.root.userData.dims;
+  $('sF').textContent = fmtInt(f); $('sV').textContent = fmtInt(v); $('sP').textContent = fmtInt(ms.length);
+  $('sD').textContent = [d.x, d.y, d.z].map(fmtLen).join(' × ');
+  showTarget(t, d, f);
+  $('propName').textContent = t.gameId ? `${t.gameId} · ${t.name}` : t.name;
+  rim.color.set(t.colors.glow);
+  if (fit) fitView();
+  return c;
+}
+function roll(cat, seed) {
+  state.traits = { ...rollTraits(cat, seed), ...outputSettings() };
+  writeUI(state.traits);
+  rebuild({ fit: true });
+  log(`${state.traits.name} (${CATS[cat].label}, seed "${seed}")`);
+}
+// A game id: its category and variants, the game palette, the target box and a detail level within the budget.
+function rollGame(id, seed) {
+  const d = GAME_IDS[id], box = gameBox(id);
+  const t = { ...rollTraits(d.cat, seed), ...outputSettings(), gameId: id, box, fit: 'height', palette: d.pal };
+  Object.assign(t.opts, d.opts);
+  t.enchanted = !!d.glow;
+  t.colors = { ...t.colors, ...PALETTES[d.pal], ...d.colors };
+  t.style = 'lowpoly'; $('style').value = 'lowpoly';
+  t.detail = pickDetail(t, gameBudget(box)); $('detail').value = t.detail;
+  state.traits = t;
+  for (const [id2, v] of [['anim', false], ['gameMats', true], ['combine', true], ['knight', true]]) $(id2).checked = v;
+  writeUI(t);
+  rebuild({ fit: true });
+  log(`${id}: ${CATS[d.cat].label}, target ${fmtBox(box)}${TARGETS.objects?.[id] ? '' : ' (estimated size, not in targets.json)'}, seed "${seed}"`);
+}
+const fmtBox = (b) => `${fmtLen(b.w)} × ${fmtLen(b.h)} × ${fmtLen(b.d)}`;
+const facesOf = (c) => meshesOf(c.root).reduce((n, m) => n + triCount(m.geometry), 0);
+// Highest detail level that stays within the triangle budget.
+function pickDetail(t, budget) {
+  for (const detail of ['high', 'medium', 'low']) {
+    const c = buildProp({ ...t, detail }), f = facesOf(c);
+    disposeBuilt(c);
+    if (f <= budget) return detail;
+  }
+  return 'low';
+}
+function showTarget(t, d, faces) {
+  targetBox.visible = !!t.box;
+  if (!t.box) { $('sT').textContent = '–'; $('sB').textContent = '–'; $('sT').style.color = $('sB').style.color = ''; }
+  else {
+    const b = t.box, drv = driverAxis(b), tgt = { x: b.w, y: b.h, z: b.d }, tol = TARGETS.tolerance ?? 0.15;
+    const off = ['x', 'y', 'z'].map((a) => Math.abs(d[a] / tgt[a] - 1)), ok = off[['x', 'y', 'z'].indexOf(drv)] <= tol;
+    $('sT').textContent = fmtBox(b) + (ok ? ' ✓' : ' ✗'); $('sT').style.color = ok ? 'var(--ok)' : 'var(--err)';
+    const budget = gameBudget(b), cap = TARGETS.maxTriangles || 10000;
+    $('sB').textContent = `${fmtInt(faces)} / ${fmtInt(budget)}` + (faces <= budget ? ' ✓' : faces <= cap ? ' (ingest simplifies)' : ' ✗ over cap');
+    $('sB').style.color = faces <= budget ? 'var(--ok)' : faces <= cap ? 'var(--warn)' : 'var(--err)';
+    targetBox.box.set(V(-b.w / 2, 0, -b.d / 2), V(b.w / 2, b.h, b.d / 2));
+  }
+  knight.visible = $('knight').checked;
+  knight.position.set(-(Math.max(d.x, t.box ? t.box.w : 0) / 2 + 0.6), 0, 0);
+}
+async function loadTargets(text, from) {
+  try {
+    const j = JSON.parse(text);
+    if (!j.objects || typeof j.objects !== 'object') throw new Error('no "objects" table');
+    TARGETS = j;
+    const known = Object.keys(GAME_IDS).filter((id) => j.objects[id]).length;
+    log(`Targets from ${from}: ${Object.keys(j.objects).length} ids, ${known} of the ${Object.keys(GAME_IDS).length} game ids here`, 'ok');
+    if (state.traits?.gameId) rollGame(state.traits.gameId, state.traits.seed);
+  } catch (e) { log(`Could not read targets from ${from}: ${e.message}`, 'warn'); }
+}
+function applyWire() { if (state.current) for (const m of Object.values(state.current.materials)) m.wireframe = $('wire').checked; }
+
+let pending = 0, refit = false;
+function scheduleRebuild(e) {
+  if (e && e.target && e.target.id && e.target.id.startsWith('opt_')) refit = true; // a variant can change the shape a lot
+  cancelAnimationFrame(pending);
+  pending = requestAnimationFrame(() => { state.traits = readUI(); rebuild({ fit: refit }); refit = false; });
+}
+
+$('category').addEventListener('change', () => roll($('category').value, $('seed').value.trim() || randomSeed()));
+const reroll = (seed) => state.traits.gameId ? rollGame(state.traits.gameId, seed) : roll($('category').value, seed);
+$('seed').addEventListener('change', () => reroll($('seed').value.trim() || randomSeed()));
+$('randomBtn').addEventListener('click', () => reroll(randomSeed()));
+$('colorsBtn').addEventListener('click', () => {
+  const c = basePalette(makeRng(randomSeed()));
+  for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).value = c[k];
+  scheduleRebuild();
+});
+$('size').addEventListener('input', () => { updateLabels(); refit = true; scheduleRebuild(); });
+for (const id of ['enchant', 'style', 'detail']) $(id).addEventListener('change', scheduleRebuild);
+$('fit').addEventListener('change', () => {
+  // leaving "as designed": start the slider at the current size so nothing jumps
+  const d = state.current?.root.userData.dims;
+  if (d && $('fit').value !== 'design') setSize(Math.min(20, Math.max(0.3, $('fit').value === 'height' ? d.y : Math.max(d.x, d.y, d.z))));
+  $('size').disabled = $('fit').value === 'design';
+  updateLabels(); refit = true; scheduleRebuild();
+});
+$('palette').addEventListener('change', () => {
+  const v = $('palette').value;
+  const c = v === 'random' ? basePalette(makeRng(state.traits.category + '|' + state.traits.seed + '|colors')) : PALETTES[v];
+  for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).value = c[k];
+  scheduleRebuild();
+});
+$('gameId').addEventListener('change', () => {
+  const id = $('gameId').value, seed = $('seed').value.trim() || randomSeed();
+  if (id) rollGame(id, seed);
+  else { for (const [id2, v] of [['anim', true], ['gameMats', false]]) $(id2).checked = v; roll(state.traits.category, seed); }
+});
+$('targetsBtn').addEventListener('click', () => $('targetsFile').click());
+$('targetsFile').addEventListener('change', async () => {
+  const f = $('targetsFile').files[0]; if (f) await loadTargets(await f.text(), f.name);
+  $('targetsFile').value = '';
+});
+$('knight').addEventListener('change', () => { knight.visible = $('knight').checked; fitView(); });
+$('wire').addEventListener('change', applyWire);
+$('fitBtn').addEventListener('click', fitView);
+
+// ---------- export ----------
+const nodeName = (s) => THREE.PropertyBinding.sanitizeNodeName(s.replace(/\s+/g, '_')) || 'Structure';
+// Copy of the piece with every transform baked into the geometry (in metres): Root > Body plus one node per
+// animated part.
+function exportScene(c, { combine, anim, gameMats, traits = state.traits }) {
+  poseAnims(c.anims, 0);
+  c.root.updateMatrixWorld(true);
+  const k = c.root.userData.scale, S = new THREE.Matrix4().makeScale(k.x, k.y, k.z);
+  const out = new THREE.Group(); out.name = nodeName(traits.gameId || traits.name);
+  // enough to regenerate the piece (kept in the file as glTF extras)
+  out.userData = { generator: 'structures-generator', category: traits.category, seed: traits.seed, opts: traits.opts, enchanted: traits.enchanted, fit: traits.fit,
+    ...(traits.gameId ? { gameId: traits.gameId } : {}) };
+  // game materials: flat, roughness 1, metallic 0, opaque; emissive colour kept
+  const flat = new Map(), matFor = (m) => {
+    if (!gameMats) return m;
+    if (!flat.has(m)) flat.set(m, new THREE.MeshStandardMaterial({ name: m.name, color: m.color, emissive: m.emissive, emissiveIntensity: m.emissiveIntensity, roughness: 1, metalness: 0, side: m.side }));
+    return flat.get(m);
+  };
+  for (const g of [c.body, ...c.anims.map((a) => a.node)]) {
+    const meshes = meshesOf(g); if (!meshes.length) continue;
+    const node = new THREE.Group(); node.name = g.name; out.add(node);
+    node.position.copy(g.position).multiply(k);
+    const inv = g.matrixWorld.clone().invert();
+    const baked = meshes.map((m) => ({ name: m.name, mat: matFor(m.material), geo: m.geometry.clone().applyMatrix4(S.clone().multiply(inv).multiply(m.matrixWorld)) }));
+    if (!combine) { for (const p of baked) { const m = new THREE.Mesh(p.geo, p.mat); m.name = p.name; node.add(m); } continue; }
+    const byMat = new Map();
+    for (const p of baked) { if (!byMat.has(p.mat)) byMat.set(p.mat, []); byMat.get(p.mat).push(p.geo); }
+    for (const [mat, geos] of byMat) {
+      const clean = geos.map((g0) => {
+        const g1 = g0.index ? g0.toNonIndexed() : g0;
+        const g2 = new THREE.BufferGeometry();
+        g2.setAttribute('position', g1.attributes.position); g2.setAttribute('normal', g1.attributes.normal);
+        g2.setAttribute('uv', g1.attributes.uv || new THREE.Float32BufferAttribute(new Float32Array(g1.attributes.position.count * 2), 2));
+        return g2;
+      });
+      const merged = mergeVertices(mergeGeometries(clean), 1e-5);
+      for (const g0 of geos) g0.dispose();
+      const m = new THREE.Mesh(merged, mat); m.name = g.name + '_' + mat.name; node.add(m);
+    }
+  }
+  const clips = [];
+  if (anim) {
+    const tracks = [], T = ANIM_PERIOD, present = new Set(out.children.map((n) => n.name));
+    for (const a of c.anims) {
+      if (!present.has(a.node.name)) continue;
+      if (a.kind === 'spin') {
+        const steps = 4 * Math.abs(a.turns), times = [], vals = [], q = new THREE.Quaternion();
+        for (let i = 0; i <= steps; i++) { times.push((T * i) / steps); q.setFromAxisAngle(AXES[a.axis], (i / steps) * a.turns * PI * 2); vals.push(q.x, q.y, q.z, q.w); }
+        tracks.push(new THREE.QuaternionKeyframeTrack(a.node.name + '.quaternion', times, vals));
+      } else {
+        const steps = 60, times = [], vals = [];
+        for (let i = 0; i <= steps; i++) { const tm = (T * i) / steps; times.push(tm); vals.push(...flickerScale(tm, a.phase)); }
+        tracks.push(new THREE.VectorKeyframeTrack(a.node.name + '.scale', times, vals));
+      }
+    }
+    if (tracks.length) clips.push(new THREE.AnimationClip('Idle', T, tracks));
+  }
+  return { out, clips };
+}
+const exportOptions = () => ({ combine: $('combine').checked, anim: $('anim').checked, gameMats: $('gameMats').checked });
+async function exportGLB(c = state.current, traits = state.traits) {
+  const { out, clips } = exportScene(c, { ...exportOptions(), traits });
+  try {
+    const buf = await new GLTFExporter().parseAsync(out, { binary: true, trs: true, animations: clips });
+    return { buf, out, clips };
+  } finally {
+    out.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (!Object.values(c.materials).includes(o.material)) o.material.dispose(); } });
+  }
+}
+const fileBase = () => ($('fileName').value.trim().replace(/\.glb$/i, '').replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-|-$/g, '')) || 'structure';
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+// Minimal zip writer (stored, no compression; GLB data barely compresses anyway).
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+const crc32 = (d) => { let c = 0xffffffff; for (let i = 0; i < d.length; i++) c = CRC_TABLE[(c ^ d[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), data = new Uint8Array(f.data), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint32(14, crc, true);
+    h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint32(16, crc, true);
+    c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+    parts.push(h.buffer, name, data); central.push(c.buffer, name);
+    off += 30 + name.length + data.length;
+  }
+  const size = central.reduce((n, b) => n + b.byteLength, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+  e.setUint32(12, size, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...central, e.buffer], { type: 'application/zip' });
+}
+// Variant file names: an id ending in -a counts on (-a, -b, -c), anything else gets -a, -b, -c appended.
+function variantNames(base, n) {
+  const m = base.match(/^(.*)-([a-z])$/), stem = m ? m[1] : base, start = m ? m[2].charCodeAt(0) : 97;
+  return Array.from({ length: n }, (_, i) => `${stem}-${String.fromCharCode(Math.min(122, start + i))}`);
+}
+// Builds and exports each [name, traits] pair into one zip.
+async function zipOf(list) {
+  const files = [];
+  for (const [name, t] of list) {
+    $('busyText').textContent = `Building ${name}…`;
+    await new Promise((res) => setTimeout(res, 0));
+    const c = buildProp(t);
+    try { files.push({ name: name + '.glb', data: (await exportGLB(c, t)).buf }); } finally { disposeBuilt(c); }
+  }
+  return makeZip(files);
+}
+async function busy(text, job) {
+  if (state.busy) return;
+  state.busy = true; $('busy').classList.add('show'); $('busyText').textContent = text;
+  try { await job(); } catch (e) { console.error(e); log('Export failed: ' + (e.message || e), 'err'); }
+  finally { $('busy').classList.remove('show'); state.busy = false; }
+}
+$('downloadBtn').addEventListener('click', () => busy('Exporting GLB…', async () => {
+  const { buf } = await exportGLB();
+  const name = fileBase() + '.glb';
+  saveBlob(new Blob([buf], { type: 'model/gltf-binary' }), name);
+  log(`Saved ${name} (${fmtBytes(buf.byteLength)})`, buf.byteLength > (TARGETS.maxFileMB || 1.5) * 1048576 ? 'warn' : 'ok');
+}));
+$('variantsBtn').addEventListener('click', () => busy('Building variants…', async () => {
+  const n = Math.max(2, Math.min(12, Math.round(Number($('variantCount').value)) || 3));
+  const names = variantNames(fileBase(), n);
+  const zip = await zipOf(names.map((name, i) => [name, { ...state.traits, seed: i === 0 ? state.traits.seed : `${state.traits.seed}-${name.slice(-1)}` }]));
+  const zipName = names[0].replace(/-a$/, '') + '-variants.zip';
+  saveBlob(zip, zipName);
+  log(`Saved ${zipName}: ${names.map((x) => x + '.glb').join(', ')} (${fmtBytes(zip.size)})`, 'ok');
+}));
+// Kit: the current piece once per value of the category's kit slot (every wall opening, corner form, roof shape).
+// With a scale other than "as designed", every piece takes the current piece's scale factor so the kit still fits.
+$('kitBtn').addEventListener('click', () => busy('Building kit…', async () => {
+  const t = state.traits, slot = CATS[t.category].kit; if (!slot) return;
+  const k = state.current.root.userData.scale, values = Object.keys(CATS[t.category].opts[slot].values);
+  const scaled = t.fit !== 'design' && !t.box;
+  const list = values.map((v) => [`${fileBase()}-${v}`, { ...t, opts: { ...t.opts, [slot]: v }, ...(scaled ? { fit: 'scale', scale: k } : {}) }]);
+  const zip = await zipOf(list), zipName = fileBase() + '-kit.zip';
+  saveBlob(zip, zipName);
+  log(`Saved ${zipName}: ${list.map(([n]) => n + '.glb').join(', ')} (${fmtBytes(zip.size)})`, 'ok');
+}));
+
+window.__structgen = { THREE, state, CATS, GAME_IDS, PALETTES, rollTraits, rollGame, buildProp, roll, rebuild, exportGLB, exportScene, makeZip, variantNames, wallRects, targets: () => TARGETS }; // handy for debugging in the console
+
+roll('wall', randomSeed());
+log('Ready. Pick a piece type or a game id, press Randomize, then Download GLB.', 'ok');
+// the game's live size table, when online (the built-in copy is used otherwise)
+(async () => {
+  try {
+    const ctl = new AbortController(); setTimeout(() => ctl.abort(), 6000);
+    const res = await fetch(TARGETS_URL, { cache: 'no-store', signal: ctl.signal });
+    if (res.ok) await loadTargets(await res.text(), 'the game repo');
+  } catch { /* offline: keep the built-in copy */ }
+})();
+</script>
+</body>
+</html>
