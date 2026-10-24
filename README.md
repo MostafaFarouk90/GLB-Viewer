@@ -39,6 +39,12 @@ The exported GLB opens in the viewer above, so you can then smooth it, change it
 
 Why procedural instead of AI text-to-3D: services such as Meshy, Tripo or Hunyuan3D give more detailed sculpted models but need an account, an API key (which would be readable inside a shared HTML file), internet and per-model credits, and take from 30 seconds to minutes per model. The procedural generator is instant, free, offline and reproducible.
 
+## Embers of Valdren game data (`embers/`)
+Reference files from the game repo [MostafaFarouk90/OpenWorld](https://github.com/MostafaFarouk90/OpenWorld), so the viewer's game mode and the props page export game-ready models:
+- `embers/conventions.md`: file rules (Y up, 1 unit = 1 m, base-centre pivot, front +Z, `<id>.glb`, about 4.5k faces, 512 px textures), palette, and what the game's ingest step does.
+- `embers/targets.json`: target size in metres per object id, tolerances and budgets. It changes as the game's map tiles are designed, so the tools should load the live copy from `https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/src/env/targets.json` and fall back to this file offline.
+- `embers/environment-needs-prompts.md`: the list of missing objects with sizes and one-line descriptions.
+
 ## Editing / development
 `index.html` and `character-generator.html` are the sources. `glb-viewer-offline.html` and `character-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
