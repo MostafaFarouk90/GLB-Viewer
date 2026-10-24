@@ -1,0 +1,1555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embers Coverage Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
+    --text: #e6e8ec; --muted: #8b93a3; --accent: #e8a33d; --accent2: #b97a1f;
+    --ok: #3fbf7f; --warn: #e0a83a; --err: #e05a5a; --info: #6f9ce0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 14px 16px 40px; }
+  .wrap { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 22px 0 8px; }
+  a { color: var(--accent); }
+  .hint { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 11px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent); }
+  input[type=search], select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; font: inherit; }
+  input[type=search] { width: 220px; }
+  input[type=checkbox] { accent-color: var(--accent); }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  #sources { display: flex; gap: 6px 16px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 6px; }
+  #sources b { color: var(--text); font-weight: 500; }
+  #drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 14px; margin-top: 12px; text-align: center; color: var(--muted); }
+  #drop.dragging { border-color: var(--accent); color: var(--text); background: var(--panel); }
+  #tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 14px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; text-align: left; cursor: pointer; }
+  .tile .n { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .tile .l { color: var(--muted); font-size: 12px; }
+  .tile.on { border-color: var(--accent); background: var(--panel2); }
+  .tile.ok .n { color: var(--ok); } .tile.fail .n { color: var(--err); } .tile.warn .n { color: var(--warn); }
+  #meter { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 10px; background: var(--panel2); gap: 2px; }
+  #meter span { display: block; height: 100%; }
+  .tbl { overflow-x: auto; margin-top: 10px; border: 1px solid var(--line); border-radius: 9px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 500; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .05em; cursor: pointer; user-select: none; }
+  th[data-sort]:hover { color: var(--text); }
+  th.sorted::after { content: " ▾"; } th.sorted.rev::after { content: " ▴"; }
+  td.num, th.num { text-align: right; }
+  tbody tr.row { cursor: pointer; } tbody tr.row:hover { background: var(--panel); }
+  tr.detail td { white-space: normal; background: var(--panel); }
+  .id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .muted { color: var(--muted); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); font-size: 11.5px; }
+  .pill.pass { color: var(--ok); border-color: var(--ok); } .pill.fail { color: var(--err); border-color: var(--err); }
+  .pill.notarget { color: var(--warn); border-color: var(--warn); } .pill.missing { color: var(--muted); }
+  .pill.game { color: var(--info); border-color: var(--info); }
+  .gens a { margin-right: 8px; white-space: nowrap; }
+  ul.lines { margin: 4px 0 6px; padding-left: 18px; }
+  ul.lines li.fail { color: var(--err); } ul.lines li.warn { color: var(--warn); } ul.lines li.pass { color: var(--ok); }
+  ul.lines li.info { color: var(--muted); }
+  #log { margin-top: 18px; font: 11.5px/1.45 ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+    max-height: 140px; overflow-y: auto; white-space: pre-wrap; }
+  #log .warn { color: var(--warn); } #log .err { color: var(--err); } #log .ok { color: var(--ok); }
+  @media (max-width: 640px) { input[type=search] { width: 100%; } }
+</style>
+<!-- Offline copy of the game's size table (Embers of Valdren, src/env/targets.json). The page loads the live file
+     from the game repo when it can and falls back to this copy. Written by tools/coverage-data.mjs from embers/targets.json. -->
+<script type="application/json" id="embersTargets">
+{
+ "$comment": "Target sizes in metres (width x, depth z, height y) for environment objects, from assets/environment-needs-prompts.md. Used by src/env/scaleTable.ts and tools/env-pass/check-glb.mjs.",
+ "tolerance": 0.15,
+ "knightHeight": 1.8,
+ "proportion": {
+  "$comment": "Ids ingested with an exact fit to the target size (tools/env-pass/ingest.mjs): uniform scale to the height, optional tile = repeat the model n times along x, then width/depth scaled to the target without the 15% cap. For artist models whose shape is far from the table (batch 2).",
+  "stonewall-low": { "tile": 2 },
+  "wattle-fence": { "tile": 2 },
+  "picket-fence": { "tile": 2 },
+  "garden-bed-a": { "tile": 2 },
+  "signpost-a": {},
+  "washing-line": {},
+  "barn-a": {}
+},
+  "objects": {
+  "oak-a": {
+   "w": 10.5,
+   "d": 10.5,
+   "h": 13
+  },
+  "oak-b": {
+   "w": 10.5,
+   "d": 10.5,
+   "h": 13
+  },
+  "oak-c": {
+   "w": 10.5,
+   "d": 10.5,
+   "h": 13
+  },
+  "birch-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "poplar-a": {
+   "w": 2.5,
+   "d": 2.5,
+   "h": 14.0
+  },
+  "cairn-a": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 1.3
+  },
+  "birch-b": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "elm-or-ash-a": {
+   "w": 6.0,
+   "d": 6.0,
+   "h": 10.0
+  },
+  "autumn-tree-a": {
+   "w": 6.0,
+   "d": 6.0,
+   "h": 9.0
+  },
+  "autumn-tree-b": {
+   "w": 6.0,
+   "d": 6.0,
+   "h": 9.0
+  },
+  "bush-round-a": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.1
+  },
+  "bush-round-b": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.1
+  },
+  "bush-flowering-a": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.2
+  },
+  "bush-flowering-b": {
+   "w": 1.4,
+   "d": 1.4,
+   "h": 1.2
+  },
+  "hedge-straight": {
+   "w": 3.4,
+   "d": 0.9,
+   "h": 1.6
+  },
+  "hedge-corner": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 1.6
+  },
+  "grass-clump-a": {
+   "w": 0.6,
+   "d": 0.6,
+   "h": 0.5
+  },
+  "grass-clump-b": {
+   "w": 0.6,
+   "d": 0.6,
+   "h": 0.5
+  },
+  "grass-clump-c": {
+   "w": 0.6,
+   "d": 0.6,
+   "h": 0.5
+  },
+  "fern-a": {
+   "w": 0.9,
+   "d": 0.9,
+   "h": 0.7
+  },
+  "flower-patch-yellow": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "flower-patch-white": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "flower-patch-purple": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "flower-patch-red": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.4
+  },
+  "reeds-a": {
+   "w": 0.8,
+   "d": 0.8,
+   "h": 1.8
+  },
+  "reeds-b": {
+   "w": 0.8,
+   "d": 0.8,
+   "h": 1.8
+  },
+  "stump-a": {
+   "w": 0.9,
+   "d": 0.9,
+   "h": 0.6
+  },
+  "stump-b": {
+   "w": 0.9,
+   "d": 0.9,
+   "h": 0.6
+  },
+  "log-fallen-a": {
+   "w": 3.0,
+   "d": 0.8,
+   "h": 0.7
+  },
+  "mushrooms-a": {
+   "w": 0.5,
+   "d": 0.5,
+   "h": 0.3
+  },
+  "boulder-large-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 2.4
+  },
+  "boulder-large-b": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 2.4
+  },
+  "rock-cluster-a": {
+   "w": 2.5,
+   "d": 2.0,
+   "h": 1.0
+  },
+  "haystack-round": {
+   "w": 2.4,
+   "d": 2.4,
+   "h": 2.6
+  },
+  "haybale-a": {
+   "w": 1.2,
+   "d": 0.8,
+   "h": 0.7
+  },
+  "haycart-a": {
+   "w": 3.2,
+   "d": 1.6,
+   "h": 1.8
+  },
+  "woodpile-chop": {
+   "w": 2.0,
+   "d": 1.2,
+   "h": 1.3
+  },
+  "trough-a": {
+   "w": 2.0,
+   "d": 0.7,
+   "h": 0.7
+  },
+  "garden-bed-a": {
+   "w": 2.0,
+   "d": 1.4,
+   "h": 0.5
+  },
+  "garden-bed-b": {
+   "w": 2.0,
+   "d": 1.4,
+   "h": 0.5
+  },
+  "beehive-skep": {
+   "w": 0.7,
+   "d": 0.7,
+   "h": 0.8
+  },
+  "washing-line": {
+   "w": 4.0,
+   "d": 0.3,
+   "h": 2.2
+  },
+  "signpost-a": {
+   "w": 1.2,
+   "d": 0.4,
+   "h": 2.4
+  },
+  "milestone-a": {
+   "w": 0.6,
+   "d": 0.4,
+   "h": 1.1
+  },
+  "picket-fence": {
+   "w": 3.4,
+   "d": 0.2,
+   "h": 1.1
+  },
+  "wattle-fence": {
+   "w": 3.4,
+   "d": 0.3,
+   "h": 1.2
+  },
+  "stonewall-low": {
+   "w": 3.4,
+   "d": 0.7,
+   "h": 1.0
+  },
+  "market-stall-a": {
+   "w": 3.0,
+   "d": 2.4,
+   "h": 2.8
+  },
+  "market-stall-b": {
+   "w": 3.0,
+   "d": 2.4,
+   "h": 2.8
+  },
+  "well-bucket-rope": {
+   "w": 0.4,
+   "d": 0.4,
+   "h": 0.5
+  },
+  "barn-a": {
+   "w": 8.0,
+   "d": 12.0,
+   "h": 7.0
+  },
+  "stable-a": {
+   "w": 7.0,
+   "d": 5.0,
+   "h": 4.0
+  },
+  "cottage-thatch-a": {
+   "w": 4.6,
+   "d": 5.0,
+   "h": 5.0
+  },
+  "cottage-thatch-b": {
+   "w": 4.6,
+   "d": 5.0,
+   "h": 5.0
+  },
+  "wagon-wreck-a": {
+   "w": 4.0,
+   "d": 2.0,
+   "h": 2.2
+  },
+  "wagon-burnt": {
+   "w": 4.0,
+   "d": 2.0,
+   "h": 2.0
+  },
+  "roadside-shrine-a": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 2.2
+  },
+  "gibbet-post": {
+   "w": 1.0,
+   "d": 1.0,
+   "h": 3.6
+  },
+  "campfire-ring": {
+   "w": 1.6,
+   "d": 1.6,
+   "h": 0.6
+  },
+  "crow-perch-post": {
+   "w": 0.4,
+   "d": 0.4,
+   "h": 1.6
+  },
+  "ash-tree-dead-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "ash-tree-dead-b": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 8.0
+  },
+  "charred-stump": {
+   "w": 1.2,
+   "d": 1.2,
+   "h": 0.8
+  },
+  "basalt-columns-a": {
+   "w": 3.0,
+   "d": 3.0,
+   "h": 4.0
+  },
+  "ember-rock-a": {
+   "w": 2.5,
+   "d": 2.5,
+   "h": 2.0
+  },
+  "ember-rock-b": {
+   "w": 2.5,
+   "d": 2.5,
+   "h": 2.0
+  },
+  "slag-heap": {
+   "w": 5.0,
+   "d": 5.0,
+   "h": 2.5
+  },
+  "mine-cart": {
+   "w": 1.8,
+   "d": 1.0,
+   "h": 1.0
+  },
+  "ore-pile": {
+   "w": 2.0,
+   "d": 2.0,
+   "h": 1.0
+  },
+  "scorched-fence": {
+   "w": 3.4,
+   "d": 0.3,
+   "h": 1.6
+  },
+  "smelter-chimney": {
+   "w": 2.0,
+   "d": 2.0,
+   "h": 9.0
+  }
+ },
+ "maxTriangles": 10000,
+ "maxFileMB": 1.5,
+ "proportionTolerance": 1.1
+}
+</script>
+<!-- Offline copy of the missing-objects list (embers/environment-needs-prompts.md), written by tools/coverage-data.mjs. -->
+<script type="text/markdown" id="missingList">
+# Missing 3D objects and image-generation prompts (environment pass)
+
+Mostafa: generate a reference image per object with image AI, turn each into a .glb, and drop them in /mnt/project-files/uploads/ (or tell me where). What we already have is in assets/object-grids/ (grid-hex.png, grid-hal.png, grid-fur.png, grid-dun.png; cells show name and WxDxH in metres at game scale). The existing KayKit Hexagon buildings stay as the baseline; this list adds density: vegetation, clutter, village dressing, road and Act 2 dressing.
+
+## What the grids show we lack
+- Trees: only two conifers (5 m) and three dead trees (3 to 4 m). No broadleaf trees, no bushes, hedges, flowers, grass, reeds, stumps or logs.
+- Rocks: three small rocks (1 to 1.5 m). No boulders, cliffs or scree.
+- Village dressing: barrel, crates, sack, bucket, wheelbarrow, lumber. No haystack, cart, trough, garden bed, washing line, signpost, stalls, beehive, stable or barn.
+- Act 2 (ash and ember country): nothing.
+
+## Shared rules for every file (so it drops in without rescaling)
+- Format .glb, glTF 2.0, Y up, 1 unit = 1 metre, authored at the target size below (our loader then uses factor 1).
+- Pivot at the centre of the base, lowest point at y = 0. The front (door side, open side or the face the player sees first) faces +Z. No rotation baked into the mesh.
+- Style: KayKit low-poly: chunky simple shapes, flat colours with soft shading, no photoreal textures, one small colour-atlas texture or vertex colours, no transparency cards except foliage if needed, 300 to 4,000 triangles (hero trees to 6,000).
+- Palette: saturated but warm (grass green 5a8c44, bark 6b4a2b, warm stone 8a8578, thatch d1b25a, red roof a83a2c); Act 2 ash palette: charcoal 2b2b2b, ash grey 8d8780, ember orange ff5a0f, scorched brown 4a3722.
+- One object per file, named `<id>.glb` with the id from the table. Collision is added by us, so no collider meshes.
+- Variants: where the table says xN, make N different silhouettes (the game places them with random yaw and +-10% scale).
+
+## Prompt template (paste, then add the object line)
+"Single game asset, stylized low-poly medieval fantasy in the style of KayKit asset packs, chunky simple shapes, flat saturated colours with soft shading, clean silhouette, three-quarter view from front-left and slightly above, centered, whole object visible, plain light grey background, no ground shadow, no text, no characters. OBJECT:"
+
+## A. Vegetation (priority 1)
+| id | target size (W x D x H, m) | OBJECT line |
+| --- | --- | --- |
+| oak-a, oak-b, oak-c (x3) | 8 x 8 x 11 to 13 x 13 x 15 | large broadleaf oak, thick trunk with two big roots, round layered crown of 4 to 6 chunky leaf clusters, green |
+| birch-a, birch-b (x2) | 3 x 3 x 8 | slender birch, white trunk with dark bands, light airy green crown |
+| elm-or-ash-a (x1) | 6 x 6 x 10 | tall ash tree, open crown, yellow-green |
+| autumn-tree-a, autumn-tree-b | 6 x 6 x 9 | broadleaf tree with orange and rust crown |
+| bush-round-a, bush-round-b | 1.4 x 1.4 x 1.1 | round leafy bush, dense, two shades of green |
+| bush-flowering-a, -b | 1.4 x 1.4 x 1.2 | bush covered in small white and pink blossoms |
+| hedge-straight | 3.4 x 0.9 x 1.6 | trimmed hedge block, one module long, flat ends so modules join, leafy surface |
+| hedge-corner | 1.2 x 1.2 x 1.6 | corner post of the same hedge |
+| grass-clump-a, -b, -c | 0.6 x 0.6 x 0.5 | clump of tall grass blades, 12 to 20 chunky blades, two greens |
+| fern-a | 0.9 x 0.9 x 0.7 | fern with 8 fronds |
+| flower-patch-yellow, -white, -purple, -red | 0.7 x 0.7 x 0.4 | cluster of small flowers on short stems with leaves, one colour |
+| reeds-a, reeds-b | 0.8 x 0.8 x 1.8 | clump of tall reeds with brown cattail heads |
+| stump-a, stump-b | 0.9 x 0.9 x 0.6 | tree stump with cut top and rings, moss on one side |
+| log-fallen-a | 3.0 x 0.8 x 0.7 | fallen tree log with broken end and a few mushrooms |
+| mushrooms-a | 0.5 x 0.5 x 0.3 | small group of red and brown mushrooms |
+| boulder-large-a, -b | 3 x 3 x 2.4 | large mossy boulder, angular facets, grey with green moss on top |
+| rock-cluster-a | 2.5 x 2 x 1 | three to five stones of different sizes, partly buried |
+
+## B. Village and farm dressing (priority 1)
+| id | target size (m) | OBJECT line |
+| --- | --- | --- |
+| haystack-round | 2.4 x 2.4 x 2.6 | round haystack with a pointed top, tied with a rope band |
+| haybale-a | 1.2 x 0.8 x 0.7 | rectangular hay bale tied with twine |
+| haycart-a | 3.2 x 1.6 x 1.8 | wooden two-wheeled farm cart loaded with hay |
+| woodpile-chop | 2.0 x 1.2 x 1.3 | stacked firewood against a chopping block with an axe stuck in it |
+| trough-a | 2.0 x 0.7 x 0.7 | wooden water trough on legs |
+| garden-bed-a, -b | 2.0 x 1.4 x 0.5 | fenced vegetable bed with cabbages and rows of green, one with beans on poles |
+| beehive-skep | 0.7 x 0.7 x 0.8 | straw beehive skep on a wooden stand |
+| washing-line | 4.0 x 0.3 x 2.2 | two wooden posts with a rope line and hanging cloths |
+| signpost-a | 1.2 x 0.4 x 2.4 | wooden road signpost with two arrow boards, no text |
+| milestone-a | 0.6 x 0.4 x 1.1 | worn stone road marker |
+| picket-fence | 3.4 x 0.2 x 1.1 | low white-washed picket fence module |
+| wattle-fence | 3.4 x 0.3 x 1.2 | woven wattle fence module, hazel colour |
+| stonewall-low | 3.4 x 0.7 x 1.0 | dry-stone field wall module with moss |
+| market-stall-a, -b | 3.0 x 2.4 x 2.8 | wooden market stall with red-white awning, crates and baskets of fruit; second with green-cream awning and cloth bolts |
+| well-bucket-rope | 0.4 x 0.4 x 0.5 | wooden well bucket on a rope (optional) |
+| barn-a | 8 x 12 x 7 | big wooden barn with large double doors and a hayloft door, red-brown planks |
+| stable-a | 7 x 5 x 4 | open-fronted wooden horse stable with three stalls |
+| cottage-thatch-a, -b | 4.6 x 5 x 5 | small cottage with thatched roof, white plaster, dark timber, chimney (variety next to the red-roof houses; optional) |
+
+## C. Dead Road and Cinder Road dressing (priority 2)
+| id | target size (m) | OBJECT line |
+| --- | --- | --- |
+| wagon-wreck-a | 4.0 x 2.0 x 2.2 | broken wagon with a missing wheel, tilted, torn cover |
+| wagon-burnt | 4.0 x 2.0 x 2.0 | burnt wagon, charred black planks, ash |
+| roadside-shrine-a | 1.2 x 1.2 x 2.2 | small stone wayside shrine with a niche and a candle |
+| gibbet-post | 1.0 x 1.0 x 3.6 | wooden post with an iron hook and chain, no figures |
+| campfire-ring | 1.6 x 1.6 x 0.6 | stone fire ring with logs and ash (no flame; we add fire) |
+| crow-perch-post | 0.4 x 0.4 x 1.6 | weathered fence post (we add crows) |
+
+## D. Act 2 ash and ember country (priority 2)
+| id | target size (m) | OBJECT line |
+| --- | --- | --- |
+| ash-tree-dead-a, -b | 3 x 3 x 8 | charred leafless tree, black trunk, a few bare branches |
+| charred-stump | 1.2 x 1.2 x 0.8 | burnt stump with glowing orange cracks |
+| basalt-columns-a | 3 x 3 x 4 | cluster of hexagonal basalt columns, dark grey |
+| ember-rock-a, -b | 2.5 x 2.5 x 2 | dark volcanic rock with orange glowing veins |
+| slag-heap | 5 x 5 x 2.5 | heap of black slag and clinker with a few orange cracks |
+| mine-cart | 1.8 x 1.0 x 1.0 | rusty iron mine cart with ore |
+| ore-pile | 2 x 2 x 1 | heap of dark ore chunks with copper-coloured flecks |
+| scorched-fence | 3.4 x 0.3 x 1.6 | blackened wooden fence module, leaning |
+| smelter-chimney | 2 x 2 x 9 | tall stone and iron chimney stack with a flared top |
+
+## E. Optional animals (priority 3)
+Cow, sheep and pig already exist in the Quaternius farm-animals re-host (only the horse is imported); I will import them in G0b. Wanted from image-gen: hen, goat, crow (low-poly, rigged is a bonus, static is fine).
+
+## F. Added by the B2 designer (2026-10-23)
+Same rules as above; the stand-in column is what the game shows until your glb arrives.
+| id | target size (W x D x H, m) | OBJECT line | used for | stand-in until the glb exists | priority |
+| --- | --- | --- | --- | --- | --- |
+| poplar-a | 2.5 x 2.5 x 14 | tall slim poplar, narrow upright oval crown of many small leaf clusters, pale trunk, windbreak tree | road windbreak, z 240 to 295 (3 rows) and skyline marker | birch-a scaled 1.75 in height, 0.8 in width, tint 8fb04e | 1 |
+| cairn-a | 1.2 x 1.2 x 1.3 | small stacked stone cairn, five flat grey stones, one small moss patch | flanking the north waystone plaza | rock-cluster-a scaled 0.5 | 2 |
+| waystone-flagstones | 9 x 9 x 0.1 | round flagstone paving circle, worn warm-grey slabs with grass between, a flat ground piece (a decal or a flat mesh) | plaza under waystone.north (r 4.5 m) | flat disc, tint 969078 | 2 |
+| ash-patch-decal | 3 x 3 x 0.02 | flat scorched ground patch, ash-grey with a few black grass stubs, soft irregular edge, alpha edge | east edge scatter (about 60 would carry the greying; not in the rows yet) | none (ground splat covers it) | 2 |
+| field-gate-a | 3.4 x 0.2 x 1.2 | wooden five-bar field gate in a hazel frame, shut, no sign | filling selected hedge gaps (optional, not in the rows yet) | wattle-fence | 3 |
+
+B3 additions (2026-10-23; columns as in the B3 sheet, stand-ins are scripted until your glb arrives):
+| bush-holly-a | 1.5 x 1.5 x 1.3 | dense holly bush, glossy dark green spiky leaves, a scatter of red berries, round chunky shape | variant of bush-round-a: scale 1.05, tint mul 0x7fa070, hue -20, sat 0.9 (add to VARIANTS in resolve.ts) |
+| willow-a | 7 x 7 x 8 | weeping willow, thick gnarled trunk, wide drooping curtain of long pale-green leaf strands almost to the ground, rounded silhouette | variant of elm-or-ash-a: scale 0.85, tint mul 0xc8dcaa (a poor stand-in because the drooping silhouette is the point; flag it as a visual gap) |
+
+## Priority and count
+Priority 1 (A and B) is about 60 files and is what lifts the density in Brightwater and Harrowmark. Priority 2 (C, D) is needed for the Dead Road and Cinderreach and can wait until those tiles. A minimum starter set that already changes the look: oak-a/b/c, birch-a, bush-round-a/b, bush-flowering-a, hedge-straight, grass-clump-a/b, flower-patch x3, stump-a, log-fallen-a, boulder-large-a, rock-cluster-a, haystack-round, haybale-a, haycart-a, woodpile-chop, trough-a, garden-bed-a, signpost-a, picket-fence, stonewall-low, market-stall-a (about 30 files).
+
+## When files arrive
+Put them anywhere under /mnt/project-files/uploads/ with the id as the file name. A check script (tools/env-pass in G0a) renders each in a grid like assets/object-grids/ with measured size against the target, flags pivot, facing and scale problems, and I re-render them for your review before they go into the game.
+Until files arrive I script low-poly stand-ins with the same ids (ruling 2 of the review), so placements never change when your glb replaces a stand-in.
+
+Fit rule (default of tools/env-pass/ingest.mjs from batch 2): each model is scaled uniformly so its HEIGHT equals the target height, then width and depth are stretched by at most 15% towards the target footprint. Anything needing more stays at the cap and is printed as a CAP line (and stored under `capped` in public/assets/env/manifest.json) with measured size, target and the factor still needed, so the model can be re-made closer to the table's proportions. Output is about 5k triangles, 512 px textures.
+
+## Known gap
+The farm-animals grid (grid-animals.png) rendered blank: the horse is a skinned model the grid script does not handle. Not fixed now; the horse is already used in the game.
+
+## Batch 2 status
+Arrived and ingested (19, all at about 4.5k to 5.4k triangles, under 0.35 MB each): barn-a, beehive-skep, cottage-thatch-a (covers B "cottage-thatch-a, -b" only for -a), garden-bed-a (not -b), haybale-a, haycart-a, haystack-round, market-stall-a, market-stall-b, milestone-a, picket-fence, signpost-a, stable-a, stonewall-low, trough-a, washing-line, wattle-fence, well-bucket-rope, woodpile-chop. That is all of section B except cottage-thatch-b and garden-bed-b (both can be variants of -a). Still missing: all of A vegetation not shipped in batch 1, C, D, E, and F (poplar-a, cairn-a, waystone-flagstones, ash-patch-decal, field-gate-a, bush-holly-a, willow-a). Render: assets/renders/env-pass/batch2/grid-batch2.png. Notes: fences and stone wall come out taller than target (picket 1.8 m vs 1.1, wattle 2.0 vs 1.2, stonewall 1.95 vs 1.0), barn is 7.2 x 8.8 x 7 (target 8 x 12 x 7), washing-line and signpost are deeper than target.
+
+Batch 2 proportion fix (branch fix-batch2-proportions): the shipped light copies were width-short (not too tall) for the long pieces: stonewall-low 2.0 x 0.69 x 1.0, wattle-fence 2.31 x 0.30 x 1.2, picket-fence 2.40 x 0.28 x 1.1, garden-bed-a 0.87 x 1.35 x 0.5, signpost-a 1.2 x 1.16 x 2.4, washing-line 3.67 x 0.62 x 2.2, barn-a 7.99 x 10.14 x 7 (the numbers above in the Notes line were rough). Ingest now has a `proportion` table in src/env/targets.json: listed ids are fitted exactly (height first, then width and depth, no 15% cap), and `tile: 2` repeats the model twice along x first (stonewall, wattle, picket, garden bed) so the stretch stays under 30%. New sizes (w x d x h): stonewall-low 3.39 x 0.69 x 0.99, wattle-fence 3.38 x 0.30 x 1.2, picket-fence 3.40 x 0.20 x 1.1, garden-bed-a 1.99 x 1.39 x 0.50, signpost-a 1.2 x 0.40 x 2.4, washing-line 4.0 x 0.30 x 2.2, barn-a 7.99 x 11.98 x 6.99. Mostafa's originals are untouched (staging-assets/batch 2 in git history, commit fbb962d). Render: assets/renders/env-pass/batch2/grid-batch2-fixed.png (with a 1.8 m Knight silhouette). Signpost depth is squashed to 0.29x and the washing-line posts to 0.48x: if they look too thin in game, re-make those two with less depth.
+
+## G. Act 2 stand-ins requested by the polish-pass thread (2026-10-24, not swapped in the polish pass)
+Detail with file:line in plans/polish-pass/art-sound-inventory.md (section 1a). All priority 2, needed for Cinderreach and Oldsmoke; sizes to be fixed with the object's designer before prompting.
+| id (provisional) | what | replaces |
+|---|---|---|
+| golem-rock-chunks | 3 to 4 rough rock chunks (limb and torso pieces) for the Cinder Golem rig | src/enemies/golem/rig.ts icosahedra |
+| brazier-cart | iron brazier on a hand cart, embers glowing | Cinderreach brazier cart (cinderreachArt.ts) |
+| lift-cage, headframe | Oldsmoke surface lift cage with iron posts and rope, mine headframe with wheel | src/oldsmoke/oldsmokeArt.ts:75-143 |
+| poi-props set | bones, eggs, bedroll, net, fire-ring, cave-mouth, cache, lore-stone | src/world/poi/proc.ts:20-104 |
+| cinderreach-shrines | Weeping Bellows, Hushed Anvil, forge and waystone shrines | src/shrine/*.visuals.ts |
+| cinderreach-structures | cage, cairn, rune stone, trial ring, ledger desk, boarded well, marker | src/cinderreach/cinderreachArt.ts:87-212 |
+</script>
+<!-- Which generator page can make which game id: the GAME_IDS keys of each generator page (and their fallback boxes),
+     written by tools/coverage-data.mjs. Run "npm run coverage-data" after changing a generator's GAME_IDS. -->
+<script type="application/json" id="generatorIds">
+{
+ "vegetation": {
+  "title": "Vegetation",
+  "page": "vegetation-generator-offline.html",
+  "ids": {
+   "oak-a": null,
+   "oak-b": null,
+   "oak-c": null,
+   "birch-a": null,
+   "birch-b": null,
+   "elm-or-ash-a": null,
+   "autumn-tree-a": null,
+   "autumn-tree-b": null,
+   "poplar-a": null,
+   "willow-a": {
+    "w": 7,
+    "d": 7,
+    "h": 8
+   },
+   "bush-round-a": null,
+   "bush-round-b": null,
+   "bush-flowering-a": null,
+   "bush-flowering-b": null,
+   "bush-holly-a": {
+    "w": 1.5,
+    "d": 1.5,
+    "h": 1.3
+   },
+   "hedge-straight": null,
+   "hedge-corner": null,
+   "grass-clump-a": null,
+   "grass-clump-b": null,
+   "grass-clump-c": null,
+   "fern-a": null,
+   "flower-patch-yellow": null,
+   "flower-patch-white": null,
+   "flower-patch-purple": null,
+   "flower-patch-red": null,
+   "reeds-a": null,
+   "reeds-b": null
+  }
+ },
+ "props": {
+  "title": "Props",
+  "page": "props-generator-offline.html",
+  "ids": {
+   "gibbet-post": null,
+   "campfire-ring": null,
+   "crow-perch-post": null,
+   "ash-tree-dead-a": null,
+   "ash-tree-dead-b": null,
+   "charred-stump": null,
+   "basalt-columns-a": null,
+   "ember-rock-a": null,
+   "ember-rock-b": null,
+   "slag-heap": null,
+   "ore-pile": null,
+   "scorched-fence": null,
+   "smelter-chimney": null,
+   "cairn-a": null,
+   "waystone-flagstones": {
+    "w": 9,
+    "d": 9,
+    "h": 0.1
+   },
+   "ash-patch-decal": {
+    "w": 3,
+    "d": 3,
+    "h": 0.02
+   },
+   "field-gate-a": {
+    "w": 3.4,
+    "d": 0.2,
+    "h": 1.2
+   },
+   "stump-a": null,
+   "stump-b": null,
+   "log-fallen-a": null,
+   "mushrooms-a": null,
+   "boulder-large-a": null,
+   "boulder-large-b": null,
+   "rock-cluster-a": null,
+   "poi-bones": {
+    "w": 1.2,
+    "d": 1,
+    "h": 0.35
+   },
+   "poi-bedroll": {
+    "w": 0.8,
+    "d": 2,
+    "h": 0.3
+   },
+   "poi-fire-ring": {
+    "w": 1.2,
+    "d": 1.2,
+    "h": 0.5
+   },
+   "poi-cache": {
+    "w": 1.2,
+    "d": 0.9,
+    "h": 0.8
+   },
+   "poi-lore-stone": {
+    "w": 0.8,
+    "d": 0.5,
+    "h": 1.8
+   },
+   "cinder-cage": {
+    "w": 1.2,
+    "d": 1.2,
+    "h": 2.2
+   },
+   "cinder-cairn": {
+    "w": 1.2,
+    "d": 1.2,
+    "h": 2
+   },
+   "cinder-rune-stone": {
+    "w": 1,
+    "d": 0.6,
+    "h": 2.4
+   },
+   "cinder-trial-ring": {
+    "w": 8,
+    "d": 8,
+    "h": 2
+   },
+   "cinder-marker": {
+    "w": 0.5,
+    "d": 0.5,
+    "h": 1.6
+   }
+  }
+ },
+ "structures": {
+  "title": "Structures",
+  "page": "structures-generator-offline.html",
+  "ids": {
+   "cottage-thatch-b": null,
+   "wagon-wreck-a": null,
+   "wagon-burnt": null,
+   "roadside-shrine-a": null,
+   "mine-cart": null,
+   "headframe": {
+    "w": 5,
+    "d": 5,
+    "h": 9.5
+   },
+   "lift-cage": {
+    "w": 2.8,
+    "d": 2,
+    "h": 4.6
+   },
+   "brazier-cart": {
+    "w": 2.4,
+    "d": 1.2,
+    "h": 1.7
+   },
+   "shrine-weeping-bellows": {
+    "w": 2.4,
+    "d": 2,
+    "h": 2.4
+   },
+   "shrine-hushed-anvil": {
+    "w": 2.2,
+    "d": 2.2,
+    "h": 1.6
+   },
+   "shrine-forge": {
+    "w": 2.4,
+    "d": 1.4,
+    "h": 2.8
+   },
+   "shrine-waystone": {
+    "w": 1.8,
+    "d": 1.8,
+    "h": 3.4
+   },
+   "cinder-boarded-well": {
+    "w": 1.8,
+    "d": 1.8,
+    "h": 1.1
+   },
+   "cinder-forge": {
+    "w": 4.6,
+    "d": 3.6,
+    "h": 4.4
+   },
+   "cinder-smelter": {
+    "w": 3,
+    "d": 3,
+    "h": 4.5
+   },
+   "oldsmoke-adit": {
+    "w": 4.5,
+    "d": 4.5,
+    "h": 3.6
+   }
+  }
+ },
+ "rocks": {
+  "title": "Rocks & cliffs",
+  "page": "rocks-generator-offline.html",
+  "ids": {
+   "boulder-large-a": null,
+   "boulder-large-b": null,
+   "rock-cluster-a": null,
+   "ember-rock-a": null,
+   "ember-rock-b": null,
+   "basalt-columns-a": null,
+   "cliff-face-a": {
+    "w": 6,
+    "d": 3,
+    "h": 6
+   },
+   "cliff-face-b": {
+    "w": 6,
+    "d": 3,
+    "h": 6
+   },
+   "cliff-corner-a": {
+    "w": 3,
+    "d": 3,
+    "h": 6
+   },
+   "cliff-face-tall-a": {
+    "w": 6,
+    "d": 3.5,
+    "h": 10
+   },
+   "cliff-ledge-a": {
+    "w": 6,
+    "d": 2.5,
+    "h": 1.6
+   },
+   "cliff-overhang-a": {
+    "w": 6,
+    "d": 4,
+    "h": 6
+   },
+   "scree-slope-a": {
+    "w": 6,
+    "d": 5,
+    "h": 2.5
+   },
+   "cave-mouth-a": {
+    "w": 7,
+    "d": 5,
+    "h": 5
+   },
+   "rock-arch-a": {
+    "w": 6,
+    "d": 2,
+    "h": 5
+   },
+   "crag-spire-a": {
+    "w": 2.5,
+    "d": 2.5,
+    "h": 7
+   },
+   "ash-cliff-face-a": {
+    "w": 6,
+    "d": 3,
+    "h": 6
+   },
+   "ash-cliff-corner-a": {
+    "w": 3,
+    "d": 3,
+    "h": 6
+   },
+   "ash-scree-a": {
+    "w": 6,
+    "d": 5,
+    "h": 2.5
+   },
+   "ember-crag-a": {
+    "w": 4,
+    "d": 4,
+    "h": 4
+   },
+   "basalt-field-a": {
+    "w": 8,
+    "d": 8,
+    "h": 1.2
+   },
+   "obsidian-shards-a": {
+    "w": 2,
+    "d": 2,
+    "h": 1.8
+   },
+   "golem-rock-chunks": {
+    "w": 2.4,
+    "d": 1.3,
+    "h": 2.8
+   },
+   "poi-cave-mouth": {
+    "w": 4,
+    "d": 3,
+    "h": 3
+   }
+  }
+ },
+ "creatures": {
+  "title": "Creatures",
+  "page": "creature-generator-offline.html",
+  "ids": {
+   "hen-a": {
+    "w": 0.24,
+    "d": 0.4,
+    "h": 0.42
+   },
+   "goat-a": {
+    "w": 0.34,
+    "d": 1.2,
+    "h": 1
+   },
+   "crow-a": {
+    "w": 0.13,
+    "d": 0.42,
+    "h": 0.27
+   },
+   "wolf-a": {
+    "w": 0.44,
+    "d": 1.75,
+    "h": 0.95
+   },
+   "boar-a": {
+    "w": 0.56,
+    "d": 1.32,
+    "h": 0.85
+   },
+   "fox-a": {
+    "w": 0.19,
+    "d": 1.1,
+    "h": 0.5
+   },
+   "deer-a": {
+    "w": 0.4,
+    "d": 1.68,
+    "h": 1.75
+   },
+   "rat-a": {
+    "w": 0.1,
+    "d": 0.45,
+    "h": 0.12
+   },
+   "bat-a": {
+    "w": 0.7,
+    "d": 0.24,
+    "h": 0.15
+   },
+   "spider-giant-a": {
+    "w": 1.8,
+    "d": 1.45,
+    "h": 0.6
+   },
+   "ember-hound": {
+    "w": 0.38,
+    "d": 2.1,
+    "h": 1.05
+   },
+   "kindling-fox": {
+    "w": 0.2,
+    "d": 1.22,
+    "h": 0.55
+   },
+   "slag-crawler": {
+    "w": 1.95,
+    "d": 1.7,
+    "h": 0.7
+   },
+   "wyrmling": {
+    "w": 1.55,
+    "d": 3.5,
+    "h": 1.1
+   }
+  }
+ },
+ "textures": {
+  "title": "Textures & decals",
+  "page": "texture-generator-offline.html",
+  "ids": {
+   "ash-patch-decal": {
+    "w": 3,
+    "d": 3,
+    "h": 0.02
+   },
+   "waystone-flagstones": {
+    "w": 9,
+    "d": 9,
+    "h": 0.1
+   }
+  }
+ }
+}
+</script>
+</head>
+<body>
+<div class="wrap">
+  <h1>Embers coverage dashboard</h1>
+  <div class="hint">Every object id the game asks for (targets.json and the missing-objects list), whether the game already has it,
+    whether your folder has a file for it that passes the game's check, and which generator page can make it.
+    Nothing is uploaded: files are read in this browser only.</div>
+  <div id="sources"></div>
+
+  <div id="drop">Drop your uploads folder (or some <b>.glb</b> files) here, or
+    <button id="folderBtn" class="primary">Choose folder…</button>
+    <button id="filesBtn">Choose files…</button>
+    <input id="folderInput" type="file" webkitdirectory multiple hidden>
+    <input id="filesInput" type="file" multiple accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.json,.md" hidden>
+    <div class="hint" style="margin-top:6px">Files are matched by name: <span class="id">&lt;id&gt;.glb</span> (also <span class="id">Oak_A.glb</span> or <span class="id">oak-a_optimized.glb</span>).
+      A dropped <span class="id">targets.json</span>, game <span class="id">manifest.json</span> or missing-list <span class="id">.md</span> replaces the built-in copy.</div>
+  </div>
+
+  <div id="tiles"></div>
+  <div id="meter" title="Shipped in the game · passing file in your folder · failing file · still needed"></div>
+
+  <div class="bar">
+    <input type="search" id="search" placeholder="Search id or description">
+    <select id="section"><option value="">All sections</option></select>
+    <select id="gen"><option value="">Any generator</option><option value="-">No generator</option></select>
+    <label><input type="checkbox" id="onlyTargets"> Only ids in targets.json</label>
+    <span style="flex:1"></span>
+    <button id="csvBtn">Download report.csv</button>
+    <button id="zipBtn" disabled>Download failing files (.zip)</button>
+    <button id="loadBtn">Load file…</button>
+    <input id="loadInput" type="file" accept=".json,.md" hidden>
+  </div>
+
+  <div class="tbl"><table id="table">
+    <thead><tr>
+      <th data-sort="id">Id</th><th data-sort="section">Section</th><th data-sort="target">Target W × D × H</th>
+      <th data-sort="game">Game</th><th data-sort="status">Your file</th><th data-sort="size">Measured W × D × H</th>
+      <th data-sort="tris" class="num">Triangles</th><th data-sort="mb" class="num">MB</th><th data-sort="gens">Generators</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table></div>
+  <div id="countLine" class="hint"></div>
+
+  <div id="unmatchedBox" hidden>
+    <h2>Files that match no id</h2>
+    <div class="hint">Rename these to <span class="id">&lt;id&gt;.glb</span> with an id from the table, or ask the game to add the id to targets.json.</div>
+    <div class="tbl"><table id="unmatched"><thead><tr><th>File</th><th>Closest id</th><th class="num">Triangles</th><th class="num">MB</th></tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <div id="log"></div>
+</div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const TARGETS_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/src/env/targets.json';
+const MANIFEST_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/public/assets/env/manifest.json';
+const DEFAULTS = { tolerance: 0.15, proportionTolerance: 1.1, maxTriangles: 10000, maxFileMB: 1.5, proportion: {}, objects: {} };
+const FACE_BUDGET = 4500; // ingest simplifies to about this many triangles
+
+function log(msg, level = '') {
+  const d = document.createElement('div'); d.className = level; d.textContent = msg;
+  $('log').appendChild(d); $('log').scrollTop = 1e9;
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtM = (m) => (Math.abs(m) >= 100 ? m.toFixed(0) : Math.abs(m) >= 10 ? m.toFixed(1) : m.toFixed(2));
+const fmtBox = (b) => b ? `${+(+b.w).toFixed(2)} × ${+(+b.d).toFixed(2)} × ${+(+b.h).toFixed(2)}` : '';
+const fmtInt = (n) => Math.round(n).toLocaleString('en-US');
+
+// ---------- data sources ----------
+const S = {
+  targets: null, targetsFrom: 'built-in copy',
+  manifest: null, manifestFrom: 'not loaded',
+  list: null, listFrom: 'built-in copy',
+  gens: JSON.parse($('generatorIds').textContent),
+  files: new Map(), // id -> [{ name, path, bytes, file, m (measure) | error }]
+  unmatched: [], scanned: false, folder: '',
+};
+function setTargets(j, from) {
+  if (!j || typeof j.objects !== 'object') throw new Error('not a targets.json (no "objects")');
+  S.targets = { ...DEFAULTS, ...j, proportion: j.proportion || {} }; S.targetsFrom = from;
+}
+function setManifest(j, from) {
+  if (!j || typeof j.objects !== 'object') throw new Error('not a manifest.json (no "objects")');
+  S.manifest = j; S.manifestFrom = from;
+}
+setTargets(JSON.parse($('embersTargets').textContent), 'built-in copy');
+
+// ---------- missing-objects list (markdown) ----------
+// Section E names animals in prose, and three section G rows name a set rather than ids; the generators' ids that
+// belong to those sets are matched by prefix.
+const SECTION_E = ['hen-a', 'goat-a', 'crow-a'];
+const G_SETS = { 'poi-props set': /^poi-/, 'cinderreach-shrines': /^shrine-/, 'cinderreach-structures': /^cinder-/ };
+function parseList(md) {
+  const sections = {}, ids = new Map(), sets = [];
+  let sec = null;
+  for (const line of md.split(/\r?\n/)) {
+    const h = line.match(/^##\s+([A-Z])\.\s+(.*)$/);
+    if (h) { sec = h[1]; sections[sec] = h[2].replace(/\s*\((priority[^)]*|[^)]*\d{4}-\d\d-\d\d[^)]*)\)\s*$/i, '').trim(); continue; }
+    if (/^##\s/.test(line)) { sec = null; continue; }
+    if (!sec || !line.startsWith('|')) continue;
+    const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+    if (cells.length < 2 || /^id\b/i.test(cells[0]) || /^-+$/.test(cells[0].replace(/\s/g, ''))) continue;
+    const m = cells[1].match(/^([\d.]+)\s*x\s*([\d.]+)\s*x\s*([\d.]+)$/);
+    const box = m ? { w: +m[1], d: +m[2], h: +m[3] } : null;
+    const what = cells.length >= 3 && m ? cells[2] : cells[1];
+    const raw = cells[0].replace(/\((x\d+|provisional)\)/gi, '').split(',').map((t) => t.trim()).filter(Boolean);
+    let stem = '';
+    for (const t of raw) {
+      if (G_SETS[t]) { sets.push({ section: sec, name: t, re: G_SETS[t], what }); continue; }
+      let id = t;
+      if (t.startsWith('-')) id = stem + t; else stem = t.replace(/-[^-]+$/, '');
+      if (!/^[a-z0-9-]+$/.test(id)) continue;
+      if (!ids.has(id)) ids.set(id, { section: sec, box, what });
+    }
+  }
+  if (sections.E) for (const id of SECTION_E) if (!ids.has(id)) ids.set(id, { section: 'E', box: null, what: 'optional animal (' + id.replace(/-a$/, '') + ')' });
+  if (!ids.size) throw new Error('no object ids found (expected "## A. …" sections with "| id | size | … |" tables)');
+  return { sections, ids, sets };
+}
+S.list = parseList($('missingList').textContent);
+
+// ---------- the game's check (mirrors OpenWorld tools/env-pass/check-glb.mjs) ----------
+// Reads only the glTF JSON: world-space bounds from each POSITION accessor's min/max through the node transforms,
+// triangles from the index (or vertex) counts. So a 50 MB scan needs no WebGL and takes a moment.
+function gltfJson(buf, name) {
+  const u8 = new Uint8Array(buf);
+  if (/\.gltf$/i.test(name)) return JSON.parse(new TextDecoder().decode(u8));
+  const dv = new DataView(buf);
+  if (buf.byteLength < 20 || dv.getUint32(0, true) !== 0x46546c67) throw new Error('not a glb');
+  const len = dv.getUint32(12, true);
+  return JSON.parse(new TextDecoder().decode(u8.subarray(20, 20 + len)));
+}
+function nodeMatrix(n) {
+  if (n.matrix) return n.matrix.slice();
+  const [x, y, z, w] = n.rotation ?? [0, 0, 0, 1], [sx, sy, sz] = n.scale ?? [1, 1, 1], [tx, ty, tz] = n.translation ?? [0, 0, 0];
+  return [
+    (1 - 2 * (y * y + z * z)) * sx, 2 * (x * y + z * w) * sx, 2 * (x * z - y * w) * sx, 0,
+    2 * (x * y - z * w) * sy, (1 - 2 * (x * x + z * z)) * sy, 2 * (y * z + x * w) * sy, 0,
+    2 * (x * z + y * w) * sz, 2 * (y * z - x * w) * sz, (1 - 2 * (x * x + y * y)) * sz, 0,
+    tx, ty, tz, 1,
+  ];
+}
+function mul(a, b) {
+  const o = new Array(16).fill(0);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) o[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k];
+  return o;
+}
+function measure(g, bytes) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  const scene = g.scenes?.[g.scene ?? 0];
+  if (!scene) throw new Error('the file has no scene');
+  const seen = new Set();
+  const visit = (i, parent) => {
+    const n = g.nodes[i]; if (!n || seen.has(i)) return; seen.add(i);
+    const m = mul(parent, nodeMatrix(n));
+    if (n.mesh !== undefined) for (const p of g.meshes[n.mesh].primitives) {
+      const a = g.accessors[p.attributes.POSITION];
+      if (!a?.min || !a?.max) throw new Error('a POSITION accessor has no min/max');
+      for (let k = 0; k < 8; k++) {
+        const v = [k & 1 ? a.max[0] : a.min[0], k & 2 ? a.max[1] : a.min[1], k & 4 ? a.max[2] : a.min[2]];
+        for (let ax = 0; ax < 3; ax++) {
+          const t = m[ax] * v[0] + m[4 + ax] * v[1] + m[8 + ax] * v[2] + m[12 + ax];
+          lo[ax] = Math.min(lo[ax], t); hi[ax] = Math.max(hi[ax], t);
+        }
+      }
+    }
+    for (const c of n.children ?? []) visit(c, m);
+  };
+  for (const r of scene.nodes ?? []) visit(r, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+  if (!isFinite(lo[0])) throw new Error('the scene has no meshes');
+  // Like check-glb.mjs, every mesh counts once. Unlike it, non-indexed triangle lists count too (check-glb counts 0).
+  let tris = 0;
+  for (const mesh of g.meshes ?? []) for (const p of mesh.primitives) {
+    if (p.mode !== undefined && p.mode !== 4) continue;
+    tris += (p.indices !== undefined ? g.accessors[p.indices].count : g.accessors[p.attributes.POSITION]?.count || 0) / 3;
+  }
+  return {
+    lo, hi, size: { w: hi[0] - lo[0], d: hi[2] - lo[2], h: hi[1] - lo[1] }, tris: Math.round(tris), mb: bytes / 1e6,
+    skinned: !!(g.skins?.length || g.animations?.length),
+  };
+}
+
+// Verdict lines for a measured file. pass/fail follow check-glb.mjs as the viewer's game mode does (ids in the
+// proportion table have their width and depth fitted exactly by ingest, so those are info lines); warn lines say what
+// ingest would still change. `box` is a fallback size for ids not in targets.json (checked as an estimate).
+function verdict(id, m) {
+  const C = S.targets, lines = [], add = (level, text) => lines.push({ level, text });
+  const T = C.objects[id], est = !T && fallbackBox(id), want = T || est;
+  const pct = (r) => (r >= 0 ? '+' : '') + Math.round(r * 100) + '%';
+  if (!T) add('fail', `no target in targets.json` + (est ? ` (checked below against the estimated ${fmtBox(est)} m)` : ''));
+  const lvl = (bad) => (bad ? (T ? 'fail' : 'warn') : 'pass');
+  if (want) {
+    const fitExact = !!T && Object.hasOwn(C.proportion || {}, id);
+    const wide = Math.max(want.w, want.d) > 1.8 * want.h, { w: W, d: D, h: H } = m.size;
+    // For proportion ids the viewer still checks the longest side; here it is info too, since ingest fits it exactly
+    // (a tile: 2 fence module is meant to be half the target length).
+    if (wide && fitExact) add('info', `longest side ${fmtM(Math.max(W, D))} m: ingest fits ${id} exactly to ${Math.max(want.w, want.d)} m`);
+    else if (wide) {
+      const got = Math.max(W, D), tgt = Math.max(want.w, want.d), dev = (got - tgt) / tgt;
+      add(lvl(Math.abs(dev) > C.tolerance), `longest side ${fmtM(got)} m, want ${tgt} m (${pct(dev)}, limit ±${Math.round(C.tolerance * 100)}%)`);
+    }
+    const k = H > 0 ? want.h / H : 1;
+    for (const [key, name, got] of [['h', 'height', H], ['w', 'width', W], ['d', 'depth', D]]) {
+      const tgt = want[key]; if (!(tgt > 0)) continue;
+      if (fitExact && key !== 'h') { add('info', `${name} ${fmtM(got)} m: ingest fits ${id} exactly to ${tgt} m${C.proportion[id]?.tile && key === 'w' ? ` (repeated ${C.proportion[id].tile}× along X first)` : ''}`); continue; }
+      const driver = !wide && key === 'h', dev = (got - tgt) / tgt, tol = driver ? C.tolerance : C.proportionTolerance;
+      add(lvl(Math.abs(dev) > tol), `${name} ${fmtM(got)} m, want ${tgt} m (${pct(dev)}, limit ±${Math.round(tol * 100)}%)`);
+      if (!driver && key !== 'h' && !fitExact && !wide && H > 0) {
+        const after = got * k, r = (after - tgt) / tgt;
+        if (Math.abs(r) > 0.15) add('warn', `${name} at the target height would be ${fmtM(after)} m (${pct(r)}): ingest stretches 15% at most (CAP line)`);
+      }
+    }
+  }
+  add(Math.abs(m.lo[1]) > 0.05 ? 'fail' : 'pass', `base at y ${fmtM(m.lo[1])} m` + (Math.abs(m.lo[1]) > 0.05 ? ', want 0' : ''));
+  const cx = (m.lo[0] + m.hi[0]) / 2, cz = (m.lo[2] + m.hi[2]) / 2, off = Math.hypot(cx, cz) > 0.1 * Math.max(m.size.w, m.size.d);
+  add(off ? 'fail' : 'pass', `footprint centre at (${fmtM(cx)}, ${fmtM(cz)})` + (off ? ', want about 0, 0' : ''));
+  add(m.tris > C.maxTriangles ? 'fail' : m.tris > FACE_BUDGET ? 'warn' : 'pass',
+    `${fmtInt(m.tris)} triangles (cap ${fmtInt(C.maxTriangles)}${m.tris > FACE_BUDGET && m.tris <= C.maxTriangles ? `; ingest simplifies to about ${fmtInt(FACE_BUDGET)}` : ''})`);
+  add(m.mb > C.maxFileMB ? 'fail' : 'pass', `${m.mb.toFixed(2)} MB (cap ${C.maxFileMB} MB)`);
+  if (m.skinned) add('warn', 'skinned or animated: scenery must be static');
+  const status = !T ? 'notarget' : lines.some((l) => l.level === 'fail') ? 'fail' : 'pass';
+  return { status, lines };
+}
+
+// ---------- the id table ----------
+const GEN_ORDER = Object.keys(S.gens);
+function generatorsFor(id) { return GEN_ORDER.filter((g) => Object.hasOwn(S.gens[g].ids, id)); }
+function fallbackBox(id) {
+  const l = S.list.ids.get(id)?.box; if (l) return l;
+  for (const g of generatorsFor(id)) if (S.gens[g].ids[id]) return S.gens[g].ids[id];
+  return null;
+}
+const SECTION_ORDER = (s) => (s === 'P' ? 'Z' : s || 'Y');
+function sectionOf(id) {
+  const l = S.list.ids.get(id); if (l) return l.section;
+  const set = S.list.sets.find((x) => x.re.test(id)); if (set) return set.section;
+  return S.targets.objects[id] ? '' : 'P';
+}
+function sectionName(s) {
+  if (s === 'P') return 'Generator stand-ins (not on the list)';
+  if (!s) return 'targets.json only';
+  return `${s}. ${S.list.sections[s] || ''}`.trim();
+}
+// Every id the game asks for: targets.json, the missing-objects list, and the ids generators make for the list's sets
+// and stand-ins.
+function allIds() {
+  const ids = new Set([...Object.keys(S.targets.objects), ...S.list.ids.keys()]);
+  for (const g of GEN_ORDER) for (const id of Object.keys(S.gens[g].ids)) ids.add(id);
+  return [...ids];
+}
+function rowOf(id) {
+  const files = S.files.get(id) || [];
+  const checked = files.map((f) => ({ f, v: f.m ? verdict(id, f.m) : { status: 'fail', lines: [{ level: 'fail', text: f.error }] } }));
+  const rank = { pass: 0, notarget: 1, fail: 2 };
+  checked.sort((a, b) => rank[a.v.status] - rank[b.v.status]); // the best file decides
+  const best = checked[0];
+  const game = S.manifest?.objects?.[id] || null;
+  const status = best ? best.v.status : 'missing';
+  return {
+    id, section: sectionOf(id), target: S.targets.objects[id] || null, est: fallbackBox(id), inTargets: !!S.targets.objects[id],
+    game, status, best, checked, gens: generatorsFor(id), what: S.list.ids.get(id)?.what || S.list.sets.find((x) => x.re.test(id))?.what || '',
+    needed: !game && status !== 'pass',
+  };
+}
+function rows() { return allIds().map(rowOf); }
+
+// ---------- reading files ----------
+const MODEL_RE = /\.(glb|gltf)$/i;
+const slug = (n) => n.replace(/\.(glb|gltf)$/i, '').replace(/_optimized$/i, '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+function matchId(name) {
+  const base = name.replace(/\.(glb|gltf)$/i, '').replace(/_optimized$/i, ''), known = new Set(allIds());
+  return [base, slug(base)].find((k) => known.has(k)) || null;
+}
+const asEntries = (files) => [...files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name }));
+async function droppedFiles(dt) {
+  const entries = [...(dt.items || [])].map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
+  if (!entries.some((e) => e.isDirectory)) return asEntries(dt.files);
+  const out = [];
+  const walk = async (entry, dir) => {
+    if (entry.isFile) out.push({ file: await new Promise((res, rej) => entry.file(res, rej)), path: dir + entry.name });
+    else if (entry.isDirectory) {
+      const reader = entry.createReader(); let batch;
+      do {
+        batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+        for (const e of batch) await walk(e, dir + entry.name + '/');
+      } while (batch.length);
+    }
+  };
+  for (const e of entries) await walk(e, '');
+  return out;
+}
+// Loads a dropped targets.json, manifest.json or missing-list .md. Returns true if it was one of them.
+async function loadDataFile(file) {
+  const text = await file.text();
+  try {
+    if (/\.md$/i.test(file.name)) { S.list = parseList(text); S.listFrom = file.name; log(`Missing-objects list from ${file.name}: ${S.list.ids.size} ids`, 'ok'); return true; }
+    const j = JSON.parse(text);
+    if (j.objects && Object.values(j.objects).some((o) => o && 'trisAfter' in o)) { setManifest(j, file.name); log(`Game manifest from ${file.name}: ${Object.keys(j.objects).length} shipped ids`, 'ok'); return true; }
+    setTargets(j, file.name); log(`Targets from ${file.name}: ${Object.keys(j.objects).length} ids`, 'ok'); return true;
+  } catch (e) { log(`${file.name}: ${e.message}`, 'err'); return false; }
+}
+// `list`: [{ file, path }]. Data files are loaded first, then every .glb/.gltf is measured. A .gltf adds the size
+// of the .bin and image files it names from its own folder.
+async function scan(list, folderName = '') {
+  for (const x of list) if (/\.(json|md)$/i.test(x.file.name) && !MODEL_RE.test(x.file.name)) {
+    if (/targets|manifest/i.test(x.file.name) || /\.md$/i.test(x.file.name)) await loadDataFile(x.file);
+  }
+  const models = list.filter((x) => MODEL_RE.test(x.file.name));
+  if (!models.length) { render(); return log('No .glb or .gltf files found.', 'warn'); }
+  S.files = new Map(); S.unmatched = []; S.scanned = true;
+  S.folder = folderName || (models[0].path.includes('/') ? models[0].path.split('/')[0] : '');
+  const dirOf = (p) => p.slice(0, p.lastIndexOf('/') + 1);
+  let n = 0;
+  for (const x of models) {
+    const rec = { name: x.file.name, path: x.path, file: x.file, bytes: x.file.size };
+    try {
+      const buf = await x.file.arrayBuffer(), g = gltfJson(buf, x.file.name);
+      if (/\.gltf$/i.test(x.file.name)) {
+        const uris = [...(g.buffers || []), ...(g.images || [])].map((b) => b.uri).filter((u) => u && !u.startsWith('data:'));
+        for (const u of uris) {
+          const sib = list.find((y) => y.path === dirOf(x.path) + decodeURIComponent(u) || y.file.name === decodeURIComponent(u).split('/').pop());
+          if (sib) rec.bytes += sib.file.size;
+        }
+      }
+      rec.m = measure(g, rec.bytes);
+    } catch (e) { rec.error = 'could not read: ' + (e.message || e); }
+    // vegetation LODs (<id>.lod1.glb) belong to their id but are not checked on their own
+    const lod = x.file.name.match(/^(.*)\.lod\d+\.(glb|gltf)$/i);
+    const id = lod ? matchId(lod[1] + '.glb') : matchId(x.file.name);
+    if (lod && id) { if (!S.files.has(id)) S.files.set(id, []); S.files.get(id).lods = (S.files.get(id).lods || 0) + 1; continue; }
+    if (id) { if (!S.files.has(id)) S.files.set(id, []); S.files.get(id).push(rec); }
+    else S.unmatched.push(rec);
+    if (++n % 20 === 0) await new Promise((r) => setTimeout(r, 0));
+  }
+  const matched = models.length - S.unmatched.length;
+  log(`Scanned ${models.length} model files${S.folder ? ' in ' + S.folder : ''}: ${matched} match an id, ${S.unmatched.length} do not.`, 'ok');
+  render();
+}
+
+// ---------- rendering ----------
+const F = { tile: 'all', search: '', section: '', gen: '', onlyTargets: false, sort: 'section', rev: false, open: new Set() };
+const TILES = [
+  ['all', 'All ids', ''],
+  ['game', 'Shipped in the game', ''],
+  ['pass', 'Your file passes', 'ok'],
+  ['fail', 'Your file fails', 'fail'],
+  ['notarget', 'File, but id not in targets.json', 'warn'],
+  ['needed', 'Still needed', ''],
+  ['needGen', 'Needed, a generator makes it', ''],
+  ['needNoGen', 'Needed, no generator', 'warn'],
+];
+const tileTest = {
+  all: () => true, game: (r) => !!r.game, pass: (r) => r.status === 'pass', fail: (r) => r.status === 'fail',
+  notarget: (r) => r.status === 'notarget', needed: (r) => r.needed, needGen: (r) => r.needed && r.gens.length > 0,
+  needNoGen: (r) => r.needed && !r.gens.length,
+};
+const STATUS_LABEL = { pass: 'passes', fail: 'fails', notarget: 'no target', missing: 'missing' };
+function filtered(all) {
+  const q = F.search.trim().toLowerCase();
+  return all.filter((r) => tileTest[F.tile](r)
+    && (!F.section || r.section === F.section)
+    && (!F.gen || (F.gen === '-' ? !r.gens.length : r.gens.includes(F.gen)))
+    && (!F.onlyTargets || r.inTargets)
+    && (!q || r.id.includes(q) || r.what.toLowerCase().includes(q)));
+}
+const SORTS = {
+  id: (r) => r.id, section: (r) => SECTION_ORDER(r.section), target: (r) => (r.target || r.est)?.h ?? -1,
+  game: (r) => (r.game ? 0 : 1), status: (r) => ({ fail: 0, notarget: 1, pass: 2, missing: 3 }[r.status]),
+  size: (r) => r.best?.f.m?.size.h ?? -1, tris: (r) => r.best?.f.m?.tris ?? -1, mb: (r) => r.best?.f.m?.mb ?? -1,
+  gens: (r) => r.gens.length ? S.gens[r.gens[0]].title : '~',
+};
+function render() {
+  const all = rows();
+  // sources
+  const nT = Object.keys(S.targets.objects).length;
+  $('sources').innerHTML = [
+    `targets.json: <b>${esc(S.targetsFrom)}</b> (${nT} ids)`,
+    `game manifest: <b>${esc(S.manifestFrom)}</b>${S.manifest ? ` (${Object.keys(S.manifest.objects).length} shipped)` : ''}`,
+    `missing-objects list: <b>${esc(S.listFrom)}</b> (${S.list.ids.size} ids)`,
+    `generators: <b>${GEN_ORDER.length} pages</b>`,
+    `your folder: <b>${S.scanned ? esc(S.folder || 'chosen files') : 'not chosen yet'}</b>`,
+  ].map((s) => `<span>${s}</span>`).join('');
+  // tiles
+  $('tiles').replaceChildren(...TILES.filter(([k]) => S.scanned || !['pass', 'fail', 'notarget'].includes(k)).map(([k, label, cls]) => {
+    const b = document.createElement('button'); b.className = `tile ${cls}` + (F.tile === k ? ' on' : ''); b.dataset.tile = k;
+    b.innerHTML = `<div class="n">${all.filter(tileTest[k]).length}</div><div class="l">${label}</div>`;
+    b.onclick = () => { F.tile = F.tile === k ? 'all' : k; render(); };
+    return b;
+  }));
+  const cnt = (f) => all.filter(f).length, tot = all.length || 1;
+  $('meter').innerHTML = [[cnt((r) => r.game), 'var(--info)'], [cnt((r) => !r.game && r.status === 'pass'), 'var(--ok)'],
+    [cnt((r) => !r.game && (r.status === 'fail' || r.status === 'notarget')), 'var(--err)']]
+    .map(([n, c]) => `<span style="width:${(n / tot) * 100}%;background:${c}"></span>`).join('');
+  // section and generator filters
+  const secs = [...new Set(all.map((r) => r.section))].sort((a, b) => SECTION_ORDER(a).localeCompare(SECTION_ORDER(b)));
+  const sel = $('section'), cur = sel.value;
+  sel.replaceChildren(new Option('All sections', ''), ...secs.map((s) => new Option(sectionName(s), s))); sel.value = secs.includes(cur) ? cur : '';
+  F.section = sel.value;
+  const gsel = $('gen');
+  if (gsel.options.length !== GEN_ORDER.length + 2) {
+    gsel.replaceChildren(new Option('Any generator', ''), new Option('No generator', '-'), ...GEN_ORDER.map((g) => new Option(S.gens[g].title, g)));
+    gsel.value = F.gen;
+  }
+  // table
+  const list = filtered(all), key = SORTS[F.sort];
+  list.sort((a, b) => {
+    const x = key(a), y = key(b), c = typeof x === 'string' ? x.localeCompare(y) : x - y;
+    return (F.rev ? -c : c) || SECTION_ORDER(a.section).localeCompare(SECTION_ORDER(b.section)) || all.indexOf(a) - all.indexOf(b);
+  });
+  for (const th of document.querySelectorAll('#table th')) { th.classList.toggle('sorted', th.dataset.sort === F.sort); th.classList.toggle('rev', F.rev); }
+  const tb = $('table').tBodies[0]; tb.replaceChildren();
+  for (const r of list) {
+    const tr = tb.insertRow(); tr.className = 'row'; tr.dataset.id = r.id;
+    const m = r.best?.f.m, box = r.target || r.est;
+    tr.innerHTML = `<td class="id">${esc(r.id)}</td><td class="muted">${esc(r.section === 'P' ? 'stand-in' : r.section || '–')}</td>`
+      + `<td>${box ? fmtBox(box) + (r.target ? '' : ' <span class="muted" title="Not in targets.json: size from the missing-objects list or a generator estimate">est.</span>') : '<span class="muted">–</span>'}</td>`
+      + `<td>${r.game ? `<span class="pill game" title="${fmtInt(r.game.trisAfter)} triangles, ${r.game.mb} MB after ingest">shipped</span>` : '<span class="muted">–</span>'}</td>`
+      + `<td>${S.scanned ? `<span class="pill ${r.status}">${STATUS_LABEL[r.status]}</span>${r.checked.length > 1 ? ` <span class="muted">${r.checked.length} files</span>` : ''}` : '<span class="muted">–</span>'}</td>`
+      + `<td>${m ? fmtBox(m.size) : ''}</td><td class="num">${m ? fmtInt(m.tris) : ''}</td><td class="num">${m ? m.mb.toFixed(2) : ''}</td>`
+      + `<td class="gens">${r.gens.map((g) => `<a href="${esc(S.gens[g].page)}" title="Opens the generator: pick ${esc(r.id)} in its Game id list">${esc(S.gens[g].title)}</a>`).join('') || '<span class="muted">none</span>'}</td>`;
+    tr.onclick = (e) => { if (e.target.closest('a')) return; F.open.has(r.id) ? F.open.delete(r.id) : F.open.add(r.id); render(); };
+    if (F.open.has(r.id)) {
+      const d = tb.insertRow(); d.className = 'detail';
+      const c = d.insertCell(); c.colSpan = 9;
+      c.innerHTML = (r.what ? `<div>${esc(r.what)}</div>` : '')
+        + (r.game ? `<div class="hint">In the game: ${fmtInt(r.game.trisBefore)} → ${fmtInt(r.game.trisAfter)} triangles, ${r.game.mb} MB, scale ${r.game.scale}.</div>` : '')
+        + (!r.inTargets ? `<div class="hint">Not in targets.json yet${r.est ? `: estimated box ${fmtBox(r.est)} m from ${S.list.ids.get(r.id)?.box ? 'the missing-objects list' : 'the generator'}` : ''}. The game's check fails any file until the id is added.</div>` : '')
+        + r.checked.map(({ f, v }) => `<div><b class="id">${esc(f.path)}</b> <span class="pill ${v.status}">${STATUS_LABEL[v.status]}</span></div>`
+          + `<ul class="lines">${v.lines.map((l) => `<li class="${l.level}">${esc(l.text)}</li>`).join('')}</ul>`).join('')
+        + ((S.files.get(r.id) || {}).lods ? `<div class="hint">${(S.files.get(r.id)).lods} LOD file(s) found.</div>` : '');
+    }
+  }
+  $('countLine').textContent = `${list.length} of ${all.length} ids shown. Click a row for the check details.`;
+  // unmatched files
+  $('unmatchedBox').hidden = !S.unmatched.length;
+  const ids = allIds(), ub = $('unmatched').tBodies[0]; ub.replaceChildren();
+  for (const f of S.unmatched) {
+    const tr = ub.insertRow();
+    tr.innerHTML = `<td class="id">${esc(f.path)}</td><td class="id">${esc(closestId(slug(f.name), ids) || '')}</td>`
+      + `<td class="num">${f.m ? fmtInt(f.m.tris) : esc(f.error || '')}</td><td class="num">${(f.bytes / 1e6).toFixed(2)}</td>`;
+  }
+  $('zipBtn').disabled = !all.some((r) => r.status === 'fail' || r.status === 'notarget');
+}
+function closestId(s, ids) {
+  const dist = (a, b) => {
+    const d = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      let prev = d[0]; d[0] = i;
+      for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; }
+    }
+    return d[b.length];
+  };
+  let best = null, bd = Infinity;
+  for (const id of ids) { const v = dist(s, id); if (v < bd) { bd = v; best = id; } }
+  return bd <= Math.max(3, s.length / 3) ? best : null;
+}
+
+// ---------- exports ----------
+function csv() {
+  const q = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const head = ['id', 'section', 'in_targets', 'target_w', 'target_d', 'target_h', 'estimated_box', 'in_game', 'game_tris', 'game_mb',
+    'file', 'file_status', 'w', 'd', 'h', 'triangles', 'mb', 'problems', 'generators', 'still_needed'];
+  const out = [head.join(',')];
+  for (const r of rows().sort((a, b) => SECTION_ORDER(a.section).localeCompare(SECTION_ORDER(b.section)))) {
+    const m = r.best?.f.m, probs = r.best ? r.best.v.lines.filter((l) => l.level === 'fail').map((l) => l.text).join('; ') : '';
+    out.push([r.id, r.section, r.inTargets ? 'yes' : 'no', r.target?.w, r.target?.d, r.target?.h, !r.target && r.est ? fmtBox(r.est).replace(/ × /g, 'x') : '',
+      r.game ? 'yes' : 'no', r.game?.trisAfter, r.game?.mb, r.best?.f.path || '', S.scanned ? r.status : '',
+      m && +m.size.w.toFixed(3), m && +m.size.d.toFixed(3), m && +m.size.h.toFixed(3), m?.tris, m && +m.mb.toFixed(3), probs,
+      r.gens.map((g) => S.gens[g].title).join(' / '), r.needed ? 'yes' : 'no'].map(q).join(','));
+  }
+  return out.join('\n') + '\n';
+}
+const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
+const crc32 = (u8) => { let c = ~0; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 255] ^ (c >>> 8); return ~c >>> 0; };
+// Minimal ZIP writer, stored (no compression), as in the viewer.
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  const d = new Date(), time = d.getHours() << 11 | d.getMinutes() << 5 | d.getSeconds() >> 1;
+  const date = (d.getFullYear() - 1980) << 9 | (d.getMonth() + 1) << 5 | d.getDate();
+  for (const f of files) {
+    const name = enc.encode(f.name), data = typeof f.data === 'string' ? enc.encode(f.data) : f.data, crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30)), c = new DataView(new ArrayBuffer(46));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true);
+    h.setUint16(10, time, true); h.setUint16(12, date, true); h.setUint32(14, crc, true);
+    h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true);
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+    c.setUint16(12, time, true); c.setUint16(14, date, true); c.setUint32(16, crc, true);
+    c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+    parts.push(new Uint8Array(h.buffer), name, data); central.push(new Uint8Array(c.buffer), name);
+    off += 30 + name.length + data.length;
+  }
+  const e = new DataView(new ArrayBuffer(22)), cd = central.reduce((n, a) => n + a.length, 0);
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+  e.setUint32(12, cd, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...central, new Uint8Array(e.buffer)], { type: 'application/zip' });
+}
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+// The failing files as they are, plus report.csv and a failing.txt with each file's problems, ready to drop into
+// the viewer's batch in game mode.
+async function failingZip() {
+  const bad = rows().filter((r) => r.status === 'fail' || r.status === 'notarget'), files = [], names = new Set(), txt = [];
+  for (const r of bad) for (const { f, v } of r.checked) {
+    if (v.status === 'pass') continue;
+    let name = f.path.replace(/^.*\//, '');
+    for (let k = 2; names.has(name); k++) name = f.path.replace(/^.*\//, '').replace(/(\.\w+)$/, `-${k}$1`);
+    names.add(name);
+    files.push({ name, data: new Uint8Array(await f.file.arrayBuffer()) });
+    txt.push(`${v.status.toUpperCase()} ${name} (${f.path})`, ...v.lines.filter((l) => l.level === 'fail' || l.level === 'warn').map((l) => `  ${l.level.padEnd(4)} ${l.text}`));
+  }
+  files.push({ name: 'failing.txt', data: txt.join('\n') + '\n' }, { name: 'report.csv', data: csv() });
+  saveBlob(makeZip(files), `failing-${files.length - 2}-files.zip`);
+  log(`Saved ${files.length - 2} failing files with failing.txt and report.csv.`, 'ok');
+}
+
+// ---------- wiring ----------
+$('folderBtn').onclick = () => $('folderInput').click();
+$('filesBtn').onclick = () => $('filesInput').click();
+$('folderInput').onchange = (e) => { const l = asEntries(e.target.files); e.target.value = ''; scan(l); };
+$('filesInput').onchange = async (e) => {
+  const l = asEntries(e.target.files); e.target.value = '';
+  if (l.some((x) => MODEL_RE.test(x.file.name))) return scan(l, 'chosen files');
+  for (const x of l) await loadDataFile(x.file);
+  render();
+};
+$('loadBtn').onclick = () => $('loadInput').click();
+$('loadInput').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f && await loadDataFile(f)) render(); };
+$('csvBtn').onclick = () => { saveBlob(new Blob([csv()], { type: 'text/csv' }), 'report.csv'); };
+$('zipBtn').onclick = () => failingZip();
+$('search').oninput = (e) => { F.search = e.target.value; render(); };
+$('section').onchange = (e) => { F.section = e.target.value; render(); };
+$('gen').onchange = (e) => { F.gen = e.target.value; render(); };
+$('onlyTargets').onchange = (e) => { F.onlyTargets = e.target.checked; render(); };
+for (const th of document.querySelectorAll('#table th[data-sort]')) th.onclick = () => {
+  const k = th.dataset.sort; F.rev = F.sort === k ? !F.rev : false; F.sort = k; render();
+};
+const drop = $('drop');
+for (const t of [document.body]) {
+  t.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragging'); });
+  t.addEventListener('dragleave', (e) => { if (!e.relatedTarget) drop.classList.remove('dragging'); });
+  t.addEventListener('drop', async (e) => {
+    e.preventDefault(); drop.classList.remove('dragging');
+    const l = await droppedFiles(e.dataTransfer);
+    if (l.some((x) => MODEL_RE.test(x.file.name))) return scan(l);
+    for (const x of l) await loadDataFile(x.file);
+    render();
+  });
+}
+
+// Live copies from the game repo, when online.
+async function fetchLive() {
+  const get = async (url) => { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); };
+  await Promise.all([
+    get(TARGETS_URL).then((j) => { if (S.targetsFrom === 'built-in copy') { setTargets(j, 'live (game repo)'); log(`Live targets.json: ${Object.keys(j.objects).length} ids`, 'ok'); } })
+      .catch((e) => log(`Live targets.json not reachable (${e.message}): using the built-in copy.`, 'warn')),
+    get(MANIFEST_URL).then((j) => { if (!S.manifest) { setManifest(j, 'live (game repo)'); log(`Live game manifest: ${Object.keys(j.objects).length} shipped ids`, 'ok'); } })
+      .catch((e) => log(`Game manifest not reachable (${e.message}): "Shipped" is unknown. Load public/assets/env/manifest.json to fill it in.`, 'warn')),
+  ]);
+  render();
+}
+
+render();
+window.__coverage = { S, parseList, gltfJson, measure, verdict, rows, scan, csv, setTargets, setManifest, makeZip, matchId };
+log('Ready. Choose or drop your uploads folder to check it against the game.');
+fetchLive();
+</script>
+</body>
+</html>
