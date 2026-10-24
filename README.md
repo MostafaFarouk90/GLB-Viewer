@@ -83,8 +83,21 @@ The **Game id** list holds the objects from the game's missing-objects list that
 
 The size table is fetched live from the game repo when online; the page also carries a built-in copy and has a **Load targets.json** button. Ids not in `targets.json` yet use the size from the missing-objects list (section F) or an estimate (the provisional section G ids).
 
+## Creature generator
+`creature-generator-offline.html` (offline) / `creature-generator.html` (CDN) makes animals and monsters procedurally and saves them as GLB, static or rigged with animation clips.
+
+- **Species**: 17 in five body plans. Four-legged: wolf, ember hound, fox, boar, goat, deer, bear, rat. Birds: hen, crow, owl. Bat. Spiders and beetles: giant spider, beetle / crawler. Lizards and wyrms: lizard, fire salamander, wyrmling.
+- Each body plan has its own **variant** dropdowns (build, ears, horns or antlers or tusks, tail, coat, ruff, beard, beak, comb, jaws, back spines, wings…); a species only makes some values more likely, so any combination can be picked. **Ember-touched** adds glowing eyes, cracks and a glowing maw or tail.
+- **Seed / Randomize / New colors / Size** work as in the props generator. Every creature stands on its base centre and faces +Z, in the KayKit low-poly style by default.
+- **Rig**: *None* exports one static mesh (what the game wants for scenery). *Jointed parts* exports one node per joint (Root, Hips, Chest, Neck, Head, Jaw, Tail1, LegFL1…), each holding its own piece, for a procedural rig like the game's quadruped. *Skeleton* exports one skinned mesh on bones with the same names, every part bound rigidly to its bone. Joints have no rest rotation, so a clip is plain joint rotations plus a Hips position track.
+- **Clips** (with a rig): four-legged Idle, Walk, Run, Bite (the names of the game's `QUADRUPED_CLIPS`); birds Idle, Walk, Fly, Peck; bats Idle (hover), Fly, Bite; spiders and beetles Idle, Walk, Bite; lizards Idle, Walk, Bite (and Fly with wings). **Play** in the toolbar previews them.
+- Every export keeps the species, seed, name and variants in the root node's glTF `extras`. **Seed variants** downloads several seeds as a .zip.
+
+### Game ids (Embers of Valdren)
+Section E of the missing-objects list (`hen-a`, `goat-a`, `crow-a`), wildlife (`wolf-a`, `boar-a`, `fox-a`, `deer-a`, `rat-a`, `bat-a`, `spider-giant-a`) and art stand-ins for the game's procedural Act 2 foes, named as its `EnemyKind` ids with the colours of their `ENEMY_DEFS` tints (`ember-hound`, `kindling-fox`, `slag-crawler`, `wyrmling`). Picking one fits the creature to the id's box (driver axis exact, the others stretched by at most 1.25x), picks the highest detail within 1,500 triangles (small animals) or 4,000, and exports `<id>.glb` with flat game materials and no rig. None of these ids is in `targets.json` yet, so their sizes are estimates until the game adds them; when it does, the live table (or **Load targets.json**) takes over. Section E says rigged is a bonus: choose *Skeleton* to add the clips.
+
 ## Editing / development
-`index.html`, `character-generator.html` and `props-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html` and `props-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html`, `character-generator.html`, `props-generator.html` and `creature-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html`, `props-generator-offline.html` and `creature-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright
