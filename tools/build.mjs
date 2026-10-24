@@ -1,6 +1,7 @@
 // Builds the offline pages: glb-viewer-offline.html from index.html, character-generator-offline.html
-// from character-generator.html, props-generator-offline.html from props-generator.html and
-// creature-generator-offline.html from creature-generator.html. Each is the same
+// from character-generator.html, props-generator-offline.html from props-generator.html,
+// texture-generator-offline.html from texture-generator.html, vegetation-generator-offline.html from
+// vegetation-generator.html and creature-generator-offline.html from creature-generator.html. Each is the same
 // page with every library inlined, so it opens by double-click with no internet.
 //
 // Usage (from anywhere):  npm install && npm run build
@@ -19,7 +20,8 @@ import * as esbuild from 'esbuild';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PAGES = [['index.html', 'glb-viewer-offline.html'], ['character-generator.html', 'character-generator-offline.html'],
-  ['props-generator.html', 'props-generator-offline.html'], ['creature-generator.html', 'creature-generator-offline.html']];
+  ['props-generator.html', 'props-generator-offline.html'], ['texture-generator.html', 'texture-generator-offline.html'],
+  ['vegetation-generator.html', 'vegetation-generator-offline.html'], ['creature-generator.html', 'creature-generator-offline.html']];
 const nm = path.join(root, 'node_modules');
 
 const fail = (msg) => { console.error('build failed: ' + msg); process.exit(1); };
