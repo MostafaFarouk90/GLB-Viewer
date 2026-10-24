@@ -18,13 +18,28 @@ Works in current Chrome, Edge, Firefox and Safari.
 - **Surface smoothing**: Taubin smoothing passes (smooths without shrinking).
 - **Shading / normals**: keep, smooth, flat, or auto with a crease angle.
 - **Fit to target size**: reduces faces until the exported GLB fits the MB target.
-- **Max texture size / format**: textures are often most of the file size; JPEG + 1024 shrinks a lot.
+- **Max texture size / format**: textures are often most of the file size; JPEG or WebP + 512/1024 shrinks a lot. WebP is written with `EXT_texture_webp` declared, as glTF requires. **Keep** writes the original image bytes back unchanged when no resize is needed (it used to re-encode them as PNG, which made files bigger).
+- **Base colour only**: drops normal, roughness, metal, AO and emissive maps on export and sets roughness 1, metal 0.
+- **Face budget**: presets Prop 1,500, Standard 4,500, Hero tree 6,000, Character 5,000. A preset never adds faces to a model that is already under it. A face target more than 4× the model (and above 20,000), or above 1,000,000, asks before running.
+- **Transform**: pivot to base centre (base on y 0, footprint centred on x/z 0), rotate 90° about Y, Z-up → Y-up, scale to a height in metres, and bake transforms into the vertices. These change the model; press Apply again afterwards.
+- **Scale aids** (viewer toolbar): metre grid centred on the origin with a ruler, the bounding box with W × D × H, a 1.8 m figure beside the model, and a +Z arrow showing the front. They are not exported.
+- **Batch**: **Batch folder…**, or drop a folder or several models at once. Every .glb/.gltf runs with the current settings (face budget from the preset, else the % slider) and a zip downloads with the results, `report.json` and `report.txt`.
+
+## Game profile: Embers of Valdren
+Set **Profile** to *Embers game-ready* to prepare models for the game (`embers/conventions.md` has the rules).
+
+- Target sizes load live from the game repo's `src/env/targets.json`; without internet the copy built into the page (`embers/targets.json`) is used. **Load targets.json…** (or dropping a .json) uses another copy.
+- The id comes from the file name (`oak-a.glb`, also `Oak_A.glb` or `oak-a_optimized.glb`); type another in **Id**. Downloads are saved as `<id>.glb`.
+- The verdict list uses the same pass/fail rules as the game's `tools/env-pass/check-glb.mjs`: size against the target (driver axis ±15%, the others ±110%), base at y 0, footprint centre near 0, at most 10,000 triangles and 1.5 MB. Warnings show what the ingest would still change: width/depth that would need more than its 15% stretch once scaled to the target height (a CAP line), more than 4,500 triangles, extra or large textures, skins and animations. Ids in the `proportion` table are fitted exactly by the ingest, so their width and depth are not checked.
+- **Make game-ready** scales to the target height, moves the pivot to the base centre, sets the Standard face budget (if no preset is chosen), 512 px WebP base-colour textures and a 25% shape error limit, then applies. Facing (+Z is the front) is still yours to check against the arrow.
+- Batch with the profile on fits each file to its target and adds the verdict to the report.
 
 ## Notes and limitations
 - Skinned (animated) and morph-target meshes are decimated but not subdivided or smoothed, so animation keeps working.
 - Draco-compressed input loads only when online (the decoder comes from Google's CDN). Meshopt-compressed input works offline.
 - A `.gltf` with external `.bin`/texture files: select or drop all of its files together.
-- Output is an uncompressed GLB; textures are re-encoded by the browser.
+- Output is an uncompressed GLB. Textures are re-encoded by the browser when they are resized or change format; Safari before 17 cannot write WebP and falls back to PNG (the log says so).
+- three.js 0.170 is used here while the game uses 0.168; GLB files are version-neutral, so that is fine.
 
 ## Mystical character generator
 `character-generator-offline.html` (offline) / `character-generator.html` (CDN) makes fantasy characters procedurally and saves them as GLB. It needs no account or API key and runs entirely in the browser.
@@ -54,6 +69,6 @@ npm run build    # regenerate both *-offline.html files
 npm test         # Playwright tests (Chromium) against the CDN pages and their offline files
 ```
 
-**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
+**After editing a source page, run `npm run build` and commit the regenerated offline file together with it.** When `embers/targets.json` changes, paste it into the `embersTargets` block of `index.html` too (a test checks they match). Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
 
 There is intentionally no CI: build and test locally before committing.
