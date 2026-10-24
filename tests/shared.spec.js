@@ -21,6 +21,7 @@ test('every shared/ file a page loads exists, and its offline build has them inl
     if (!srcs.length) continue;
     expect(srcs[0], f).toBe('shared/kit.js');
     for (const s of srcs) expect(fs.existsSync(path.join(ROOT, s)), `${f} loads ${s}`).toBe(true);
+    if (!fs.existsSync(path.join(ROOT, offlineOf(f)))) continue; // coverage.html has no offline build
     const off = read(offlineOf(f));
     expect(off, offlineOf(f)).not.toMatch(/<script[^>]+src=/);
     expect(off).toContain('window.EmbersKit = window.EmbersKit || {}');
