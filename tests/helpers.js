@@ -1,4 +1,4 @@
-// Shared setup: open either a CDN page (index.html, character-generator.html, with jsDelivr served from
+// Shared setup: open either a CDN page (index.html, character-generator.html, props-generator.html, with jsDelivr served from
 // node_modules so it works offline) or its offline build (*-offline.html, with jsDelivr blocked).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,6 +8,7 @@ import { expect } from '@playwright/test';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const VARIANTS = ['index.html', 'glb-viewer-offline.html'];
 export const GENERATOR_VARIANTS = ['character-generator.html', 'character-generator-offline.html'];
+export const PROPS_VARIANTS = ['props-generator.html', 'props-generator-offline.html'];
 const CDN = 'https://cdn.jsdelivr.net/';
 
 // `ready` is the debugging global the page sets once it has started.

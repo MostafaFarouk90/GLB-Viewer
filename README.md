@@ -39,12 +39,30 @@ The exported GLB opens in the viewer above, so you can then smooth it, change it
 
 Why procedural instead of AI text-to-3D: services such as Meshy, Tripo or Hunyuan3D give more detailed sculpted models but need an account, an API key (which would be readable inside a shared HTML file), internet and per-model credits, and take from 30 seconds to minutes per model. The procedural generator is instant, free, offline and reproducible.
 
+## Fantasy props generator
+`props-generator-offline.html` (offline) / `props-generator.html` (CDN) makes props for the characters procedurally and saves them as GLB, the same way as the character generator.
+
+- **Type**: 28 categories in four groups. Weapons and gear: sword, axe/hammer/mace, bow, magic staff, shield. Loot and magic: potion, treasure chest, spellbook, treasure pile. Camp, road and tavern: barrel, crate, lantern/torch/candles, post/gibbet/cage, fence or gate, flagstones or ground patch, camp clutter (bones, bedroll, cache, sacks). Nature: crystal cluster, giant mushroom, tree/stump/fallen log, boulder, gravestone, rune stone or altar, portal, campfire. Ash country: basalt columns, slag/ore/rubble heap, cairn, smelter chimney.
+- Each type has its own **variant** dropdowns (blade shape, bottle, lid, kind, condition…), plus **Enchanted** for glowing runes, ember veins and the like.
+- **Seed / Randomize / New colors** work as in the character generator. **Size** is the longest side or the height, in metres.
+- **Output**: smooth or low-poly, detail level, combine per material, idle animation (flickering flames, spinning portals and orbiting runes), and for weapons and torches **Origin at the handle**, so the file can be attached to a hand. Every prop is centred on its base and faces +Z. **Seed variants** downloads several seeds of the same prop as a .zip.
+
+### Game ids (Embers of Valdren)
+The **Game id** list holds the objects from the game's missing-objects list that suit procedural props: Dead Road posts and fire ring, ash-country basalt, ember rocks, slag heap, ore pile, charred stump, dead ash trees, scorched fence and smelter chimney, the village cairn, flagstone circle, ash patch and field gate, stumps, fallen log, mushrooms and boulders, and provisional stand-ins for the Act 2 points of interest and Cinderreach structures. Picking one:
+
+- uses the game's palette (field or ash country) and the right variants,
+- fits the prop to the id's target box from `targets.json` (driver axis exact, the other axes stretched towards the target by at most 1.6x) and shows the target box and a 1.8 m figure next to it,
+- picks the highest detail level within the triangle budget (1,500 for small props, 4,500 otherwise),
+- exports game-ready: file named `<id>.glb`, roughness 1, metallic 0, opaque, emissive colour kept for embers, no animation, origin at the base centre.
+
+The size table is fetched live from the game repo when online; the page also carries a built-in copy and has a **Load targets.json** button. Ids not in `targets.json` yet use the size from the missing-objects list (section F) or an estimate (the provisional section G ids).
+
 ## Editing / development
-`index.html` and `character-generator.html` are the sources. `glb-viewer-offline.html` and `character-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
+`index.html`, `character-generator.html` and `props-generator.html` are the sources. `glb-viewer-offline.html`, `character-generator-offline.html` and `props-generator-offline.html` are generated from them by `tools/build.mjs` (esbuild inlines the libraries pinned in `package.json`, which must match the versions in the importmap).
 
 ```sh
 npm install      # dev tools only: three, meshoptimizer, three-subdivide, esbuild, Playwright
-npm run build    # regenerate both *-offline.html files
+npm run build    # regenerate the *-offline.html files
 npm test         # Playwright tests (Chromium) against the CDN pages and their offline files
 ```
 
