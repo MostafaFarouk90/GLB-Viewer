@@ -83,7 +83,7 @@ for (const file of VEG_VARIANTS) {
       await page.selectOption('#detail', 'low');
       const cats = await page.evaluate(() => Object.fromEntries(Object.entries(window.__veggen.CATS).map(([k, c]) =>
         [k, Object.fromEntries(Object.entries(c.opts).map(([s, o]) => [s, Object.keys(o.values)]))])));
-      expect(Object.keys(cats).length).toBe(7);
+      expect(Object.keys(cats).length).toBe(8);
       for (const [cat, slots] of Object.entries(cats)) {
         await setSeed(page, cat, 'all-' + cat);
         const size = await page.evaluate(() => window.__veggen.state.traits.size);
@@ -139,8 +139,8 @@ for (const file of VEG_VARIANTS) {
             faces: Number(document.getElementById('sF').textContent.replace(/\D/g, '')) };
         });
       });
-      expect(rows.length).toBe(27);
-      expect(rows.filter((r) => !r.inTable).map((r) => r.id).sort()).toEqual(['bush-holly-a', 'willow-a']);
+      expect(rows.length).toBe(34);
+      expect(rows.filter((r) => !r.inTable).map((r) => r.id).sort()).toEqual(['greyfen-reed-bed', 'greyfen-reed-bed-charred']);
       for (const r of rows) {
         const tgt = [r.box.w, r.box.h, r.box.d], drv = Math.max(r.box.w, r.box.d) > 1.8 * r.box.h ? (r.box.w >= r.box.d ? 0 : 2) : 1;
         expect(r.dims[drv], r.id).toBeCloseTo(tgt[drv], 2);

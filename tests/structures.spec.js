@@ -208,7 +208,9 @@ for (const file of STRUCT_VARIANTS) {
         });
       });
       expect(rows.length).toBeGreaterThanOrEqual(15);
-      expect(rows.filter((r) => r.inTable).map((r) => r.id).sort()).toEqual(['cottage-thatch-b', 'mine-cart', 'roadside-shrine-a', 'wagon-burnt', 'wagon-wreck-a']);
+      // targets.json has the game's own ids; the list's new Greyfen and Dragonspine pieces fall back to their list boxes
+      expect(rows.filter((r) => r.inTable).map((r) => r.id)).toEqual(expect.arrayContaining(['cart-goods-a', 'cottage-thatch-b', 'deepgate-headframe', 'handcart-a', 'mine-cart', 'wagon-wreck-a']));
+      expect(rows.filter((r) => !r.inTable).map((r) => r.id)).toEqual(expect.arrayContaining(['greyfen-stilt-house', 'dragonspine-sled-shed']));
       for (const r of rows) {
         const tgt = [r.box.w, r.box.h, r.box.d], drv = Math.max(r.box.w, r.box.d) > 1.8 * r.box.h ? (r.box.w >= r.box.d ? 0 : 2) : 1;
         expect(r.dims[drv], r.id).toBeCloseTo(tgt[drv], 2);

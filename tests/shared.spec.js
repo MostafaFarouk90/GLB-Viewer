@@ -55,7 +55,7 @@ test('shared helpers: seeded random, zip, variant names, fit to box', async ({ p
 });
 
 test('export-ids makes game ids headless, the same as the page', async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(360_000); // four export-ids runs, slow when the whole suite runs alongside
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'export-ids-'));
   const run = (...a) => execFileSync(process.execPath, [path.join(ROOT, 'tools/export-ids.mjs'), ...a], { encoding: 'utf8' });
   expect(run('--list', '--manifest', 'builtin')).toMatch(/^props \(\d+\): .*stump-a \(shipped\)/m);

@@ -117,7 +117,7 @@
 
     <h2>Colors</h2>
     <div class="row"><label for="palette">Palette</label>
-      <select id="palette"><option value="random">Random for this seed</option><option value="field">Game: field and village</option><option value="ash">Game: ash country</option></select></div>
+      <select id="palette"><option value="random">Random for this seed</option><option value="field">Game: field and village</option><option value="ash">Game: ash country</option><option value="fen">Game: Greyfen</option><option value="frost">Game: Dragonspine</option></select></div>
     <div class="colors" id="colors"></div>
 
     <h2>Output</h2>
@@ -282,8 +282,8 @@ const CATS = {
     nouns: ['Hoard', 'Treasure', 'Riches', 'Plunder'], build: buildTreasure,
   },
   barrel: {
-    label: 'Barrel', group: 'dungeon', enchant: 0.05, size: (o) => o.shape === 'keg' ? [0.75, 0.95] : [0.85, 1.1],
-    opts: { shape: opt('Shape', { barrel: ['Upright barrel', 3], keg: ['Keg on a stand', 1] }), top: opt('Top', { sealed: ['Sealed lid', 2], open: ['Open (filled)', 1] }),
+    label: 'Barrel or vat', group: 'dungeon', enchant: 0.05, size: (o) => ({ keg: [0.75, 0.95], vat: [1.1, 1.3], cradle: [1.5, 1.7] })[o.shape] || [0.85, 1.1],
+    opts: { shape: opt('Shape', { barrel: ['Upright barrel', 3], keg: ['Keg on a stand', 1], vat: ['Wide vat with a paddle', 0], cradle: ['Big keg on a cradle', 0] }), top: opt('Top', { sealed: ['Sealed lid', 2], open: ['Open (filled)', 1] }),
       bands: opt('Hoops', { iron: ['Iron', 3], rope: ['Rope', 1] }) },
     nouns: ['Barrel', 'Cask', 'Keg', 'Tun'], of: ['of Ale', 'of Mead', 'of Pickled Herring', 'of Rainwater', 'of Dwarven Stout', 'of Lamp Oil'],
     palette: (r, c) => ({ ...c, main: r.pick(['#c58a2a', '#6a1f1f', '#4a7a9a', '#3a2412']), wood: hsl(r.range(0.07, 0.1), r.range(0.4, 0.55), r.range(0.24, 0.34)) }),
@@ -367,8 +367,8 @@ const CATS = {
     nouns: ['Columns', 'Pillars', 'Outcrop', 'Causeway'], palette: (r, c) => ({ ...c, stone: hsl(r.range(0.55, 0.65), 0.04, r.range(0.18, 0.26)) }), build: buildBasalt,
   },
   heap: {
-    label: 'Slag, ore or rubble heap', group: 'waste', enchant: 0.5, size: (o) => o.kind === 'slag' ? [4, 5.5] : [1.6, 2.4],
-    opts: { kind: opt('Kind', { slag: ['Slag heap', 1], ore: ['Ore pile', 1], rubble: ['Rubble', 1] }) },
+    label: 'Slag, ore, coal or rubble heap', group: 'waste', enchant: 0.5, size: (o) => o.kind === 'slag' || o.kind === 'clamp' ? [4, 5.5] : [1.6, 2.4],
+    opts: { kind: opt('Kind', { slag: ['Slag heap', 1], ore: ['Ore pile', 1], rubble: ['Rubble', 1], coal: ['Coal heap with a shovel', 0], clamp: ['Charcoal clamp', 0] }) },
     nouns: ['Heap', 'Pile', 'Tailings', 'Spoil'], palette: (r, c) => ({ ...c, stone: hsl(0.07, 0.05, r.range(0.14, 0.24)), trim: r.pick([COPPER, '#c98a3a', GOLD]) }), build: buildHeap,
   },
   cairn: {
@@ -382,8 +382,10 @@ const CATS = {
     nouns: ['Smelter', 'Chimney', 'Furnace Stack'], build: buildChimney,
   },
   post: {
-    label: 'Post, gibbet or cage', group: 'dungeon', enchant: 0.15, size: (o) => ({ gibbet: [3.2, 3.8], perch: [1.4, 1.8], marker: [1.4, 1.8], sign: [2.1, 2.5], cage: [1.8, 2.3] })[o.kind],
-    opts: { kind: opt('Kind', { gibbet: ['Gibbet post', 2], perch: ['Crow perch', 2], sign: ['Signpost', 2], marker: ['Marker post', 1], cage: ['Cage', 1] }),
+    label: 'Post, board, gibbet or cage', group: 'dungeon', enchant: 0.15,
+    size: (o) => ({ gibbet: [3.2, 3.8], perch: [1.4, 1.8], marker: [1.4, 1.8], sign: [2.1, 2.5], cage: [1.8, 2.3], toll: [2.2, 2.6], notice: [2, 2.4], waymark: [1.4, 1.8] })[o.kind],
+    opts: { kind: opt('Kind', { gibbet: ['Gibbet post', 2], perch: ['Crow perch', 2], sign: ['Signpost', 2], marker: ['Marker post', 1], cage: ['Cage', 1],
+      toll: ['Toll post with a bar', 0], notice: ['Notice board', 0], waymark: ['Leaning way-marker', 0] }),
       state: opt('Wood', { weathered: ['Weathered', 3], scorched: ['Scorched', 1] }) },
     nouns: ['Post', 'Gibbet', 'Marker', 'Waypost'], build: buildPost,
   },
@@ -398,17 +400,39 @@ const CATS = {
     nouns: ['Paving', 'Flagstones', 'Plaza', 'Path'], palette: (r, c) => ({ ...c, second: '#8d8780' }), build: buildFlagstones,
   },
   clutter: {
-    label: 'Camp clutter', group: 'dungeon', enchant: 0.05, size: (o) => o.kind === 'bedroll' ? [1.9, 2.1] : [1.0, 1.3],
-    opts: { kind: opt('Kind', { bones: ['Bones', 1], bedroll: ['Bedroll', 1], cache: ['Supply cache', 1], sacks: ['Sacks', 1] }) },
+    label: 'Camp clutter', group: 'dungeon', enchant: 0.05, size: (o) => ({ bedroll: [1.9, 2.1], basket: [0.5, 0.65], nest: [2.2, 2.6] })[o.kind] || [1.0, 1.3],
+    opts: { kind: opt('Kind', { bones: ['Bones', 1], bedroll: ['Bedroll', 1], cache: ['Supply cache', 1], sacks: ['Sacks', 1], basket: ['Basket of goods', 0], nest: ['Big nest with eggs', 0] }) },
     nouns: ['Camp', 'Stash', 'Remains', 'Cache'], palette: (r, c) => ({ ...c, main: hsl(r.next(), 0.4, 0.35), second: hsl(r.next(), 0.3, 0.55) }), build: buildClutter,
+  },
+  polearm: {
+    label: 'Spear or lance', group: 'weapons', grip: true, enchant: 0.15, size: (o) => o.kind === 'lance' ? [3, 3.4] : [2, 2.4],
+    opts: { kind: opt('Kind', { spear: ['Hunting spear', 2], lance: ['Lance with a vamplate', 1] }), pennon: opt('Pennon', { none: ['None', 2], pennon: ['Pennon', 1] }) },
+    nouns: ['Spear', 'Lance', 'Pike', 'Boar Spear'], build: buildPolearm,
+  },
+  tent: {
+    label: 'Tent', group: 'dungeon', enchant: 0, size: (o) => o.kind === 'refugee' ? [2.8, 3.2] : [2.8, 3.2],
+    opts: { kind: opt('Kind', { ridge: ['Ridge tent (door at the front)', 2], refugee: ['Low tent (open end, bedroll)', 1] }), patch: opt('Patch', { patch: ['Patched panel', 2], none: ['None', 1] }) },
+    nouns: ['Tent', 'Shelter', 'Camp'], palette: (r, c) => ({ ...c, main: hsl(0.1, 0.25, r.range(0.75, 0.85)), second: hsl(0.08, 0.35, 0.32) }), build: buildTent,
+  },
+  planter: {
+    label: 'Planter or garden bed', group: 'nature', enchant: 0, size: (o) => ({ box: [1.1, 1.3], garden: [1.9, 2.1], herbs: [5.5, 6.5] })[o.kind],
+    opts: { kind: opt('Kind', { box: ['Flower planter box', 2], garden: ['Raised vegetable bed', 2], herbs: ['Fenced herb bed (bog)', 1] }) },
+    nouns: ['Planter', 'Garden', 'Bed', 'Patch'], build: buildPlanter,
+  },
+  yard: {
+    label: 'Forge, yard and wall kit', group: 'dungeon', enchant: 0.05,
+    size: (o) => ({ anvil: [0.85, 1], grindstone: [1, 1.2], rack: [2.2, 2.6], trophies: [3.8, 4.2], stocks: [1.9, 2.1] })[o.kind],
+    opts: { kind: opt('Kind', { anvil: ['Anvil on a stump', 2], grindstone: ['Treadle grindstone', 1], rack: ['Iron stock rack', 1], trophies: ['Trophy wall', 1], stocks: ['Stocks', 1] }) },
+    nouns: ['Anvil', 'Rack', 'Stocks', 'Wall', 'Grindstone'], build: buildYard,
   },
 };
 
 // ---------- game ids (Embers of Valdren) ----------
 // Each id from the game's missing-objects list that suits procedural props: which category and variants make it,
 // which game palette it uses, and whether it glows. Sizes come from targets.json; "box" is the fallback for ids
-// not in targets.json yet (section F sizes from the missing-objects list, estimates for the provisional section G).
-const GAME_GROUPS = { C: 'Dead Road and Cinder Road (C)', D: 'Ash and ember country (D)', F: 'Village additions (F)', A: 'Nature (A)', G: 'Act 2 stand-ins (G, provisional sizes)' };
+// not in targets.json yet (the size the missing-objects list gives, estimates for the provisional section G).
+const GAME_GROUPS = { C: 'Dead Road and Cinder Road (C)', D: 'Ash and ember country (D)', F: 'Village additions and decals (F, P)', A: 'Nature (A)', G: 'Act 2 stand-ins (G)',
+  H: 'Hand-held weapons (H)', I: 'Village and camp (I)', K: 'Forge Row (K)', N: 'Greyfen (N)', O: 'Dragonspine (O)' };
 const GAME_IDS = {
   'gibbet-post': { g: 'C', cat: 'post', opts: { kind: 'gibbet', state: 'weathered' }, pal: 'field' },
   'campfire-ring': { g: 'C', cat: 'campfire', opts: { fuel: 'teepee', fire: 'out', ring: 'stones', extra: 'none' }, pal: 'field' },
@@ -423,6 +447,9 @@ const GAME_IDS = {
   'smelter-chimney': { g: 'D', cat: 'chimney', opts: { shape: 'round', top: 'glow' }, pal: 'ash' },
   'cairn-a': { g: 'F', cat: 'cairn', opts: { kind: 'stack', moss: 'moss' }, pal: 'field' },
   'field-gate-a': { g: 'F', cat: 'fence', opts: { kind: 'gate', state: 'intact' }, pal: 'field', box: { w: 3.4, d: 0.2, h: 1.2 } },
+  // the game refuses a flat quad, so the decals are thin meshes (section P of the list)
+  'waystone-flagstones': { g: 'F', cat: 'flagstones', opts: { kind: 'circle' }, pal: 'field', box: { w: 9, d: 9, h: 0.1 } },
+  'ash-patch-decal': { g: 'F', cat: 'flagstones', opts: { kind: 'ash' }, pal: 'ash', box: { w: 3, d: 3, h: 0.02 } },
   'stump-a': { g: 'A', cat: 'tree', opts: { kind: 'stump', roots: 'roots', state: 'living' }, pal: 'field' },
   'stump-b': { g: 'A', cat: 'tree', opts: { kind: 'stump', roots: 'none', state: 'living' }, pal: 'field' },
   'log-fallen-a': { g: 'A', cat: 'tree', opts: { kind: 'log', roots: 'none', state: 'living' }, pal: 'field' },
@@ -432,17 +459,45 @@ const GAME_IDS = {
   'poi-fire-ring': { g: 'G', cat: 'campfire', opts: { fuel: 'teepee', fire: 'out', ring: 'stones', extra: 'none' }, pal: 'field', box: { w: 1.2, d: 1.2, h: 0.5 } },
   'poi-cache': { g: 'G', cat: 'clutter', opts: { kind: 'cache' }, pal: 'field', box: { w: 1.2, d: 0.9, h: 0.8 } },
   'poi-lore-stone': { g: 'G', cat: 'runestone', opts: { form: 'standing', runes: 'glowing' }, pal: 'field', box: { w: 0.8, d: 0.5, h: 1.8 } },
-  'cinder-cage': { g: 'G', cat: 'post', opts: { kind: 'cage', state: 'scorched' }, pal: 'ash', box: { w: 1.2, d: 1.2, h: 2.2 } },
-  'cinder-cairn': { g: 'G', cat: 'cairn', opts: { kind: 'marker', moss: 'none' }, pal: 'ash', box: { w: 1.2, d: 1.2, h: 2.0 } },
-  'cinder-rune-stone': { g: 'G', cat: 'runestone', opts: { form: 'standing', runes: 'glowing' }, pal: 'ash', box: { w: 1.0, d: 0.6, h: 2.4 } },
-  'cinder-trial-ring': { g: 'G', cat: 'runestone', opts: { form: 'circle', runes: 'glowing' }, pal: 'ash', box: { w: 8, d: 8, h: 2 } },
+  'cinder-cage': { g: 'G', cat: 'post', opts: { kind: 'cage', state: 'scorched' }, pal: 'ash', box: { w: 3, d: 3, h: 2.4 } },
+  'cinder-cairn': { g: 'G', cat: 'cairn', opts: { kind: 'mound', moss: 'none' }, pal: 'ash', box: { w: 2.4, d: 2.4, h: 1.6 } },
+  'cinder-rune-stone': { g: 'G', cat: 'runestone', opts: { form: 'standing', runes: 'glowing' }, pal: 'ash', box: { w: 1.4, d: 0.8, h: 2.4 } },
+  'cinder-trial-ring': { g: 'G', cat: 'flagstones', opts: { kind: 'circle' }, pal: 'ash', glow: true, kerb: true, box: { w: 16, d: 16, h: 0.35 } },
   'cinder-marker': { g: 'G', cat: 'post', opts: { kind: 'marker', state: 'scorched' }, pal: 'ash', box: { w: 0.5, d: 0.5, h: 1.6 } },
+  // hand: laid along +Z (point forward) with the origin at the grip, as section H asks
+  'spear-hunter': { g: 'H', cat: 'polearm', opts: { kind: 'spear', pennon: 'none' }, pal: 'field', hand: true, box: { w: 0.1, d: 2.2, h: 0.1 } },
+  'lance-redmane': { g: 'H', cat: 'polearm', opts: { kind: 'lance', pennon: 'pennon' }, pal: 'field', hand: true, colors: { main: '#7a3a2a' }, box: { w: 0.25, d: 3.2, h: 0.25 } },
+  'tent': { g: 'I', cat: 'tent', opts: { kind: 'ridge', patch: 'patch' }, pal: 'field', colors: { main: '#cbc0a4', second: '#7a5a3a' }, box: { w: 2.4, d: 3, h: 1.6 } },
+  'refugee-tent-a': { g: 'I', cat: 'tent', opts: { kind: 'refugee', patch: 'patch' }, pal: 'field', colors: { main: '#bfb294', second: '#6e4e32' } },
+  'toll-post': { g: 'I', cat: 'post', opts: { kind: 'toll', state: 'weathered' }, pal: 'field', colors: { main: '#a83a2c', second: '#e2d8c0' }, box: { w: 0.6, d: 2.4, h: 2.2 } },
+  'notice-board-a': { g: 'I', cat: 'post', opts: { kind: 'notice', state: 'weathered' }, pal: 'field' },
+  'planter-box-a': { g: 'I', cat: 'planter', opts: { kind: 'box' }, pal: 'field', colors: { main: '#c8342a', second: '#e8c030' }, box: { w: 1.2, d: 0.5, h: 0.6 } },
+  'garden-bed-b': { g: 'I', cat: 'planter', opts: { kind: 'garden' }, pal: 'field' },
+  'dye-vat-a': { g: 'I', cat: 'barrel', opts: { shape: 'vat', top: 'open', bands: 'iron' }, pal: 'field', colors: { main: '#2a3a8a' }, box: { w: 1.2, d: 1.2, h: 0.9 } },
+  'keg-a': { g: 'I', cat: 'barrel', opts: { shape: 'cradle', top: 'sealed', bands: 'iron' }, pal: 'field', colors: { trim: '#c8a040' }, box: { w: 1.4, d: 1.6, h: 1.6 } },
+  'basket-goods-a': { g: 'I', cat: 'clutter', opts: { kind: 'basket' }, pal: 'field', colors: { main: '#b02a22', second: '#e8dcc8' } },
+  'crates-stacked-a': { g: 'I', cat: 'crate', opts: { style: 'planked', stack: 'three', mark: 'none' }, pal: 'field', colors: { main: '#7a5a3a' }, cloth: true, box: { w: 1.6, d: 1.1, h: 1.7 } },
+  'anvil-a': { g: 'K', cat: 'yard', opts: { kind: 'anvil' }, pal: 'field', box: { w: 0.9, d: 0.4, h: 0.9 } },
+  'coal-heap-a': { g: 'K', cat: 'heap', opts: { kind: 'coal' }, pal: 'ash', box: { w: 2, d: 2, h: 0.8 } },
+  'iron-stock-a': { g: 'K', cat: 'yard', opts: { kind: 'rack' }, pal: 'field', colors: { metal: '#7a4a32' }, box: { w: 2.4, d: 0.8, h: 1.2 } },
+  'grindstone-a': { g: 'K', cat: 'yard', opts: { kind: 'grindstone' }, pal: 'field', colors: { stone: '#b89870' }, box: { w: 1, d: 0.8, h: 1.1 } },
+  'charcoal-clamp-a': { g: 'K', cat: 'heap', opts: { kind: 'clamp' }, pal: 'field', glow: true, colors: { second: '#5a4a3a', glow: kit.SWATCHES.ember }, box: { w: 4, d: 4, h: 2 } },
+  'brazier-standing-a': { g: 'K', cat: 'lantern', opts: { kind: 'brazier', flame: 'fire' }, pal: 'ash', box: { w: 0.7, d: 0.7, h: 1.4 } },
+  'greyfen-stocks': { g: 'N', cat: 'yard', opts: { kind: 'stocks' }, pal: 'fen', box: { w: 2, d: 0.8, h: 1.4 } },
+  'greyfen-herb-bed': { g: 'N', cat: 'planter', opts: { kind: 'herbs' }, pal: 'fen', box: { w: 6, d: 4, h: 0.5 } },
+  'greyfen-marker': { g: 'N', cat: 'post', opts: { kind: 'waymark', state: 'weathered' }, pal: 'fen', colors: { second: '#8a3a2a' }, box: { w: 0.4, d: 0.4, h: 1.6 } },
+  'dragonspine-hawk-nest': { g: 'O', cat: 'clutter', opts: { kind: 'nest' }, pal: 'frost', box: { w: 2.5, d: 2.5, h: 0.8 } },
+  'dragonspine-trophy-wall': { g: 'O', cat: 'yard', opts: { kind: 'trophies' }, pal: 'frost', box: { w: 4, d: 0.4, h: 2.5 } },
+  'dragonspine-prayer-cairn': { g: 'O', cat: 'cairn', opts: { kind: 'stack', moss: 'none' }, pal: 'frost', wax: true, box: { w: 1, d: 1, h: 1.2 } },
+  'dragonspine-carving-stone': { g: 'O', cat: 'runestone', opts: { form: 'standing', runes: 'carved' }, pal: 'frost', box: { w: 1, d: 0.5, h: 1.8 } },
 };
 // The game's palette swatches (missing-objects list).
 const SW = kit.SWATCHES;
 const PALETTES = {
   field: { main: SW.thatch, second: SW.redRoof, wood: SW.bark, metal: '#7d7a74', trim: '#9a7440', stone: SW.warmStone, glow: '#ffb347', plant: SW.grass },
   ash: { main: SW.ashGrey, second: SW.ashGrey, wood: SW.scorched, metal: '#55504b', trim: COPPER, stone: SW.charcoal, glow: SW.ember, plant: SW.scorched },
+  fen: { main: SW.reedThatch, second: SW.peat, wood: SW.fenTimber, metal: '#5d605a', trim: '#7a6a4a', stone: '#7f8679', glow: '#ffb347', plant: SW.lichen },
+  frost: { main: SW.hide, second: SW.snow, wood: SW.darkTimber, metal: '#6f747a', trim: '#b8b0a0', stone: SW.frostStone, glow: '#ffb347', plant: '#6f8a74' },
 };
 let TARGETS = kit.embeddedTargets();
 const gameBox = (id) => TARGETS.objects?.[id] || GAME_IDS[id]?.box || null;
@@ -534,6 +589,9 @@ function makeMaterials(t) {
     paper: std('Paper', { color: col('#d9ccae'), roughness: 0.9 }),
     rope: std('Rope', { color: col('#a3875a'), roughness: 0.95 }),
     wax: std('Wax', { color: col('#efe4c8'), roughness: 0.6 }),
+    berry: std('Berry', { color: col('#b0302a'), roughness: 0.6 }),
+    egg: std('Egg', { color: col('#cfe0e8'), roughness: 0.6 }),
+    soil: std('Soil', { color: col('#4a3626'), roughness: 1 }),
     dark: std('Dark', { color: col('#15110f'), roughness: 1 }),
     fire: std('Fire', { color: col('#ff8a2a'), emissive: col('#ff7a1a'), emissiveIntensity: 3, roughness: 1 }),
     fireCore: std('FireCore', { color: col('#fff0b3'), emissive: col('#ffe080'), emissiveIntensity: 3.5, roughness: 1 }),
@@ -1093,11 +1151,13 @@ function buildTreasure(x) {
 // ---------- dungeon and tavern ----------
 function buildBarrel(x) {
   const { o, r, M, body, add, t } = x;
-  const keg = o.shape === 'keg', H = keg ? 0.6 : 0.9, R0 = keg ? 0.2 : 0.26, R1 = keg ? 0.24 : 0.31;
+  // cradle: a big keg lying front to back (tap at the front); vat: a wide low tub, always open
+  const big = o.shape === 'cradle', vat = o.shape === 'vat', keg = o.shape === 'keg' || big;
+  const H = big ? 1.3 : vat ? 0.8 : keg ? 0.6 : 0.9, R0 = big ? 0.5 : vat ? 0.52 : keg ? 0.2 : 0.26, R1 = big ? 0.58 : vat ? 0.56 : keg ? 0.24 : 0.31;
   const prof = (y) => R0 + (R1 - R0) * Math.sin(PI * (y / H)); // bulge
-  const host = keg ? x.group(body, 'Keg', [H / 2, 0.42, 0], [0, 0, PI / 2]) : body;
+  const host = big ? x.group(body, 'Keg', [0, 0.32 + R1, -H / 2], [PI / 2, 0, 0]) : keg ? x.group(body, 'Keg', [H / 2, 0.42, 0], [0, 0, PI / 2]) : body;
   const pts = []; for (let i = 0; i <= 10; i++) { const y = (i / 10) * H; pts.push([prof(y), y]); }
-  const open = o.top === 'open';
+  const open = o.top === 'open' || vat;
   if (open) pts.push([R0 - 0.02, H], [prof(H * 0.85) - 0.02, H * 0.85], [0, H * 0.85]);
   else pts.push([R0 - 0.02, H], [R0 - 0.02, H - 0.025], [0, H - 0.025]);
   pts.unshift([0, 0]);
@@ -1110,12 +1170,26 @@ function buildBarrel(x) {
   }
   if (open) add(host, 'Contents', new THREE.CircleGeometry(prof(H * 0.88) - 0.02, x.seg(24)), M.liquid, [0, H * 0.88, 0], [-PI / 2, 0, 0]);
   else for (let i = -1; i <= 1; i++) add(host, 'LidPlank', x.box(0.003, 0.004, (R0 - 0.03) * 2 * Math.sqrt(1 - (i * 0.33) ** 2)), M.wood2, [i * (R0 - 0.02) * 0.33, H - 0.023, 0]);
-  const hoopYs = keg ? [0.07, 0.2, H - 0.2, H - 0.07] : [0.08, 0.24, H - 0.24, H - 0.08];
+  const hoopYs = big ? [0.1, 0.36, H - 0.36, H - 0.1] : vat ? [0.1, H - 0.12] : keg ? [0.07, 0.2, H - 0.2, H - 0.07] : [0.08, 0.24, H - 0.24, H - 0.08];
   for (const y of hoopYs) {
     if (o.bands === 'iron') add(host, 'Hoop', new THREE.CylinderGeometry(prof(y + 0.02) + 0.008, prof(y - 0.02) + 0.008, 0.04, x.seg(24), 1, true), M.iron, [0, y, 0]);
     else for (const dy of [-0.01, 0.01]) add(host, 'Rope', new THREE.TorusGeometry(prof(y) + 0.006, 0.008, x.seg(6), x.seg(28)), M.rope, [0, y + dy, 0], [PI / 2, 0, 0]);
   }
-  if (keg) {
+  if (vat) { // a paddle leaning in the dye
+    x.between(body, 'Paddle', V(-0.15, 0.3, 0.05), V(0.42, H + 0.5, -0.2), 0.022, 0.022, M.wood, 6);
+    add(body, 'PaddleBlade', x.box(0.14, 0.3, 0.025), M.wood2, [-0.2, 0.42, 0.08], [0.2, 0, 0.6]);
+  } else if (big) { // brass tap at the front, two cradle saddles on legs
+    add(host, 'Tap', x.cyl(0.035, 0.035, 0.12, 10), M.trim, [0, H + 0.05, -R0 * 0.55]);
+    add(host, 'Spout', x.cyl(0.022, 0.022, 0.12, 8), M.trim, [0, H + 0.1, -R0 * 0.55 - 0.05], [PI / 2, 0, 0]);
+    add(host, 'TapHandle', x.box(0.03, 0.1, 0.03), M.wood2, [0.05, H + 0.1, -R0 * 0.55]);
+    for (const z of [-H * 0.3, H * 0.3]) {
+      add(body, 'CradleSaddle', x.box(R1 * 2 + 0.1, 0.22, 0.16), M.wood2, [0, 0.36, z]);
+      for (const sx of [1, -1]) {
+        add(body, 'CradleLeg', x.box(0.12, 0.3, 0.14), M.wood2, [sx * (R1 - 0.05), 0.15, z]);
+        add(body, 'CradleChock', x.box(0.14, 0.2, 0.15), M.wood2, [sx * (R1 * 0.82), 0.5, z], [0, 0, sx * 0.6]);
+      }
+    }
+  } else if (keg) {
     add(host, 'Tap', x.cyl(0.015, 0.015, 0.06, 10), M.trim, [0, H + 0.02, R0 * 0.55]);
     add(host, 'Spout', x.cyl(0.01, 0.01, 0.05, 8), M.trim, [-0.025, H + 0.04, R0 * 0.55], [0, 0, PI / 2]);
     add(host, 'TapHandle', x.box(0.012, 0.04, 0.012), M.wood2, [0, H + 0.065, R0 * 0.55]);
@@ -1162,6 +1236,12 @@ function buildCrate(x) {
   if (o.stack === 'one') crate([0, 0, 0], 0, 'Crate');
   else if (o.stack === 'two') { crate([0, 0, 0], 0, 'Crate'); crate([r.range(-0.05, 0.05), S, r.range(-0.05, 0.05)], r.range(-0.4, 0.4), 'Crate2'); }
   else { crate([-S * 0.53, 0, 0], r.range(-0.1, 0.1), 'Crate'); crate([S * 0.53, 0, 0], r.range(-0.1, 0.1), 'Crate2'); crate([r.range(-0.04, 0.04), S, 0], r.range(-0.3, 0.3), 'Crate3'); }
+  if (t.cloth) { // a cloth thrown over the first crate, hanging down its front and sides
+    const g = x.group(body, 'Cloth', o.stack === 'three' ? [-S * 0.53, 0, 0] : [0, 0, 0]);
+    add(g, 'ClothTop', x.box(S + 0.06, 0.02, S + 0.06), M.main, [0, S + 0.01, 0]);
+    add(g, 'ClothFront', x.box(S + 0.06, S * 0.55, 0.02), M.main, [0, S * 0.73, S / 2 + 0.03], [-0.05, 0, 0]);
+    add(g, 'ClothSide', x.box(0.02, S * 0.4, S + 0.06), M.main, [-S / 2 - 0.03, S * 0.8, 0], [0, 0, -0.05]);
+  }
 }
 
 function buildLantern(x) {
@@ -1500,7 +1580,7 @@ function buildRunestone(x) {
   };
   if (o.form === 'standing') {
     standing(body, 'StandingStone', [0, 0, 0], 1, 0);
-    add(body, 'Grass', lumpyDome(1, x.seg(18), x.seg(6), r.next() * 50, 0.4), M.plant, [0, 0, 0], [0, 0, 0], [0.55, 0.08, 0.4]);
+    add(body, 'Grass', lumpyDome(1, x.seg(18), x.seg(6), r.next() * 50, 0.4), M.plant, [0, 0, 0], [0, 0, 0], [0.55, 0.08, 0.3]);
   } else if (o.form === 'obelisk') {
     const H = 2.2, rb = 0.26, rt = 0.17;
     add(body, 'Plinth', x.box(0.62, 0.15, 0.62), M.stone, [0, 0.075, 0]);
@@ -1538,8 +1618,8 @@ function buildRunestone(x) {
   }
   if (o.runes === 'glowing' && o.form !== 'circle') {
     const c = o.form === 'altar' ? V(0, 1.2, 0) : V(0, o.form === 'obelisk' ? 1.4 : 0.9, 0);
-    const sp = x.spin(c, 'y', 1);
-    for (let i = 0; i < 5; i++) { const a = (i / 5) * PI * 2; add(sp, 'Mote', x.sphere(0.03, 8, 6), M.glow, [Math.cos(a) * 0.6, Math.sin(a * 2) * 0.15, Math.sin(a) * 0.6]); }
+    const sp = x.spin(c, 'y', 1), rr = t.box ? Math.min(0.6, 0.9 * Math.min(t.box.w, t.box.d) / t.box.h) : 0.6; // orbit kept inside a thin box
+    for (let i = 0; i < 5; i++) { const a = (i / 5) * PI * 2; add(sp, 'Mote', x.sphere(0.03, 8, 6), M.glow, [Math.cos(a) * rr, Math.sin(a * 2) * 0.15, Math.sin(a) * rr]); }
   }
 }
 
@@ -1726,6 +1806,40 @@ function buildHeap(x) {
       const m = add(body, ore ? 'Ore' : 'Chunk', x.rock(s), ore ? M.trim : r.chance(0.5) ? M.stone : M.stone2, [Math.cos(a) * f * R, H * Math.sqrt(Math.max(0, 1 - f * f)) * 0.95 + s * 0.3, Math.sin(a) * f * R]);
       if (ore) x.facet.push(m);
     }
+  } else if (o.kind === 'coal') {
+    const R = 1.0, H = 0.65;
+    add(body, 'Coal', lumpyDome(1, x.seg(20), x.seg(8), r.next() * 50, 0.3), M.dark, [0, 0, 0], [0, 0, 0], [R, H, R]);
+    const n = Math.round(26 * Math.max(0.6, x.D));
+    for (let i = 0; i < n; i++) {
+      const a = r.next() * PI * 2, f = Math.sqrt(r.next()) * 1.1, s = r.range(0.06, 0.13);
+      add(body, 'Lump', x.rock(s), r.chance(0.5) ? M.char : M.dark, [Math.cos(a) * f * R, H * Math.sqrt(Math.max(0, 1 - f * f)) * 0.95 + s * 0.3, Math.sin(a) * f * R]);
+    }
+    // a shovel stuck in the heap
+    x.between(body, 'ShovelHaft', V(0.25, H * 0.75, 0.1), V(0.55, H + 0.75, 0.3), 0.022, 0.022, M.wood, 6);
+    add(body, 'ShovelBlade', x.box(0.24, 0.3, 0.03), M.iron, [0.2, H * 0.62, 0.07], [0.35, 0, -0.35]);
+  } else if (o.kind === 'clamp') {
+    // a dome of stacked logs sealed with turf and earth, logs showing round the foot, smoke vents and glowing cracks
+    const R = 1.9, H = 1.85;
+    add(body, 'Clamp', lumpyDome(1, x.seg(24), x.seg(10), r.next() * 50, 0.15), M.second, [0, 0, 0], [0, 0, 0], [R, H, R]);
+    const n = x.seg(22);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * PI * 2 + r.range(-0.05, 0.05);
+      add(body, 'Log', x.cyl(0.09, 0.1, 0.9, 6), r.chance(0.3) ? M.char : M.wood, [Math.cos(a) * (R - 0.1), 0.12, Math.sin(a) * (R - 0.1)], [0, -a, PI / 2 - 0.25]);
+    }
+    for (let i = 0; i < 9; i++) { // turf sods
+      const a = r.next() * PI * 2, f = r.range(0.3, 0.8), y = H * Math.sqrt(1 - f * f);
+      add(body, 'Turf', x.box(0.5, 0.1, 0.4), M.plant, [Math.cos(a) * f * R, y, Math.sin(a) * f * R], [r.range(-0.4, 0.4), r.next() * 3, r.range(-0.4, 0.4)]);
+    }
+    for (let i = 0; i < 4; i++) {
+      const a = r.next() * PI * 2, f = r.range(0.15, 0.55), y = H * Math.sqrt(1 - f * f);
+      add(body, 'Vent', x.cyl(0.07, 0.09, 0.14, 6), M.dark, [Math.cos(a) * f * R, y + 0.02, Math.sin(a) * f * R]);
+    }
+    const yAt = (f) => H * Math.sqrt(Math.max(0, 1 - f * f));
+    for (let i = 0; i < (t.enchanted ? 6 : 3); i++) {
+      const a = r.next() * PI * 2, f = r.range(0.4, 0.85), p = V(Math.cos(a) * f * R, yAt(f) + 0.01, Math.sin(a) * f * R);
+      const m = add(body, 'Crack', x.box(r.range(0.3, 0.6), 0.03, 0.05), M.glow, p, [0, r.next() * PI, 0]);
+      m.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(UP, V(p.x / (R * R), p.y / (H * H), p.z / (R * R)).normalize()));
+    }
   } else {
     const R = 1.1, H = 0.5;
     add(body, 'Rubble', lumpyDome(1, x.seg(20), x.seg(8), r.next() * 50, 0.4), M.stone2, [0, 0, 0], [0, 0, 0], [R, H, R]);
@@ -1765,6 +1879,18 @@ function buildCairn(x) {
       add(body, 'Skull', x.sphere(0.07, 12, 8), M.paper, [0, y + 0.88, 0.02], [0, 0, 0], [1, 0.9, 1.15]);
     }
   }
+  if (t.wax && o.kind !== 'mound') { // prayer cairn: wax on the top stone and a carved hammer-and-flame mark on the front
+    const { m, rad } = stones[stones.length - 1];
+    for (let i = 0; i < 4; i++) add(body, 'Wax', x.sphere(rad * 0.18, 8, 6), M.wax, [m.position.x + r.range(-0.4, 0.4) * rad, m.position.y + rad * 0.36, m.position.z + r.range(-0.4, 0.4) * rad], [0, 0, 0], [1.4, 0.4, 1.2]);
+    const { m: m2, rad: rad2 } = stones[1], h = surfaceHit(m2, m2.position, V(0, 0.1, 1).normalize());
+    if (h) {
+      const g = x.group(body, 'Mark', h.point.addScaledVector(h.normal, 0.004)); g.quaternion.setFromUnitVectors(V(0, 0, 1), h.normal);
+      const k = rad2 * 0.5;
+      add(g, 'HammerHead', x.box(0.5 * k, 0.2 * k, 0.04), M.dark, [0, 0.25 * k, 0]);
+      add(g, 'HammerHaft', x.box(0.09 * k, 0.55 * k, 0.04), M.dark, [0, -0.1 * k, 0]);
+      add(g, 'Flame', x.extrude(shapeOf([[-0.12, 0], [0, 0.38], [0.12, 0], [0, -0.06]]), 0.03, 0), M.dark, [0.42 * k, 0, 0], [0, 0, 0], [k, k, 1]);
+    }
+  }
   if (o.moss === 'moss') {
     const { m, rad } = stones[Math.min(1, stones.length - 1)];
     add(body, 'Moss', lumpyDome(1, x.seg(12), x.seg(5), r.next() * 50, 0.4), M.plant, [m.position.x + rad * 0.3, m.position.y + rad * 0.3, m.position.z + rad * 0.2], [0, 0, 0], [rad * 0.6, rad * 0.18, rad * 0.5]);
@@ -1782,7 +1908,7 @@ function buildPost(x) {
   const cage = (parent, c, R, H) => { // round iron cage, bottom at c
     add(parent, 'CageFloor', x.cyl(R, R, 0.03, 16), M.iron, [c.x, c.y + 0.015, c.z]);
     for (const y of [0.03, H * 0.5, H]) add(parent, 'CageRing', new THREE.TorusGeometry(R, 0.015, x.seg(5), x.seg(24)), M.iron, [c.x, c.y + y, c.z], [PI / 2, 0, 0]);
-    const n = 10;
+    const n = Math.max(10, Math.round(R * 16));
     for (let i = 0; i < n; i++) { const a = (i / n) * PI * 2; add(parent, 'Bar', x.cyl(0.012, 0.012, H, 5), M.iron, [c.x + Math.cos(a) * R, c.y + H / 2, c.z + Math.sin(a) * R]); }
     for (let i = 0; i < 2; i++) add(parent, 'DomeBar', new THREE.TorusGeometry(R, 0.012, x.seg(4), x.seg(14), PI), M.iron, [c.x, c.y + H, c.z], [0, (i * PI) / 2, 0], [1, 0.7, 1]);
     add(parent, 'CageRingTop', new THREE.TorusGeometry(0.06, 0.012, x.seg(5), x.seg(12)), M.iron, [c.x, c.y + H + R * 0.7 + 0.05, c.z]);
@@ -1819,8 +1945,50 @@ function buildPost(x) {
       const g = x.group(body, 'Sign', [0, y, 0], [0, a, 0]);
       add(g, 'Board', x.extrude(arrow, 0.035, 0.008), wood, [0.05, 0, 0]);
     }
-  } else { // standing cage
-    cage(body, V(0, 0, 0), 0.5, 1.6);
+  } else if (o.kind === 'toll') {
+    // stout post at the back, the bar lowered across the road towards the front (+Z), a hanging lantern and a strongbox
+    const H = 2.1, z0 = -0.95;
+    add(body, 'Post', x.box(0.24, H, 0.24), wood, [0, H / 2, z0]);
+    add(body, 'PostCap', x.box(0.3, 0.06, 0.3), wood, [0, H + 0.03, z0]);
+    add(body, 'Pivot', x.cyl(0.03, 0.03, 0.34, 8), M.iron, [0, 1.0, z0], [0, 0, PI / 2]);
+    const L = 2.2, n = 6, bar = x.group(body, 'Bar', [0, 1.0, z0 - 0.25], [-0.03, 0, 0]);
+    for (let i = 0; i < n; i++) add(bar, 'BarStripe', x.box(0.11, 0.11, L / n), i % 2 ? M.second : M.main, [0, 0, (i + 0.5) * (L / n)]);
+    add(bar, 'Counterweight', x.box(0.16, 0.2, 0.22), M.stone, [0, -0.02, -0.05]);
+    add(body, 'BarRest', x.box(0.1, 0.95, 0.1), wood, [0, 0.475, z0 + 2.05]);
+    add(body, 'RestFork', x.box(0.2, 0.06, 0.1), wood, [0, 0.95, z0 + 2.05]);
+    add(body, 'Bracket', x.box(0.06, 0.06, 0.45), M.iron, [0, H - 0.2, z0 + 0.3]);
+    add(body, 'LanternChain', x.cyl(0.006, 0.006, 0.18, 4), M.iron, [0, H - 0.32, z0 + 0.48]);
+    add(body, 'Lantern', x.cyl(0.07, 0.08, 0.18, 6), M.iron, [0, H - 0.5, z0 + 0.48]);
+    add(body, 'LanternGlow', x.cyl(0.055, 0.055, 0.12, 6), M.glow, [0, H - 0.5, z0 + 0.48]);
+    add(body, 'Strongbox', x.box(0.42, 0.28, 0.3), M.iron, [0, 0.14, z0 + 0.32]);
+    add(body, 'StrongboxLid', x.box(0.44, 0.06, 0.32), M.trim, [0, 0.3, z0 + 0.32]);
+    add(body, 'Base', x.rock(0.3), M.stone, [0, 0.06, z0], [0, 0, 0], [1.1, 0.4, 1.1]);
+  } else if (o.kind === 'notice') {
+    // board on two posts under a small shingle roof, papers pinned to it
+    const H = 2.1, W = 1.9;
+    for (const s of [1, -1]) add(body, 'Post', x.box(0.12, H, 0.12), wood, [s * (W / 2 - 0.06), H / 2, 0]);
+    add(body, 'Board', x.box(W - 0.16, 1.0, 0.05), M.wood2, [0, 1.35, 0]);
+    add(body, 'Frame', x.box(W - 0.1, 0.06, 0.08), wood, [0, 1.88, 0]);
+    add(body, 'Frame', x.box(W - 0.1, 0.06, 0.08), wood, [0, 0.82, 0]);
+    for (const s of [1, -1]) add(body, 'Shingles', x.box(W + 0.1, 0.04, 0.2), M.second, [0, H + 0.02, s * 0.08], [s * 0.6, 0, 0]);
+    for (let i = 0; i < 6; i++) {
+      const w = r.range(0.18, 0.3), h = r.range(0.22, 0.34);
+      add(body, 'Paper', x.box(w, h, 0.006), M.paper, [-0.65 + i * 0.26 + r.range(-0.03, 0.03), 1.35 + r.range(-0.22, 0.22), 0.03], [0, 0, r.range(-0.12, 0.12)]);
+    }
+  } else if (o.kind === 'waymark') {
+    // leaning causeway post, a carved reed sign and a rag tied on
+    const H = 1.55, lean = x.group(body, 'Lean', [0, 0, 0], [r.range(0.06, 0.1), 0, r.range(-0.08, -0.04)]);
+    add(lean, 'Post', x.cyl(0.08, 0.1, H, 7), wood, [0, H / 2, 0]);
+    add(lean, 'Cap', x.cone(0.09, 0.1, 7), wood, [0, H + 0.05, 0]);
+    add(lean, 'Sign', x.box(0.3, 0.36, 0.05), M.wood2, [0, H - 0.4, 0.1]);
+    for (let i = 0; i < 3; i++) add(lean, 'Reed', x.box(0.02, 0.28, 0.01), M.dark, [-0.07 + i * 0.07, H - 0.4, 0.13], [0, 0, (i - 1) * 0.15]);
+    add(lean, 'ReedHead', x.box(0.035, 0.08, 0.01), M.dark, [0, H - 0.25, 0.13]);
+    add(lean, 'Rag', x.box(0.07, 0.34, 0.015), M.second, [0.1, H - 0.75, 0.02], [0, 0.3, 0.2]);
+    add(lean, 'Knot', x.cyl(0.095, 0.095, 0.05, 7), M.second, [0, H - 0.62, 0]);
+    add(body, 'Mud', lumpyDome(1, x.seg(12), x.seg(4), r.next() * 50, 0.3), M.stone2, [0, 0, 0], [0, 0, 0], [0.22, 0.08, 0.22]);
+  } else { // standing cage, widened to the box's footprint (cinder-cage is 3 x 3 x 2.4)
+    const k = t.box ? t.box.w / t.box.h : 0.5, R = Math.max(0.5, (1.71 * k) / (2 - 0.7 * Math.min(k, 2.5)));
+    cage(body, V(0, 0, 0), R, 1.6);
     if (t.enchanted) add(body, 'Wisp', x.sphere(0.12, 14, 10), M.glow, [0, 0.6, 0]);
   }
 }
@@ -1903,6 +2071,10 @@ function buildFlagstones(x) {
       }
     }
     add(body, 'Grass', x.cyl(R - 0.05, R, 0.02, 40), M.plant, [0, 0.01, 0]);
+    if (t.kerb) for (let i = 0, n = 36; i < n; i++) { // trial ring: a low kerb of set stones around the paving
+      const a = (i / n) * PI * 2 + r.range(-0.02, 0.02), h = r.range(0.14, 0.2);
+      add(body, 'Kerb', x.box(0.7, h, 0.3), r.chance(0.3) ? M.stone2 : M.stone, [Math.cos(a) * (R - 0.15), h / 2, Math.sin(a) * (R - 0.15)], [0, -a + PI / 2, r.range(-0.04, 0.04)]);
+    }
   }
   if (t.enchanted) for (let i = 0; i < 6; i++) { const a = (i / 6) * PI * 2, rr = o.kind === 'path' ? 0 : 3.9; x.rune(body, [Math.cos(a) * rr + (o.kind === 'path' ? -1.5 + i * 0.6 : 0), 0.072, Math.sin(a) * rr], 0.2, M.glow, [-PI / 2, 0, a]); }
 }
@@ -1942,12 +2114,231 @@ function buildClutter(x) {
     sack(V(-0.35, 0, 0.1), 1.3); sack(V(-0.1, 0, 0.42), 1, [0.4, 0, -0.3]);
     for (let i = 0; i < 4; i++) add(body, 'Rope', new THREE.TorusGeometry(0.16, 0.022, x.seg(5), x.seg(18)), M.rope, [0.35, S + 0.02 + i * 0.04, 0.05], [PI / 2, 0, 0]);
     add(body, 'Tarp', x.box(0.9, 0.02, 0.6), M.second, [-0.2, 0.01, -0.35], [0, 0.2, 0]);
+  } else if (o.kind === 'basket') {
+    // wicker basket of apples and turnips
+    add(body, 'Basket', x.lathe([[0, 0], [0.2, 0], [0.26, 0.1], [0.29, 0.3], [0.27, 0.3], [0.24, 0.12], [0.18, 0.03], [0, 0.03]], 16), M.rope);
+    for (let i = 0; i < 3; i++) add(body, 'Weave', new THREE.TorusGeometry(0.235 + i * 0.022, 0.01, x.seg(4), x.seg(18)), M.wood, [0, 0.07 + i * 0.09, 0], [PI / 2, 0, 0]);
+    add(body, 'Rim', new THREE.TorusGeometry(0.28, 0.018, x.seg(5), x.seg(20)), M.wood, [0, 0.3, 0], [PI / 2, 0, 0]);
+    add(body, 'Handle', new THREE.TorusGeometry(0.26, 0.016, x.seg(4), x.seg(14), PI), M.wood, [0, 0.3, 0], [0, 0.4, 0], [1, 0.4, 1]);
+    for (let i = 0; i < 10; i++) {
+      const a = r.next() * PI * 2, f = Math.sqrt(r.next()) * 0.18, apple = i % 2 === 0;
+      add(body, apple ? 'Apple' : 'Turnip', x.sphere(apple ? 0.05 : 0.055, 10, 8), apple ? M.main : M.second, [Math.cos(a) * f, 0.28 + r.range(0, 0.04), Math.sin(a) * f], [0, 0, 0], apple ? 1 : [1, 0.85, 1]);
+      if (!apple) add(body, 'TurnipTop', x.cone(0.02, 0.06, 4), M.plant, [Math.cos(a) * f, 0.36, Math.sin(a) * f]);
+    }
+  } else if (o.kind === 'nest') {
+    // a big nest of twigs and bones on a rock ledge, white down, three pale speckled eggs
+    add(body, 'Ledge', x.rock(1.1), M.stone, [0, 0.12, 0], [0, 0, 0], [1.15, 0.2, 1.1]);
+    const n = x.seg(36);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * PI * 2 + r.range(-0.1, 0.1), R = r.range(0.78, 1.02), y = 0.4 + r.range(0, 0.3);
+      const p = V(Math.cos(a) * R, y, Math.sin(a) * R), d = V(-Math.sin(a), r.range(-0.3, 0.3), Math.cos(a)).multiplyScalar(r.range(0.3, 0.45));
+      x.between(body, 'Twig', p.clone().sub(d), p.clone().add(d), 0.03, 0.02, r.chance(0.3) ? M.wood2 : M.wood, 4);
+    }
+    add(body, 'Bowl', new THREE.TorusGeometry(0.72, 0.16, x.seg(5), x.seg(18)), M.wood2, [0, 0.38, 0], [PI / 2, 0, 0], [1, 1, 0.9]);
+    add(body, 'Floor', x.cyl(0.75, 0.75, 0.12, 14), M.wood2, [0, 0.3, 0]);
+    for (let i = 0; i < 6; i++) add(body, 'Down', x.sphere(0.08, 6, 4), M.second, [r.range(-0.5, 0.5), 0.4, r.range(-0.5, 0.5)], [0, 0, 0], [1.3, 0.4, 1]);
+    for (let i = 0; i < 3; i++) add(body, 'Egg', x.sphere(0.1, 10, 8), M.egg, [-0.15 + i * 0.16, 0.45, r.range(-0.1, 0.1)], [r.range(-0.3, 0.3), 0, PI / 2 + r.range(-0.3, 0.3)], [1, 1.3, 1]);
+    for (let i = 0; i < 4; i++) {
+      const g = x.group(body, 'Bone', [r.range(-0.8, 0.8), 0.5, r.range(-0.8, 0.8)], [0, r.next() * PI, PI / 2]);
+      add(g, 'Shaft', x.cyl(0.02, 0.02, 0.35, 5), M.paper);
+      for (const sg of [1, -1]) add(g, 'Knob', x.sphere(0.035, 6, 4), M.paper, [0, sg * 0.175, 0]);
+    }
   } else {
     const n = r.int(3, 4);
     for (let i = 0; i < n; i++) {
       const a = (i / n) * PI * 2 + r.range(-0.3, 0.3);
       sack(V(Math.cos(a) * 0.3, 0, Math.sin(a) * 0.3), r.range(0.9, 1.3), i === n - 1 ? [PI / 2 - 0.2, 0, 0] : [r.range(-0.1, 0.1), 0, r.range(-0.1, 0.1)]);
     }
+  }
+}
+
+// ---------- spears, tents, planters, yard kit ----------
+// Built upright (butt at y 0, point up). A game id with "hand" lays it along +Z with the grip as its origin.
+function buildPolearm(x) {
+  const { o, r, M, body, add, t } = x;
+  const host = t.hand ? x.group(body, 'Laid', [0, 0, 0], [PI / 2, 0, 0]) : body;
+  const lance = o.kind === 'lance', L = lance ? 3.2 : 2.2, head = lance ? 0.32 : 0.3, shaftL = L - head;
+  if (lance) {
+    add(host, 'Shaft', x.lathe([[0, 0], [0.035, 0], [0.045, 0.5], [0.05, 0.9], [0.04, 1.6], [0.022, shaftL], [0, shaftL]], 10), M.wood);
+    add(host, 'Vamplate', x.lathe([[0.04, 0.88], [0.12, 0.92], [0.1, 0.98], [0.05, 1.18], [0.04, 1.2]], 14), M.metal);
+    add(host, 'Grip', x.cyl(0.045, 0.045, 0.32, 10), M.second, [0, 0.66, 0]);
+    add(host, 'Socket', x.cyl(0.024, 0.03, 0.1, 8), M.iron, [0, shaftL, 0]);
+    add(host, 'Head', x.lathe([[0.024, 0], [0.03, 0.04], [0.02, 0.2], [0, head]], 6), M.metal, [0, shaftL + 0.02, 0]);
+    if (o.pennon === 'pennon') add(host, 'Pennon', x.extrude(shapeOf([[0, 0], [0.42, 0.06], [0.3, 0.12], [0.42, 0.18], [0, 0.24]]), 0.008, 0), M.main, [0.03, shaftL - 0.42, 0], [0, 0, -PI / 2 + 0.05]);
+    x.grip = V(0, 0.66, 0);
+  } else {
+    add(host, 'Shaft', x.cyl(0.017, 0.02, shaftL, 8), M.wood, [0, shaftL / 2, 0]);
+    add(host, 'ButtCap', x.cyl(0.022, 0.018, 0.05, 8), M.iron, [0, 0.025, 0]);
+    add(host, 'Wrap', x.cyl(0.024, 0.024, 0.3, 8), M.second, [0, 0.9, 0]);
+    for (const y of [0.75, 1.05]) add(host, 'WrapTie', x.cyl(0.026, 0.026, 0.02, 8), M.rope, [0, y, 0]);
+    add(host, 'Socket', x.cyl(0.018, 0.024, 0.1, 8), M.iron, [0, shaftL + 0.02, 0]);
+    // leaf-shaped blade, flat
+    add(host, 'Blade', x.lathe([[0.016, 0], [0.04, 0.07], [0.045, 0.12], [0.03, 0.2], [0, head - 0.04]], 4), M.metal, [0, shaftL + 0.06, 0], [0, PI / 4, 0], [1, 1, 0.35]);
+    x.grip = V(0, 0.9, 0);
+  }
+  if (t.enchanted) for (let i = 0; i < 3; i++) x.rune(host, [0, shaftL - 0.3 - i * 0.12, 0.025], 0.05, M.glow);
+  if (t.hand) x.grip.applyAxisAngle(V(1, 0, 0), PI / 2);
+}
+
+// A-frame canvas tent along z (door at +z); the low refugee tent turns side-on with a bedroll and a bundle at its open end.
+function buildTent(x) {
+  const { o, r, M, body, add, t } = x;
+  const low = o.kind === 'refugee', host = low ? x.group(body, 'Tent', [0, 0, 0], [0, PI / 2, 0]) : body;
+  const L = low ? 2.5 : 2.4, hw = low ? 1.05 : 1.0, H = low ? 1.85 : 1.5, sag = 0.06;
+  const slope = Math.hypot(hw, H), ang = Math.atan2(hw, H);
+  for (const s of [1, -1]) {
+    const side = x.group(host, 'Side', [s * hw / 2, H / 2, 0], [0, 0, s * ang]);
+    const n = 3; // panels, the middle one sagging a little
+    for (let i = 0; i < n; i++) add(side, 'Canvas', x.box(0.025, slope, L / n + 0.01), M.main, [-s * (i === 1 ? sag : 0), 0, -L / 2 + (i + 0.5) * (L / n)]);
+    if (o.patch === 'patch' && s > 0) add(side, 'Patch', x.box(0.03, slope * 0.35, L * 0.25), M.second, [0.004, -slope * 0.12, r.range(-0.4, 0.4)]);
+  }
+  const tri = shapeOf([[-hw, 0], [hw, 0], [0, H]]);
+  add(host, 'BackWall', x.extrude(tri, 0.025, 0), M.main, [0, 0, -L / 2]);
+  if (!low) { // door: two flaps tied back
+    for (const s of [1, -1]) add(host, 'Flap', x.extrude(shapeOf([[0, 0], [s * hw * 0.55, 0], [0, H * 0.95]]), 0.02, 0), M.main, [s * hw * 0.42, 0, L / 2 + 0.05], [0, -s * 0.5, 0]);
+  }
+  for (const z of [-L / 2 - 0.02, L / 2 + 0.02]) add(host, 'Pole', x.cyl(0.03, 0.03, H + 0.12, 6), M.wood, [0, (H + 0.12) / 2, z]);
+  add(host, 'Ridge', x.cyl(0.03, 0.03, L + 0.1, 6), M.wood, [0, H + 0.01, 0], [PI / 2, 0, 0]);
+  for (const s of [1, -1]) { // guy ropes to pegs beyond each pole, sagging
+    const top = V(0, H + 0.08, s * (L / 2 + 0.02)), peg = V(0, 0.04, s * (L / 2 + 0.33)), mid = top.clone().lerp(peg, 0.5).add(V(0, -0.05, 0));
+    add(host, 'GuyRope', x.tube([top, mid, peg], 0.008, 0.008, 4, 6), M.rope);
+    add(host, 'Peg', x.cyl(0.015, 0.008, 0.14, 4), M.wood2, [0, 0.03, s * (L / 2 + 0.35)]);
+  }
+  if (low) { // bedroll and bundle at the open end (+z of the tent)
+    add(host, 'Bedroll', x.cyl(0.12, 0.12, 0.7, 10), M.second, [0, 0.12, L / 2 - 0.25], [0, 0, PI / 2]);
+    add(host, 'Bundle', x.sphere(0.2, 10, 8), M.rope, [0.45, 0.16, L / 2 - 0.1], [0, 0, 0], [1, 0.8, 0.9]);
+    add(host, 'BundleTie', new THREE.TorusGeometry(0.12, 0.015, x.seg(4), x.seg(12)), M.wood2, [0.45, 0.3, L / 2 - 0.1], [PI / 2, 0, 0]);
+  }
+}
+
+// A flower planter box, a raised vegetable bed, or a fenced herb bed in boggy ground.
+function buildPlanter(x) {
+  const { o, r, M, body, add, t } = x;
+  const flower = (p, h, mat) => {
+    add(body, 'Stem', x.cyl(0.008, 0.008, h, 4), M.plant, [p.x, p.y + h / 2, p.z]);
+    add(body, 'Bloom', x.sphere(0.035, 6, 4), mat, [p.x, p.y + h, p.z], [0, 0, 0], [1, 0.6, 1]);
+  };
+  if (o.kind === 'box') {
+    const W = 1.2, D = 0.4, H = 0.36;
+    for (const s of [1, -1]) {
+      add(body, 'Plank', x.box(W, H, 0.04), M.wood, [0, H / 2, s * (D / 2 - 0.02)]);
+      add(body, 'End', x.box(0.04, H, D), M.wood, [s * (W / 2 - 0.02), H / 2, 0]);
+      add(body, 'Foot', x.box(0.08, 0.05, D + 0.04), M.wood2, [s * (W / 2 - 0.1), 0.025, 0]);
+    }
+    add(body, 'Soil', x.box(W - 0.08, 0.04, D - 0.08), M.soil, [0, H - 0.04, 0]);
+    for (let i = 0; i < 9; i++) add(body, 'Leaves', x.sphere(0.08, 8, 6), M.plant, [-0.48 + i * 0.12, H + 0.02, r.range(-0.06, 0.06)], [0, 0, 0], [1, 0.7, 1]);
+    for (let i = 0; i < 14; i++) flower(V(r.range(-0.52, 0.52), H, r.range(-0.12, 0.12)), r.range(0.12, 0.22), i % 2 ? M.main : M.second);
+  } else if (o.kind === 'garden') {
+    const W = 2.0, D = 1.4, H = 0.24;
+    for (const s of [1, -1]) {
+      add(body, 'Board', x.box(W, H, 0.05), M.wood, [0, H / 2, s * (D / 2 - 0.025)]);
+      add(body, 'Board', x.box(0.05, H, D), M.wood, [s * (W / 2 - 0.025), H / 2, 0]);
+    }
+    for (const sx of [1, -1]) for (const sz of [1, -1]) add(body, 'Stake', x.box(0.07, H + 0.08, 0.07), M.wood2, [sx * (W / 2 - 0.02), (H + 0.08) / 2, sz * (D / 2 - 0.02)]);
+    add(body, 'Soil', lumpyDome(1, x.seg(16), x.seg(4), r.next() * 50, 0.2), M.soil, [0, H - 0.06, 0], [0, 0, 0], [W / 2 - 0.06, 0.08, D / 2 - 0.06]);
+    for (let row = 0; row < 3; row++) for (let i = 0; i < 5; i++) {
+      const p = V(-0.72 + i * 0.36 + r.range(-0.03, 0.03), H, -0.42 + row * 0.42);
+      if (row === 1) { for (let k = 0; k < 3; k++) add(body, 'Leek', x.cone(0.025, 0.28, 4), M.plant, [p.x + (k - 1) * 0.06, p.y + 0.14, p.z], [r.range(-0.15, 0.15), 0, r.range(-0.15, 0.15)]); }
+      else add(body, 'Cabbage', x.sphere(0.12, 8, 6), M.plant, [p.x, p.y + 0.06, p.z], [0, r.next() * 3, 0], [1, 0.75, 1]);
+    }
+  } else {
+    // boggy ground, a low wattle fence round the bed, bog myrtle clumps, red sundews and a pale mire-lily
+    const W = 6, D = 4;
+    add(body, 'Bog', lumpyDome(1, x.seg(20), x.seg(4), r.next() * 50, 0.25), M.second, [0, 0, 0], [0, 0, 0], [W / 2, 0.12, D / 2]);
+    const posts = [];
+    for (let i = 0; i <= 6; i++) posts.push(V(-W / 2 + 0.15 + (i / 6) * (W - 0.3), 0, D / 2 - 0.15), V(-W / 2 + 0.15 + (i / 6) * (W - 0.3), 0, -D / 2 + 0.15));
+    for (let i = 1; i < 4; i++) posts.push(V(W / 2 - 0.15, 0, -D / 2 + 0.15 + (i / 4) * (D - 0.3)), V(-W / 2 + 0.15, 0, -D / 2 + 0.15 + (i / 4) * (D - 0.3)));
+    for (const p of posts) add(body, 'Stake', x.cyl(0.035, 0.04, 0.5, 5), M.wood, [p.x, 0.25, p.z], [r.range(-0.06, 0.06), 0, r.range(-0.06, 0.06)]);
+    for (const y of [0.22, 0.38]) for (const s of [1, -1]) {
+      add(body, 'Wattle', x.box(W - 0.3, 0.06, 0.04), M.wood2, [0, y, s * (D / 2 - 0.15)]);
+      add(body, 'Wattle', x.box(0.04, 0.06, D - 0.3), M.wood2, [s * (W / 2 - 0.15), y, 0]);
+    }
+    for (let i = 0; i < 16; i++) add(body, 'Myrtle', x.sphere(r.range(0.15, 0.25), 7, 5), M.plant, [r.range(-2.5, 2.5), 0.14, r.range(-1.5, 1.5)], [0, 0, 0], [1, 0.8, 1]);
+    for (let i = 0; i < 14; i++) add(body, 'Sundew', x.cone(0.05, 0.14, 4), M.berry, [r.range(-2.5, 2.5), 0.17, r.range(-1.5, 1.5)]);
+    for (let i = 0; i < 3; i++) {
+      const p = V(r.range(-2, 2), 0.12, r.range(-1.2, 1.2));
+      add(body, 'LilyStem', x.cyl(0.012, 0.012, 0.26, 4), M.plant, [p.x, p.y + 0.13, p.z]);
+      for (let k = 0; k < 5; k++) add(body, 'LilyPetal', x.box(0.04, 0.012, 0.12), M.paper, [p.x + Math.cos(k * 1.26) * 0.05, p.y + 0.27, p.z + Math.sin(k * 1.26) * 0.05], [0.4, -k * 1.26 + PI / 2, 0]);
+    }
+  }
+}
+
+// Forge Row and yard kit: an anvil on a stump, a treadle grindstone, a rack of iron stock, a trophy wall, stocks.
+function buildYard(x) {
+  const { o, r, M, body, add, t } = x;
+  if (o.kind === 'anvil') {
+    add(body, 'Stump', x.cyl(0.19, 0.22, 0.5, 10), M.wood, [0, 0.25, 0]);
+    add(body, 'StumpTop', x.cyl(0.18, 0.18, 0.01, 10), M.woodCut, [0, 0.505, 0]);
+    add(body, 'AnvilFoot', x.box(0.42, 0.08, 0.26), M.iron, [0, 0.55, 0]);
+    add(body, 'AnvilWaist', x.box(0.24, 0.14, 0.15), M.iron, [0, 0.66, 0]);
+    add(body, 'AnvilFace', x.box(0.5, 0.11, 0.18), M.iron, [-0.04, 0.785, 0]);
+    add(body, 'Horn', x.cone(0.08, 0.26, 8), M.iron, [0.33, 0.79, 0], [0, 0, -PI / 2], [1, 1, 0.9]);
+    add(body, 'Heel', x.box(0.1, 0.07, 0.14), M.iron, [-0.33, 0.8, 0]);
+    add(body, 'HammerHead', x.box(0.14, 0.05, 0.05), M.metal, [-0.12, 0.865, 0.03], [0, 0.4, 0]);
+    add(body, 'HammerHaft', x.cyl(0.012, 0.012, 0.3, 6), M.wood2, [-0.12, 0.865, 0.03], [PI / 2, 0, 0.4]);
+    x.between(body, 'Tongs', V(0.05, 0.85, -0.05), V(0.28, 0.85, 0.12), 0.01, 0.01, M.iron, 4);
+    x.between(body, 'Tongs', V(0.06, 0.85, -0.03), V(0.3, 0.85, 0.1), 0.01, 0.01, M.iron, 4);
+  } else if (o.kind === 'grindstone') {
+    add(body, 'Trough', x.box(0.7, 0.22, 0.4), M.wood2, [0, 0.11, 0]);
+    add(body, 'Water', x.box(0.62, 0.02, 0.32), M.liquid, [0, 0.2, 0]);
+    for (const s of [1, -1]) {
+      x.between(body, 'FrameLeg', V(s * 0.42, 0, -0.3), V(s * 0.42, 0.75, 0), 0.04, 0.035, M.wood, 4);
+      x.between(body, 'FrameLeg', V(s * 0.42, 0, 0.3), V(s * 0.42, 0.75, 0), 0.04, 0.035, M.wood, 4);
+    }
+    add(body, 'Wheel', x.cyl(0.38, 0.38, 0.12, 20), M.stone, [0, 0.7, 0], [0, 0, PI / 2]);
+    add(body, 'Axle', x.cyl(0.025, 0.025, 1.0, 6), M.iron, [0, 0.7, 0], [0, 0, PI / 2]);
+    add(body, 'Crank', x.box(0.04, 0.2, 0.04), M.iron, [0.5, 0.62, 0]);
+    x.between(body, 'TreadleRod', V(0.5, 0.52, 0), V(0.5, 0.08, 0.32), 0.012, 0.012, M.iron, 4);
+    add(body, 'Treadle', x.box(0.2, 0.04, 0.5), M.wood, [0.5, 0.05, 0.2], [0.12, 0, 0]);
+  } else if (o.kind === 'rack') {
+    const W = 2.4;
+    for (const s of [1, -1]) {
+      x.between(body, 'RackLeg', V(s * (W / 2 - 0.08), 0, -0.35), V(s * (W / 2 - 0.08), 1.15, 0), 0.045, 0.04, M.wood, 4);
+      x.between(body, 'RackLeg', V(s * (W / 2 - 0.08), 0, 0.35), V(s * (W / 2 - 0.08), 1.15, 0), 0.045, 0.04, M.wood, 4);
+    }
+    add(body, 'TopRail', x.box(W, 0.08, 0.08), M.wood, [0, 1.15, 0]);
+    add(body, 'FootRail', x.box(W - 0.2, 0.06, 0.06), M.wood2, [0, 0.12, -0.2]);
+    const n = x.seg(14);
+    for (let i = 0; i < n; i++) {
+      const px = -W / 2 + 0.25 + (i / (n - 1)) * (W - 0.5), side = i % 2 ? 1 : -1;
+      const a = V(px + r.range(-0.04, 0.04), 0.02, side * 0.32), b = V(px + r.range(-0.08, 0.08), 1.18 + r.range(0, 0.05), side * 0.03);
+      x.between(body, i % 3 ? 'Bar' : 'Rod', a, b, i % 3 ? 0.022 : 0.012, i % 3 ? 0.022 : 0.012, M.metal, 4);
+    }
+  } else if (o.kind === 'trophies') {
+    const W = 4, H = 2.5;
+    for (const s of [1, -1]) add(body, 'Post', x.box(0.2, H, 0.2), M.wood, [s * (W / 2 - 0.1), H / 2, -0.08]);
+    const n = 9;
+    for (let i = 0; i < n; i++) add(body, 'Plank', x.box(W / n - 0.02, H - 0.15, 0.08), i % 2 ? M.wood : M.wood2, [-W / 2 + (i + 0.5) * (W / n), (H - 0.15) / 2, -0.1]);
+    add(body, 'Beam', x.box(W, 0.18, 0.24), M.wood2, [0, H - 0.09, -0.08]);
+    // a huge curved dragon tooth
+    add(body, 'Tooth', x.tube([V(-1.5, 1.0, 0), V(-1.42, 1.5, 0.08), V(-1.22, 1.95, 0.1)], 0.13, 0.01, 8, 10), M.paper);
+    // an old barbed harpoon
+    x.between(body, 'HarpoonShaft', V(-0.8, 0.65, 0.04), V(0.6, 1.0, 0.04), 0.025, 0.025, M.wood, 6);
+    add(body, 'HarpoonHead', x.cone(0.05, 0.22, 4), M.iron, [0.7, 1.03, 0.04], [0, 0, -PI / 2 + 0.25]);
+    for (const s of [1, -1]) x.between(body, 'Barb', V(0.62, 1.01, 0.04), V(0.54, 1.02 + s * 0.08, 0.04), 0.012, 0.004, M.iron, 4);
+    // a child's charcoal drawing on bark, a hide map and a notched tally stick
+    add(body, 'BarkDrawing', x.box(0.42, 0.32, 0.03), M.woodCut, [0.15, 1.65, 0.0], [0, 0, 0.06]);
+    for (let i = 0; i < 3; i++) add(body, 'Drawing', x.box(0.2, 0.015, 0.005), M.dark, [0.15, 1.6 + i * 0.05, 0.017], [0, 0, r.range(-0.6, 0.6)]);
+    add(body, 'HideMap', x.box(0.8, 0.6, 0.02), M.main, [1.15, 1.45, 0.0], [0, 0, -0.04]);
+    for (let i = 0; i < 4; i++) add(body, 'Roost', x.sphere(0.03, 6, 4), M.dark, [0.9 + r.range(0, 0.5), 1.3 + r.range(0, 0.3), 0.012]);
+    add(body, 'Tally', x.box(0.05, 0.7, 0.04), M.woodCut, [1.75, 0.85, 0.0], [0, 0, 0.1]);
+    for (let i = 0; i < 8; i++) add(body, 'Notch', x.box(0.06, 0.01, 0.045), M.dark, [1.75 - 0.007 * i, 0.6 + i * 0.07, 0.002]);
+    if (t.enchanted) x.rune(body, [-0.6, 2.05, 0.0], 0.2, M.glow);
+  } else {
+    // stocks: two posts on a base beam, two boards with head and wrist holes, an iron hasp
+    const W = 1.9;
+    add(body, 'BaseBeam', x.box(W, 0.16, 0.7), M.wood2, [0, 0.08, 0]);
+    for (const s of [1, -1]) {
+      add(body, 'Post', x.box(0.16, 1.4, 0.16), M.wood, [s * (W / 2 - 0.25), 0.7, 0]);
+      add(body, 'Brace', x.box(0.1, 0.5, 0.1), M.wood2, [s * (W / 2 - 0.25), 0.3, 0.2], [0.7, 0, 0]);
+      add(body, 'Brace', x.box(0.1, 0.5, 0.1), M.wood2, [s * (W / 2 - 0.25), 0.3, -0.2], [-0.7, 0, 0]);
+    }
+    add(body, 'LowerBoard', x.box(W - 0.6, 0.22, 0.1), M.wood, [0, 0.95, 0]);
+    add(body, 'UpperBoard', x.box(W - 0.6, 0.22, 0.1), M.wood, [0, 1.19, 0]);
+    for (const [hx, rad] of [[-0.36, 0.05], [0, 0.11], [0.36, 0.05]]) add(body, 'Hole', x.cyl(rad, rad, 0.11, 10), M.dark, [hx, 1.07, 0], [PI / 2, 0, 0]);
+    add(body, 'Hasp', x.box(0.06, 0.2, 0.03), M.iron, [0.6, 1.07, 0.065]);
+    add(body, 'Lock', x.box(0.08, 0.09, 0.05), M.iron, [0.6, 0.98, 0.09]);
+    add(body, 'Cap', x.box(W - 0.3, 0.08, 0.18), M.wood2, [0, 1.44, 0]);
   }
 }
 
@@ -2171,11 +2562,12 @@ function rollGame(id, seed) {
   Object.assign(t.opts, d.opts);
   t.enchanted = !!d.glow;
   if (d.crown) t.crown = d.crown;
+  for (const f of ['hand', 'cloth', 'wax', 'kerb']) if (d[f]) t[f] = true; // hand: laid along +Z; cloth, wax, kerb: extra dressing
   t.colors = { ...t.colors, ...PALETTES[d.pal], ...d.colors };
   t.style = 'lowpoly'; $('style').value = 'lowpoly';
   t.detail = pickDetail(t, gameBudget(box)); $('detail').value = t.detail;
   state.traits = t;
-  for (const [id2, v] of [['anim', false], ['gripOrigin', false], ['gameMats', true], ['combine', true], ['knight', true]]) $(id2).checked = v;
+  for (const [id2, v] of [['anim', false], ['gripOrigin', !!d.hand], ['gameMats', true], ['combine', true], ['knight', true]]) $(id2).checked = v;
   writeUI(t);
   rebuild({ fit: true });
   log(`${id}: ${CATS[d.cat].label}, target ${fmtBox(box)}${TARGETS.objects?.[id] ? '' : ' (estimated size, not in targets.json)'}, seed "${seed}"`);
@@ -2354,7 +2746,8 @@ $('variantsBtn').addEventListener('click', async () => {
 kit.registerGenerator('props', {
   ids: () => Object.keys(GAME_IDS),
   targets: () => TARGETS,
-  files: async (id, seed = id) => { rollGame(id, seed); return [{ name: id + '.glb', data: (await exportGLB()).buf }]; },
+  // pivot 'grip': a hand-held id has its origin at the hand, so the base and footprint-centre rules do not apply
+  files: async (id, seed = id) => { rollGame(id, seed); return [{ name: id + '.glb', data: (await exportGLB()).buf, ...(GAME_IDS[id].hand ? { pivot: 'grip' } : {}) }]; },
 });
 window.__propgen = { THREE, state, CATS, GAME_IDS, PALETTES, rollTraits, rollGame, buildProp, roll, rebuild, exportGLB, exportScene, makeZip, variantNames, targets: () => TARGETS }; // handy for debugging in the console
 

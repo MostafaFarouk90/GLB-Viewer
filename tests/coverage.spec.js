@@ -6,6 +6,7 @@ import { ROOT, TARGETS_URL, parseGLB } from './helpers.js';
 import { coverageData } from '../tools/coverage-data.mjs';
 
 const MANIFEST_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/public/assets/env/manifest.json';
+const LIST_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/docs/env/environment-needs-prompts.md';
 const TARGETS = JSON.parse(fs.readFileSync(path.join(ROOT, 'embers/targets.json'), 'utf8'));
 const MANIFEST = { objects: {
   'oak-a': { id: 'oak-a', scale: 9.1, trisBefore: 50000, trisAfter: 4500, mb: 0.25 },
@@ -49,12 +50,16 @@ async function open(page, { manifest = true } = {}) {
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
   await page.route(TARGETS_URL, (r) => r.fulfill({ status: 200, body: JSON.stringify(TARGETS), headers: { 'access-control-allow-origin': '*' } }));
+  await page.route(LIST_URL, (r) => manifest
+    ? r.fulfill({ status: 200, body: fs.readFileSync(path.join(ROOT, 'embers/environment-needs-prompts.md')), headers: { 'access-control-allow-origin': '*' } })
+    : r.abort());
   await page.route(MANIFEST_URL, (r) => manifest
     ? r.fulfill({ status: 200, body: JSON.stringify(MANIFEST), headers: { 'access-control-allow-origin': '*' } })
     : r.abort());
   await page.goto(pathToFileURL(path.join(ROOT, 'coverage.html')).href);
   await expect(page.locator('#log')).toContainText('Ready');
   if (manifest) await expect(page.locator('#log')).toContainText('Live game manifest');
+  if (manifest) await expect(page.locator('#log')).toContainText('Live missing-objects list');
   return errors;
 }
 const row = (page, id) => page.locator(`tr.row[data-id="${id}"]`);
@@ -73,18 +78,32 @@ test.describe('coverage dashboard', () => {
     const ids = await page.evaluate(() => window.__coverage.rows().map((r) => r.id));
     for (const id of Object.keys(TARGETS.objects)) expect(ids).toContain(id);
     // list ids that are not in targets.json, "-b" shorthand, section E animals, section G rows and set members
-    for (const id of ['willow-a', 'bush-holly-a', 'field-gate-a', 'bush-flowering-b', 'flower-patch-red', 'hen-a', 'lift-cage', 'headframe', 'golem-rock-chunks', 'poi-bones', 'shrine-forge', 'cinder-cage']) expect(ids).toContain(id);
+    for (const id of ['willow-a', 'bush-holly-a', 'field-gate-a', 'bush-flowering-b', 'flower-patch-red', 'hen-a', 'lift-cage', 'deepgate-headframe', 'golem-rock-chunks', 'poi-bones', 'shrine-forge', 'cinder-cage']) expect(ids).toContain(id);
     const info = await page.evaluate(() => Object.fromEntries(window.__coverage.rows().map((r) => [r.id, { s: r.section, g: r.gens }])));
     expect(info['oak-a']).toEqual({ s: 'A', g: ['vegetation'] });
     expect(info['bush-flowering-b'].s).toBe('A');
     expect(info['mine-cart']).toEqual({ s: 'D', g: ['structures'] });
     expect(info['hen-a']).toEqual({ s: 'E', g: ['creatures'] });
-    expect(info['headframe'].s).toBe('G');
-    expect(info['poi-bones'].s).toBe('G');
-    expect(info['ash-patch-decal'].g).toEqual(['textures']); // one page per id: texture owns the decals, rocks the rock ids
+    expect(info['deepgate-headframe']).toEqual({ s: 'G', g: ['structures'] }); // the generator's old "headframe"
+    expect(info['poi-bones'].s).toBe('P'); // in a section G set, and named with its size in section P
+    expect(info['ash-patch-decal'].g).toEqual(['props']); // one page per id: props makes the decals as thin meshes, rocks the rock ids
+    // the ids from sections H to O have a generator each; only the horse (the game imports one) has none
+    for (const [id, g] of [['spear-hunter', 'props'], ['greyfen-stilt-house', 'structures'], ['prop.greyfen.ferry-punt', 'structures'],
+      ['dragonspine-rockfall', 'rocks'], ['greyfen-reed-bed', 'vegetation'], ['fruit-tree-b', 'vegetation']]) expect(info[id].g, id).toEqual([g]);
+    expect(info['horse-standing'].g).toEqual([]);
     expect(info['boulder-large-a'].g).toEqual(['rocks']);
     expect(info['haystack-round'].g).toEqual([]);
-    expect(info['wolf-a'].s).toBe('P');
+    expect(info['wolf-a'].s).toBe('P'); // section P of the list: generator ids the game sized
+    // sections H to O: other table layouts (id not first, size last, dotted ids, "toll-post art")
+    const list = await page.evaluate(() => Object.fromEntries([...window.__coverage.S.list.ids].map(([id, v]) => [id, v])));
+    expect(list['spear-hunter']).toMatchObject({ section: 'H', box: { w: 0.1, d: 2.2, h: 0.1 } });
+    expect(list['toll-post']).toMatchObject({ section: 'I', box: { w: 0.6, d: 2.4, h: 2.2 } });
+    expect(list['fruit-tree-b'].section).toBe('I');
+    expect(list['prop.greyfen.ferry-punt']).toMatchObject({ section: 'M', box: { w: 1.8, d: 5, h: 0.8 } });
+    expect(list['greyfen-stilt-house']).toMatchObject({ section: 'N', box: { w: 7, d: 7, h: 6 } });
+    expect(list['dragonspine-rockfall']).toMatchObject({ section: 'O', box: { w: 4, d: 2, h: 3 } });
+    expect(list['deepgate-headframe'].section).toBe('G');
+    expect(Object.keys(list).some((id) => /interior|group|ash country|^(herb|salve|spear|sluice|drowned|hymn|cauldron)$/i.test(id))).toBe(false);
     // shipped ids from the game manifest
     await expect(row(page, 'oak-a')).toContainText('shipped');
     await expect(row(page, 'oak-b')).not.toContainText('shipped');
@@ -121,7 +140,7 @@ test.describe('coverage dashboard', () => {
       file('reeds-a.glb', boxGlb(0.8, 0.8, 1.8, { y0: 0.5 })), // base above 0: fails
       file('fern-a.glb', boxGlb(0.9, 0.9, 0.7, { tris: 11000 })), // over the triangle cap: fails
       file('stonewall-low.glb', boxGlb(1.7, 0.7, 1.0)), // width short, but in the proportion table: passes
-      file('willow-a.glb', boxGlb(7, 7, 8)), // not in targets.json
+      file('tent.glb', boxGlb(2.4, 3, 1.6)), // not in targets.json
       file('oak-b.lod1.glb', boxGlb(1, 1, 1)), // LOD of oak-b, not checked
       file('mystery-thing.glb', boxGlb(1, 1, 1)),
       file('oak-x.glb', boxGlb(1, 1, 1)),
@@ -129,7 +148,7 @@ test.describe('coverage dashboard', () => {
     await expect(page.locator('#log')).toContainText('Scanned 10 model files');
     const st = await page.evaluate(() => Object.fromEntries(window.__coverage.rows().map((r) => [r.id, r.status])));
     expect(st).toMatchObject({ 'oak-b': 'pass', 'birch-a': 'fail', 'birch-b': 'pass', 'reeds-a': 'fail', 'fern-a': 'fail',
-      'stonewall-low': 'pass', 'willow-a': 'notarget', 'oak-c': 'missing' });
+      'stonewall-low': 'pass', 'tent': 'notarget', 'oak-c': 'missing' });
     await expect(tile(page, 'pass')).toHaveText('3');
     await expect(tile(page, 'fail')).toHaveText('3');
     await expect(tile(page, 'notarget')).toHaveText('1');
@@ -166,7 +185,7 @@ test.describe('coverage dashboard', () => {
       names.push(zip.subarray(off + 30, off + 30 + nl).toString());
       off += 30 + nl + size;
     }
-    expect(names.sort()).toEqual(['Birch_A.glb', 'failing.txt', 'fern-a.glb', 'reeds-a.glb', 'report.csv', 'willow-a.glb']);
+    expect(names.sort()).toEqual(['Birch_A.glb', 'failing.txt', 'fern-a.glb', 'reeds-a.glb', 'report.csv', 'tent.glb']);
     expect(parseGLB(zip.subarray(zip.indexOf('glTF'))).json.asset.version).toBe('2.0');
     expect(errors).toEqual([]);
     await page.screenshot({ path: info.outputPath('coverage.png'), fullPage: true });
@@ -175,9 +194,9 @@ test.describe('coverage dashboard', () => {
   test('a dropped targets.json or missing list replaces the built-in copy', async ({ page }) => {
     await open(page);
     await page.setInputFiles('#loadInput', { name: 'targets.json', mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify({ ...TARGETS, objects: { ...TARGETS.objects, 'willow-a': { w: 7, d: 7, h: 8 } } })) });
-    await expect(page.locator('#sources')).toContainText('targets.json (72 ids)');
-    expect(await page.evaluate(() => window.__coverage.rows().find((r) => r.id === 'willow-a').inTargets)).toBe(true);
+      buffer: Buffer.from(JSON.stringify({ ...TARGETS, objects: { ...TARGETS.objects, tent: { w: 2.4, d: 3, h: 1.6 } } })) });
+    await expect(page.locator('#sources')).toContainText(`targets.json (${Object.keys(TARGETS.objects).length + 1} ids)`);
+    expect(await page.evaluate(() => window.__coverage.rows().find((r) => r.id === 'tent').inTargets)).toBe(true);
     await page.setInputFiles('#loadInput', { name: 'list.md', mimeType: 'text/markdown',
       buffer: Buffer.from('## A. Trees (priority 1)\n| id | size | what |\n| --- | --- | --- |\n| yew-a, -b (x2) | 2 x 2 x 6 | a yew |\n') });
     await expect(page.locator('#sources')).toContainText('list.md (2 ids)');
