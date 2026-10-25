@@ -17,8 +17,8 @@
 // pointed at that (offline) page instead. Classic <script src="shared/…"></script> tags (the code the pages share,
 // see shared/kit.js) are replaced by the file's contents.
 //
-// It also writes shared/targets-data.js from embers/targets.json, so the pages' offline copy of the game's size
-// table is the one in embers/.
+// It also writes shared/targets-data.js from embers/targets.json and shared/manifest-data.js from embers/manifest.json,
+// so the pages' offline copies of the game's size table and shipped ids are the ones in embers/.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +35,7 @@ const nm = path.join(root, 'node_modules');
 const fail = (msg) => { console.error('build failed: ' + msg); process.exit(1); };
 
 writeTargetsData();
+writeShippedData();
 for (const [src, out] of PAGES) await buildPage(src, out);
 
 function writeTargetsData() {
@@ -44,6 +45,17 @@ function writeTargetsData() {
     + `(window.EmbersKit = window.EmbersKit || {}).EMBEDDED_TARGETS = ${JSON.stringify(json, null, 1)};\n`;
   const out = path.join(root, 'shared/targets-data.js');
   if (!fs.existsSync(out) || fs.readFileSync(out, 'utf8') !== js) { fs.writeFileSync(out, js); console.log('wrote shared/targets-data.js'); }
+}
+
+// shared/manifest-data.js: the ids of embers/manifest.json (the game's public/assets/env/manifest.json), the offline
+// copy of the shipped list; see shared/manifest.js.
+function writeShippedData() {
+  const ids = Object.keys(JSON.parse(fs.readFileSync(path.join(root, 'embers/manifest.json'), 'utf8')).objects).sort();
+  const js = '// Made by tools/build.mjs from embers/manifest.json (the game\'s public/assets/env/manifest.json): do not edit, edit\n'
+    + '// that file and run "npm run build". The offline copy of the shipped ids; see shared/manifest.js.\n'
+    + `(window.EmbersKit = window.EmbersKit || {}).EMBEDDED_SHIPPED = ${JSON.stringify(ids, null, 1)};\n`;
+  const out = path.join(root, 'shared/manifest-data.js');
+  if (!fs.existsSync(out) || fs.readFileSync(out, 'utf8') !== js) { fs.writeFileSync(out, js); console.log('wrote shared/manifest-data.js'); }
 }
 
 async function buildPage(srcName, outName) {

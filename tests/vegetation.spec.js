@@ -155,7 +155,8 @@ for (const file of VEG_VARIANTS) {
       await expect(page.locator('#fileName')).toHaveValue('oak-a');
       await expect(page.locator('#sT')).toContainText('✓');
       const { buf, name } = await download(page, info);
-      expect(name).toBe('oak-a.glb');
+      expect(name).toBe('oak-a-gen.glb'); // the game ships oak-a (Mostafa's model), so the download never replaces it
+      await expect(page.locator('#log')).toContainText('oak-a already ships in the game');
       const { json } = parseGLB(buf);
       expect(json.animations ?? []).toEqual([]);
       for (const m of json.materials) {
@@ -215,13 +216,13 @@ for (const file of VEG_VARIANTS) {
       let { buf, name } = await download(page, info, '#variantsBtn', 'v.zip');
       expect(name).toBe('bush-round-variants.zip');
       let files = unzip(buf);
-      expect(Object.keys(files)).toEqual(['bush-round-a.glb', 'bush-round-b.glb', 'bush-round-c.glb']);
+      expect(Object.keys(files)).toEqual(['bush-round-a-gen.glb', 'bush-round-b.glb', 'bush-round-c.glb']); // bush-round-a ships
       for (const [n, b] of Object.entries(files)) expect(b.subarray(0, 4).toString('latin1'), n).toBe('glTF');
       await page.check('#lodInVariants');
       await page.fill('#variantCount', '2');
       ({ buf } = await download(page, info, '#variantsBtn', 'v2.zip'));
       files = unzip(buf);
-      expect(Object.keys(files)).toEqual(['bush-round-a.glb', 'bush-round-a.lod1.glb', 'bush-round-a.lod2.glb', 'bush-round-b.glb', 'bush-round-b.lod1.glb', 'bush-round-b.lod2.glb']);
+      expect(Object.keys(files)).toEqual(['bush-round-a-gen.glb', 'bush-round-a-gen.lod1.glb', 'bush-round-a-gen.lod2.glb', 'bush-round-b.glb', 'bush-round-b.lod1.glb', 'bush-round-b.lod2.glb']);
     });
 
     test('a loaded targets.json changes the target size', async ({ page }) => {

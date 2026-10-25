@@ -1,7 +1,9 @@
 // GLB export helpers shared by the generators.
 (function (kit) {
-  // Writes root as a binary glTF (GLB) ArrayBuffer. options go to GLTFExporter.parseAsync (trs, animations, …).
-  kit.writeGLB = (root, options = {}) => new (kit.need('GLTFExporter'))().parseAsync(root, { binary: true, ...options });
+  // Writes root as a binary glTF (GLB) ArrayBuffer. options go to GLTFExporter.parseAsync (animations, …). Nodes are
+  // written as translation/rotation/scale, never as a matrix: glTF requires TRS on nodes that clips animate (bones),
+  // and strict validators and clip bakers reject a matrix there.
+  kit.writeGLB = (root, options = {}) => new (kit.need('GLTFExporter'))().parseAsync(root, { binary: true, trs: true, ...options });
 
   // Frees an export copy: every geometry, and every material that is not one of the preview's own (keep).
   kit.disposeExport = (root, keep = {}) => {

@@ -76,6 +76,8 @@
 <script src="shared/random.js"></script>
 <script src="shared/files.js"></script>
 <script src="shared/targets.js"></script>
+<script src="shared/manifest-data.js"></script>
+<script src="shared/manifest.js"></script>
 <script src="shared/targets-data.js"></script>
 <script src="shared/palette.js"></script>
 <script src="shared/scale-figure.js"></script>
@@ -411,27 +413,20 @@ const GAME_IDS = {
   'gibbet-post': { g: 'C', cat: 'post', opts: { kind: 'gibbet', state: 'weathered' }, pal: 'field' },
   'campfire-ring': { g: 'C', cat: 'campfire', opts: { fuel: 'teepee', fire: 'out', ring: 'stones', extra: 'none' }, pal: 'field' },
   'crow-perch-post': { g: 'C', cat: 'post', opts: { kind: 'perch', state: 'weathered' }, pal: 'field' },
-  'ash-tree-dead-a': { g: 'D', cat: 'tree', opts: { kind: 'dead', roots: 'roots', state: 'burnt' }, pal: 'ash' },
-  'ash-tree-dead-b': { g: 'D', cat: 'tree', opts: { kind: 'dead', roots: 'none', state: 'burnt' }, pal: 'ash' },
+  // crown < 1 narrows the branch spread, so the dead trees fit their 3 m footprint at 8 m tall (the ingest stretches 15% at most)
+  'ash-tree-dead-a': { g: 'D', cat: 'tree', opts: { kind: 'dead', roots: 'roots', state: 'burnt' }, pal: 'ash', crown: 0.5 },
+  'ash-tree-dead-b': { g: 'D', cat: 'tree', opts: { kind: 'dead', roots: 'none', state: 'burnt' }, pal: 'ash', crown: 0.5 },
   'charred-stump': { g: 'D', cat: 'tree', opts: { kind: 'stump', roots: 'roots', state: 'burnt' }, pal: 'ash', glow: true },
-  'basalt-columns-a': { g: 'D', cat: 'basalt', opts: { form: 'cluster', top: 'broken' }, pal: 'ash' },
-  'ember-rock-a': { g: 'D', cat: 'rock', opts: { shape: 'boulder', cover: 'embers' }, pal: 'ash' },
-  'ember-rock-b': { g: 'D', cat: 'rock', opts: { shape: 'cluster', cover: 'embers' }, pal: 'ash' },
   'slag-heap': { g: 'D', cat: 'heap', opts: { kind: 'slag' }, pal: 'ash' },
   'ore-pile': { g: 'D', cat: 'heap', opts: { kind: 'ore' }, pal: 'ash' },
   'scorched-fence': { g: 'D', cat: 'fence', opts: { kind: 'fence', state: 'scorched' }, pal: 'ash' },
   'smelter-chimney': { g: 'D', cat: 'chimney', opts: { shape: 'round', top: 'glow' }, pal: 'ash' },
   'cairn-a': { g: 'F', cat: 'cairn', opts: { kind: 'stack', moss: 'moss' }, pal: 'field' },
-  'waystone-flagstones': { g: 'F', cat: 'flagstones', opts: { kind: 'circle' }, pal: 'field', box: { w: 9, d: 9, h: 0.1 } },
-  'ash-patch-decal': { g: 'F', cat: 'flagstones', opts: { kind: 'ash' }, pal: 'ash', box: { w: 3, d: 3, h: 0.02 } },
   'field-gate-a': { g: 'F', cat: 'fence', opts: { kind: 'gate', state: 'intact' }, pal: 'field', box: { w: 3.4, d: 0.2, h: 1.2 } },
   'stump-a': { g: 'A', cat: 'tree', opts: { kind: 'stump', roots: 'roots', state: 'living' }, pal: 'field' },
   'stump-b': { g: 'A', cat: 'tree', opts: { kind: 'stump', roots: 'none', state: 'living' }, pal: 'field' },
   'log-fallen-a': { g: 'A', cat: 'tree', opts: { kind: 'log', roots: 'none', state: 'living' }, pal: 'field' },
   'mushrooms-a': { g: 'A', cat: 'mushroom', opts: { cap: 'dome', count: 'cluster', spots: 'spots' }, pal: 'field', colors: { main: '#a83a2c', second: '#8a6a4a' } },
-  'boulder-large-a': { g: 'A', cat: 'rock', opts: { shape: 'boulder', cover: 'moss' }, pal: 'field' },
-  'boulder-large-b': { g: 'A', cat: 'rock', opts: { shape: 'boulder', cover: 'moss' }, pal: 'field' },
-  'rock-cluster-a': { g: 'A', cat: 'rock', opts: { shape: 'cluster', cover: 'none' }, pal: 'field' },
   'poi-bones': { g: 'G', cat: 'clutter', opts: { kind: 'bones' }, pal: 'field', box: { w: 1.2, d: 1.0, h: 0.35 } },
   'poi-bedroll': { g: 'G', cat: 'clutter', opts: { kind: 'bedroll' }, pal: 'field', box: { w: 0.8, d: 2.0, h: 0.3 } },
   'poi-fire-ring': { g: 'G', cat: 'campfire', opts: { fuel: 'teepee', fire: 'out', ring: 'stones', extra: 'none' }, pal: 'field', box: { w: 1.2, d: 1.2, h: 0.5 } },
@@ -1308,6 +1303,7 @@ function buildTree(x) {
   const burnt = o.state === 'burnt', spirit = o.kind === 'spirit', bark = burnt ? M.char : spirit ? M.wood2 : M.wood;
   const leaf = spirit ? M.crystal : M.plant;
   if (o.kind === 'stump' || o.kind === 'log') return buildStumpOrLog(x, bark, burnt);
+  const crown = t.crown || 1; // branch spread (game ids that must fit a narrow footprint use less)
   const perp = (d) => { const a = Math.abs(d.y) < 0.9 ? UP : V(1, 0, 0); return d.clone().cross(a).normalize(); };
   const ends = [];
   const branch = (p0, dir, len, rad, depth) => {
@@ -1318,7 +1314,7 @@ function buildTree(x) {
     const k = o.kind === 'dead' ? r.int(2, 3) : r.int(2, 3);
     for (let i = 0; i < k; i++) {
       const ax = perp(dir).applyAxisAngle(dir, (i / k) * PI * 2 + r.next());
-      const nd = dir.clone().applyAxisAngle(ax, r.range(0.45, 0.85)).normalize();
+      const nd = dir.clone().applyAxisAngle(ax, r.range(0.45, 0.85) * crown).normalize();
       if (nd.y < -0.1) nd.y = -0.1;
       branch(p1, nd.normalize(), len * r.range(0.6, 0.78), rad * 0.62, depth - 1);
     }
@@ -1347,7 +1343,7 @@ function buildTree(x) {
     const top = tp[2];
     for (let i = 0; i < 3; i++) {
       const ax = V(Math.cos(i * 2.1), 0, Math.sin(i * 2.1));
-      branch(top, UP.clone().applyAxisAngle(ax, r.range(0.35, 0.65)), o.kind === 'dead' ? 1.1 : 1.2, 0.16, depth);
+      branch(top, UP.clone().applyAxisAngle(ax, r.range(0.35, 0.65) * crown), o.kind === 'dead' ? 1.1 : 1.2, 0.16, depth);
     }
     if (o.kind !== 'dead' && !burnt) {
       for (const e of ends) add(body, 'Foliage', x.rock(r.range(0.55, 0.8)), leaf, e, [r.next(), r.next(), r.next()], [1, 0.75, 1]);
@@ -2174,6 +2170,7 @@ function rollGame(id, seed) {
   const t = { ...rollTraits(d.cat, seed), ...outputSettings(), gameId: id, box, fit: 'height', palette: d.pal };
   Object.assign(t.opts, d.opts);
   t.enchanted = !!d.glow;
+  if (d.crown) t.crown = d.crown;
   t.colors = { ...t.colors, ...PALETTES[d.pal], ...d.colors };
   t.style = 'lowpoly'; $('style').value = 'lowpoly';
   t.detail = pickDetail(t, gameBudget(box)); $('detail').value = t.detail;
@@ -2323,9 +2320,10 @@ $('downloadBtn').addEventListener('click', async () => {
   state.busy = true; $('busy').classList.add('show'); $('busyText').textContent = 'Exporting GLB…';
   try {
     const { buf } = await exportGLB();
-    const name = fileBase() + '.glb';
+    const name = kit.genBase(fileBase()) + '.glb';
     saveBlob(new Blob([buf], { type: 'model/gltf-binary' }), name);
     log(`Saved ${name} (${fmtBytes(buf.byteLength)})`, buf.byteLength > (TARGETS.maxFileMB || 1.5) * 1048576 ? 'warn' : 'ok');
+    { const note = kit.shippedNote([fileBase()]); if (note) log(note, 'warn'); }
   } catch (e) { console.error(e); log('Export failed: ' + (e.message || e), 'err'); }
   finally { $('busy').classList.remove('show'); state.busy = false; }
 });
@@ -2341,12 +2339,13 @@ $('variantsBtn').addEventListener('click', async () => {
       await new Promise((res) => setTimeout(res, 0));
       const t = { ...state.traits, seed: i === 0 ? state.traits.seed : `${state.traits.seed}-${name.slice(-1)}` };
       const c = buildProp(t);
-      try { files.push({ name: name + '.glb', data: (await exportGLB(c, t)).buf }); }
+      try { files.push({ name: kit.genBase(name) + '.glb', data: (await exportGLB(c, t)).buf }); }
       finally { for (const m of meshesOf(c.root)) m.geometry.dispose(); for (const m of Object.values(c.materials)) m.dispose(); }
     }
     const zip = makeZip(files), zipName = names[0].replace(/-a$/, '') + '-variants.zip';
     saveBlob(zip, zipName);
-    log(`Saved ${zipName}: ${names.map((x) => x + '.glb').join(', ')} (${fmtBytes(zip.size)})`, 'ok');
+    log(`Saved ${zipName}: ${files.map((f) => f.name).join(', ')} (${fmtBytes(zip.size)})`, 'ok');
+    { const note = kit.shippedNote(names); if (note) log(note, 'warn'); }
   } catch (e) { console.error(e); log('Export failed: ' + (e.message || e), 'err'); }
   finally { $('busy').classList.remove('show'); state.busy = false; }
 });
@@ -2362,6 +2361,8 @@ window.__propgen = { THREE, state, CATS, GAME_IDS, PALETTES, rollTraits, rollGam
 roll('sword', randomSeed());
 log('Ready. Pick a prop type or a game id, press Randomize, then Download GLB.', 'ok');
 // the game's live size table, when online (the built-in copy is used otherwise)
+// the game's live shipped list, so a download never replaces a model the game ships (the built-in copy otherwise)
+kit.fetchShipped().catch(() => { /* offline: keep the built-in copy */ });
 kit.fetchLiveTargets().then((text) => loadTargets(text, 'the game repo'), () => { /* offline: keep the built-in copy */ });
 </script>
 </body>

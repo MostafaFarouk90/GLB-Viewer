@@ -81,7 +81,8 @@ test.describe('coverage dashboard', () => {
     expect(info['hen-a']).toEqual({ s: 'E', g: ['creatures'] });
     expect(info['headframe'].s).toBe('G');
     expect(info['poi-bones'].s).toBe('G');
-    expect(info['ash-patch-decal'].g).toEqual(['props', 'textures']);
+    expect(info['ash-patch-decal'].g).toEqual(['textures']); // one page per id: texture owns the decals, rocks the rock ids
+    expect(info['boulder-large-a'].g).toEqual(['rocks']);
     expect(info['haystack-round'].g).toEqual([]);
     expect(info['wolf-a'].s).toBe('P');
     // shipped ids from the game manifest
