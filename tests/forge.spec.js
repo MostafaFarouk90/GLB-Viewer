@@ -132,16 +132,15 @@ for (const file of VARIANTS) {
       const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#forgeExportBtn')]);
       expect(dl.suggestedFilename()).toBe('bush-holly-a.glb');
       const buf = fs.readFileSync(await dl.path());
-      // no bush-holly-a target yet: sized by Scale 1.05 from the 1.1 m bush
+      // targets.json now has bush-holly-a (1.5 x 1.5 x 1.3): the variant is fitted to its height
       const box = glbBox(buf);
-      expect(box.max[1] - box.min[1]).toBeCloseTo(1.1 * 1.05, 2);
-      expect(extrasOf(buf)).toMatchObject({ variantOf: 'bush-round-a', variant: { hue: -20, saturation: 0.9, tint: '#7fa070', scale: 1.05 } });
+      expect(box.max[1] - box.min[1]).toBeCloseTo(1.3, 2);
+      expect(extrasOf(buf)).toMatchObject({ variantOf: 'bush-round-a', variant: { hue: -20, saturation: 0.9, tint: '#7fa070' } }); // fitted to the target, so no Scale
       // the material colour carries the multiply tint
       const { json } = parseGLB(buf);
       const f = json.materials[0].pbrMetallicRoughness.baseColorFactor;
       expect(f[1]).toBeGreaterThan(f[0]);
       expect(f[1]).toBeGreaterThan(f[2]);
-      await expect(page.locator('#log')).toContainText('bush-holly-a has no target in targets.json');
     });
 
     test('hue shift recolours the base colour texture of the variant, not the source', async ({ page }) => {
