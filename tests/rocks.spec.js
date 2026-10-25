@@ -221,6 +221,36 @@ for (const file of ROCKS_VARIANTS) {
       expect(json.nodes.map((n) => n.name)).toEqual(expect.arrayContaining(['Torso', 'Head', 'Limb', 'Fist']));
     });
 
+    test('ember veins are continuous bands, not scattered glowing triangles', async ({ page }) => {
+      await page.uncheck('#bloom');
+      const r = await page.evaluate(() => {
+        const g = window.__rockgen, out = {};
+        for (const id of ['ember-crag-a', 'ember-rock-b', 'ash-cliff-face-a', 'golem-rock-chunks']) {
+          g.rollGame(id, 'veins');
+          // glowing triangles, grouped into pieces that touch (share a corner)
+          const tris = [];
+          g.state.current.root.updateMatrixWorld(true);
+          g.state.current.root.traverse((o) => {
+            if (!o.isMesh || o.material.name !== 'Glow') return;
+            const p = o.geometry.attributes.position, v = new g.THREE.Vector3();
+            for (let i = 0; i < p.count; i += 3) tris.push([0, 1, 2].map((k) => v.fromBufferAttribute(p, i + k).applyMatrix4(o.matrixWorld).toArray().map((c) => Math.round(c * 1000)).join()));
+          });
+          const parent = tris.map((_, i) => i), find = (i) => parent[i] === i ? i : (parent[i] = find(parent[i])), byCorner = new Map();
+          tris.forEach((t, i) => t.forEach((c) => { if (byCorner.has(c)) parent[find(i)] = find(byCorner.get(c)); else byCorner.set(c, i); }));
+          const groups = new Map();
+          tris.forEach((_, i) => groups.set(find(i), (groups.get(find(i)) || 0) + 1));
+          const sizes = [...groups.values()];
+          out[id] = { tris: tris.length, groups: sizes.length, single: sizes.filter((n) => n === 1).length };
+        }
+        return out;
+      });
+      for (const [id, v] of Object.entries(r)) {
+        expect(v.tris, id).toBeGreaterThan(20);
+        expect(v.tris / v.groups, `${id}: triangles per glowing piece`).toBeGreaterThan(5); // bands, not speckles
+        expect(v.single / v.tris, `${id}: lone glowing triangles`).toBeLessThan(0.1);
+      }
+    });
+
     test('every game id fits its target box and budget', async ({ page }) => {
       test.setTimeout(300_000);
       await page.uncheck('#bloom');

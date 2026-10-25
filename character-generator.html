@@ -91,7 +91,7 @@
       <button id="randomBtn" class="primary">Randomize</button>
       <button id="colorsBtn">New colors</button>
     </div>
-    <div class="hint">The same archetype and seed always give the same character. For the game's NPCs pick a Townsfolk archetype and tick <b>KayKit chibi look</b> and <b>KayKit skeleton</b>.</div>
+    <div class="hint">The same archetype and seed always give the same character. For the game's NPCs pick a Townsfolk archetype: it switches on the game set (chibi look, KayKit size, KayKit skeleton, one palette material, game budget and game materials). Other archetypes switch it off again.</div>
 
     <h2>Body</h2>
     <div class="row"><label for="height">Height</label><input id="height" type="range" min="0.3" max="3.5" step="0.05"><span class="val" id="heightVal"></span></div>
@@ -100,6 +100,8 @@
     <div class="row"><label for="limbs">Limb length</label><input id="limbs" type="range" min="0.75" max="1.3" step="0.01"><span class="val" id="limbsVal"></span></div>
     <div class="row"><label for="chibi">KayKit chibi look</label><input id="chibi" type="checkbox"></div>
     <div class="hint">Big head and short legs like the KayKit Adventurers, with the joints exactly where their skeleton has them, so KayKit animations fit. Off: realistic proportions.</div>
+    <div class="row"><label for="kkScale">KayKit size (units of Knight.glb)</label><input id="kkScale" type="checkbox"></div>
+    <div class="hint">With the chibi look: the file is in KayKit units at KayKit's own size (about 2.2 to 2.4 units to the top of the hair; Knight.glb is 2.3 to the top of its head, Rogue and Mage 2.2), so the game scales it exactly like its KayKit characters (0.78 in Embers, about 1.7 to 1.9 m) and it stands beside them. Height then follows the head size. Off: Height is the size in metres, so the game must use scale 1 for the file, not KayKit's 0.78.</div>
     <div class="row"><label for="pose">Pose</label>
       <select id="pose"><option value="a">A-pose (idle)</option><option value="t">T-pose (for rigging)</option><option value="cast">Casting</option></select></div>
 
@@ -140,6 +142,8 @@
     <div class="hint">Rigs the body on the KayKit Adventurers bones (same names and rest rotations), each part on one bone, in their T rest pose. The held item hangs on handslot.r. Try KayKit clips on it in the <a href="animation-preview.html" data-offline-href="animation-preview-offline.html">animation preview</a>.</div>
     <div class="row"><label for="atlas">One material (palette texture)</label><input id="atlas" type="checkbox"></div>
     <div class="hint">All colours in one small texture, plus one Glow material if the character glows. Fewest draw calls; drops metal shine and transparency.</div>
+    <div class="row"><label for="gameMats">Game materials (roughness 1, metallic 0)</label><input id="gameMats" type="checkbox"></div>
+    <div class="hint">As the game's ingest wants them: matte and never metallic, so steel, trim and armour do not look like chrome under the game's lights. Glow is kept. The palette material is always like this.</div>
     <div class="row"><label for="anim">Include idle animation</label><input id="anim" type="checkbox" checked></div>
     <div class="hint">Spins the aura and bobs floating characters (the body itself only moves with the KayKit skeleton and its clips).</div>
     <table class="stats">
@@ -594,7 +598,8 @@ function buildCharacter(t) {
   const robed = !rocky && (t.outfit === 'robe' || ghost);
   const sleeves = !rocky && ['robe', 'tunic', 'armor'].includes(t.outfit);
   const armMat = sleeves ? M.cloth : M.skin;
-  const k = t.height / headTop;
+  // KayKit size: the chibi body stays in KayKit units (scale 1), like Knight.glb; otherwise Height is the head top in metres
+  const k = chibi && t.kkScale ? 1 : t.height / headTop;
   const floatUnits = A.float / k;
 
   // ---- torso and legs ----
@@ -1172,10 +1177,13 @@ function readUI() {
   Object.assign(t, outputSettings());
   return t;
 }
-const outputSettings = () => ({ style: $('style').value, detail: $('detail').value, chibi: $('chibi').checked, rig: $('rig').checked });
+const outputSettings = () => ({ style: $('style').value, detail: $('detail').value, chibi: $('chibi').checked, rig: $('rig').checked, kkScale: $('kkScale').checked });
 function updateLabels() {
   for (const [s, f] of Object.entries(SLIDERS)) $(s + 'Val').textContent = f(Number($(s).value));
   $('limbs').disabled = $('chibi').checked; // chibi limbs are the KayKit bone lengths
+  $('kkScale').disabled = !$('chibi').checked;
+  $('height').disabled = $('chibi').checked && $('kkScale').checked; // KayKit size: the height follows from the head
+  if ($('height').disabled) $('heightVal').textContent = 'KayKit';
   $('pose').disabled = $('rig').checked; // the skeleton binds in the KayKit T rest pose
 }
 
@@ -1234,7 +1242,20 @@ function applyWire() { if (state.current) for (const m of Object.values(state.cu
 let pending = 0;
 const scheduleRebuild = () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(() => { state.traits = readUI(); rebuild(); }); };
 
-$('archetype').addEventListener('change', () => roll($('archetype').value, $('seed').value.trim() || randomSeed()));
+// The game set: what the game's NPCs need (KayKit chibi body at KayKit size on the KayKit skeleton, one palette material,
+// at most 4,000 triangles, matte non-metal materials). Picking a Townsfolk archetype switches it on, picking another
+// group switches it back to the page's defaults; ticks changed by hand stay while the group stays the same.
+const GAME_SET = { chibi: true, kkScale: true, rig: true, atlas: true, gameMats: true, detail: 'game' };
+const PAGE_SET = Object.fromEntries(Object.keys(GAME_SET).map((id) => [id, $(id).type === 'checkbox' ? $(id).checked : $(id).value]));
+function applyGameSet(on) {
+  for (const [id, v] of Object.entries(on ? GAME_SET : PAGE_SET)) if ($(id).type === 'checkbox') $(id).checked = v; else $(id).value = v;
+  updateLabels();
+}
+const isTown = (arch) => ARCH[arch]?.group === 'Townsfolk';
+$('archetype').addEventListener('change', () => {
+  if (isTown($('archetype').value) !== isTown(state.traits.archetype)) applyGameSet(isTown($('archetype').value));
+  roll($('archetype').value, $('seed').value.trim() || randomSeed());
+});
 $('seed').addEventListener('change', () => roll($('archetype').value, $('seed').value.trim() || randomSeed()));
 $('randomBtn').addEventListener('click', () => roll($('archetype').value, randomSeed()));
 $('colorsBtn').addEventListener('click', () => {
@@ -1243,7 +1264,7 @@ $('colorsBtn').addEventListener('click', () => {
   scheduleRebuild();
 });
 for (const s of Object.keys(SLIDERS)) $(s).addEventListener('input', () => { updateLabels(); scheduleRebuild(); });
-for (const id of ['pose', 'glowEyes', 'ash', 'style', 'detail', 'chibi', 'rig', ...SLOTS]) $(id).addEventListener('change', () => { updateLabels(); scheduleRebuild(); });
+for (const id of ['pose', 'glowEyes', 'ash', 'style', 'detail', 'chibi', 'kkScale', 'rig', ...SLOTS]) $(id).addEventListener('change', () => { updateLabels(); scheduleRebuild(); });
 for (const k of Object.keys(COLOR_KEYS)) $('c_' + k).addEventListener('input', scheduleRebuild);
 $('wire').addEventListener('change', applyWire);
 $('fitBtn').addEventListener('click', fitView);
@@ -1339,19 +1360,22 @@ function makeAtlas(c) {
 function extrasFor(t, opts) {
   const { detailScale, ...traits } = t;
   return { generator: 'Mystical Character Generator', archetype: t.archetype, seed: t.seed, name: t.name, chibi: !!t.chibi,
-    skeleton: opts.rig ? 'KayKit Adventurers (41 bones)' : 'none', detail: t.detail, traits };
+    skeleton: opts.rig ? 'KayKit Adventurers (41 bones)' : 'none', detail: t.detail,
+    units: t.chibi && t.kkScale ? 'KayKit (like Knight.glb)' : 'metres', gameMaterials: !!(opts.gameMats || opts.atlas), traits };
 }
 
 const { mergeParts } = kit; // merges parts that share a material, keeping the attributes they have in common
 
 // Copy of the character with every transform baked into the geometry, grouped as Root > Body, Aura (in metres), or
 // with the skeleton as Root > Rig (scaled to metres) > root bone + skinned body, Aura. Held items hang on handslot.r.
-function exportScene(c, { combine, anim, rig = false, atlas = false }) {
+function exportScene(c, { combine, anim, rig = false, atlas = false, gameMats = false }) {
   c.root.updateMatrixWorld(true);
   const t = c.traits, k = c.root.userData.scale, S = new THREE.Matrix4().makeScale(k, k, k);
   const out = new THREE.Group(); out.name = nodeName(t.name); out.position.y = c.root.userData.float;
-  out.userData = extrasFor(t, { rig });
+  out.userData = extrasFor(t, { rig, atlas, gameMats });
   const pal = atlas ? makeAtlas(c) : null;
+  const matFor = kit.gameMaterials(gameMats && !atlas), gameCopies = new Set(); // roughness 1, metallic 0, glow kept
+  const gameMat = (m) => { const g = matFor(m); if (g !== m) gameCopies.add(g); return g; };
   let skel = null, rigNode = null, rest = null;
   if (rig) {
     rigNode = new THREE.Group(); rigNode.name = 'Rig'; rigNode.scale.setScalar(k); out.add(rigNode);
@@ -1375,7 +1399,7 @@ function exportScene(c, { combine, anim, rig = false, atlas = false }) {
     const inv = g.matrixWorld.clone().invert(), unit = rig ? new THREE.Matrix4() : S;
     const parts = meshes.map((m) => {
       const geo = m.geometry.clone().applyMatrix4(unit.clone().multiply(inv).multiply(m.matrixWorld));
-      const mat = pal ? pal.assign(geo, m.material) : m.material;
+      const mat = pal ? pal.assign(geo, m.material) : gameMat(m.material);
       const gr = rig && g === c.body ? gearOf(m) : null;
       return { name: m.name, mat, geo, gear: gr, bone: rig && g === c.body && !gr ? boneFor(m) : undefined };
     });
@@ -1425,9 +1449,9 @@ function exportScene(c, { combine, anim, rig = false, atlas = false }) {
     }
     if (tracks.length) clips.push(new THREE.AnimationClip('Idle', T, tracks));
   }
-  return { out, clips, dispose: () => { out.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); pal?.dispose(); } };
+  return { out, clips, dispose: () => { out.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); pal?.dispose(); for (const m of gameCopies) m.dispose(); } };
 }
-const exportOptions = () => ({ combine: $('combine').checked, anim: $('anim').checked, rig: $('rig').checked, atlas: $('atlas').checked });
+const exportOptions = () => ({ combine: $('combine').checked, anim: $('anim').checked, rig: $('rig').checked, atlas: $('atlas').checked, gameMats: $('gameMats').checked });
 async function exportGLB(opts = exportOptions()) {
   const c = state.current;
   const { out, clips, dispose } = exportScene(c, opts);
@@ -1452,16 +1476,15 @@ async function exportGearKit(opts = exportOptions()) {
     const base = fileBase(), files = [], manifest = { character: t.name, archetype: t.archetype, seed: t.seed, chibi: !!t.chibi,
       skeleton: 'KayKit Adventurers (41 bones)', units: c.traits.chibi ? 'KayKit units (bone space)' : 'body units (bone space)',
       metresPerUnit: +c.root.userData.scale.toFixed(5), body: base + '-body.glb', gear: [] };
-    const exporter = new GLTFExporter();
     for (const p of pieces) {
       p.parent.remove(p);
       const file = `${base}-${kebab(p.userData.kind)}.glb`;
       p.userData = { generator: 'Mystical Character Generator', character: t.name, archetype: t.archetype, seed: t.seed, ...p.userData,
         units: manifest.units, metresPerUnit: manifest.metresPerUnit };
-      files.push({ name: file, data: await exporter.parseAsync(p, { binary: true }) });
+      files.push({ name: file, data: await kit.writeGLB(p) });
       manifest.gear.push({ file, slot: p.userData.slot, kind: p.userData.kind, bone: p.userData.bone, node: p.name });
     }
-    files.unshift({ name: manifest.body, data: await exporter.parseAsync(out, { binary: true, animations: clips }) });
+    files.unshift({ name: manifest.body, data: await kit.writeGLB(out, { animations: clips }) });
     files.push({ name: 'gear.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });
     return { files, manifest };
   } finally {

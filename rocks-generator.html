@@ -458,6 +458,7 @@ function makeMaterials(t) {
 // so seed noise never shifts their ends). Golem chunks put each body part in its own node ("parts").
 const CELL = { low: 0.75, medium: 0.48, high: 0.32 }; // grid cell size of cliff faces, in metres
 const ICO = { low: 2, medium: 4, high: 6 }; // icosahedron detail of rock chunks (20 × (detail + 1)² triangles)
+const VEIN_TRI = { low: 0.11, medium: 0.065, high: 0.045 }; // about one chunk triangle, as a share of the piece's size
 function buildRock(t) {
   const C = CATS[t.category], r = makeRng(t.category + '|' + t.seed + '|shape');
   const detail = t.detail || 'medium', lowpoly = (t.style || 'lowpoly') === 'lowpoly';
@@ -478,11 +479,23 @@ function buildRock(t) {
     },
     group: (parent, name, p = [0, 0, 0]) => { const g = new THREE.Group(); g.name = name; g.position.set(...p); parent.add(g); return g; },
     chunk: (rx, ry, rz, o = {}) => chunk(N, rx, ry, rz, o.detail ?? x.ico, { salt: r.next() * 100, ...o }),
-    // The usual paint: glowing veins where a noise field crosses zero, the top colour on faces that point up
-    // (above minY), otherwise stone, alternating with the band colour per stratum (band(y) gives its index).
+    // Ember veins as bands: seams about `width` metres wide, `spacing` apart, through the rock along gently warped,
+    // tilted planes. They wrap round the piece as continuous glowing bands; the width is kept to at least about one
+    // triangle of the piece (size: its largest side), so a vein never breaks up into scattered glowing triangles.
+    bands: ({ spacing, width, size, warp = 0.45, tilt = 0.8, salt = 0 }) => {
+      const vr = makeRng(t.category + '|' + t.seed + '|veins|' + salt);
+      const dir = V(vr.range(-tilt, tilt), 1, vr.range(-tilt, tilt)).normalize(), phase = vr.next() * spacing, wf = 1.4 / spacing;
+      const half = Math.max(width, size * VEIN_TRI[detail]) / 2;
+      return (q) => {
+        const s = q.dot(dir) + phase + warp * spacing * N.fbm(q.x * wf + 40 + salt, q.y * wf, q.z * wf, 2);
+        return Math.abs(s / spacing - Math.round(s / spacing)) * spacing < half;
+      };
+    },
+    // The usual paint: glowing veins where veins(q, n) says so (x.bands or cliff seams), the top colour on faces that
+    // point up (above minY), otherwise stone, alternating with the band colour per stratum (band(y) gives its index).
     painter: ({ top = false, topNy = 0.6, minY = -1, veins = null, band = null, off = V(0, 0, 0), base = 'stone' } = {}) => (p, n) => {
       const q = p.clone().add(off);
-      if (veins && Math.abs(N.fbm(q.x * veins.freq + 40, q.y * veins.freq, q.z * veins.freq, 2)) < veins.width) return 'glow';
+      if (veins && veins(q, n)) return 'glow';
       if (top && n.y > topNy && q.y > minY) return 'top';
       if (band && band(q) % 2 === 1) return 'stone2';
       return base;
@@ -513,11 +526,23 @@ const bandCount = (H) => clamp(Math.round(H / 1.4), 1, BAND_INSET.length);
 function cliffProfile(o, yN, H, D) {
   yN = clamp(yN, 0, 1);
   if (o.form === 'overhang') return D * 0.62 * (1 - Math.pow(yN, 1.4));
-  const toe = Math.min(1, yN / 0.07);
-  if (o.strata === 'plain') return D * toe * (0.14 + 0.12 * yN);
+  const toe = Math.min(1, yN / 0.07), lip = D * 0.24 * clamp((yN - 0.78) / 0.22, 0, 1) ** 2; // the top edge rounds back
+  if (o.strata === 'plain') return D * toe * (0.14 + 0.12 * yN) + lip;
   const nb = bandCount(H), b = Math.min(Math.floor(yN * nb), nb - 1), f = yN * nb - b;
-  return D * toe * (BAND_INSET[b] + 0.08 * f); // each band leans back a little, the next one steps out or in
+  return D * toe * (BAND_INSET[b] + 0.08 * f) + lip; // each band leans back a little, the next one steps out or in
 }
+// Smooth floor at 0 for the face inset: where the seed's noise would push the face out past the front, it eases
+// towards the front instead of being cut flat there, so the face has no flat, box-like patches.
+// At the foot (yN under 0.07) it blends back to a hard floor, so the toe still reaches the front and the footprint
+// stays exactly centred.
+const softInset = (a, k, yN = 1) => {
+  const soft = a >= k ? a : k * Math.exp(a / k - 1), t = clamp(yN / 0.07, 0, 1);
+  return t >= 1 ? soft : Math.max(a, 0) + (soft - Math.max(a, 0)) * t;
+};
+// The top of a module, lowered towards the front (a rounded shoulder, the same for every seed, so modules still join)
+// and, inside the module, by the seed's noise (an uneven skyline). f is the depth share (0 back, 1 front), win the
+// fade to the module ends, yN the height share: only the upper part of the face moves.
+const topDrop = (x, f, win, yN, nx) => Math.pow(clamp(yN, 0, 1), 3) * x.dims.h * (0.1 * f * f + win * 0.08 * (0.5 + 0.5 * x.N.fbm(nx / 2.5, 7.7, 2.2, 2)));
 const cliffBand = (o, H) => (p) => o.strata === 'plain' ? 0 : Math.floor(clamp(p.y / H, 0, 0.999) * bandCount(H));
 // Seed noise on a face, faded to 0 at the module ends (win = 0) so the end profiles stay exact.
 function faceNoise(x, a, y, win, salt) {
@@ -525,21 +550,29 @@ function faceNoise(x, a, y, win, salt) {
   return win * (0.16 * D * N.fbm(a / 2.4 + salt, 0.4, salt, 2) // vertical ribs and gullies
     + 0.14 * D * N.fbm(a / 1.6 + salt, y / 1.4, salt, 3) + 0.04 * D * N.n3(a * 1.3, y * 1.3, salt + 9));
 }
-function cliffPainter(x) {
-  const { o, dims } = x;
-  return x.painter({ top: o.top === 'grass', topNy: 0.55, veins: o.veins === 'embers' ? { freq: 0.6, width: 0.022 } : null, band: cliffBand(o, dims.h) });
+// Ember seams: glowing bands along the strata boundaries (where one band steps out over the next), a little more than
+// a grid cell thick, following the same wobble as the geometry (wob(q, n)), so they line up across modules.
+function cliffPainter(x, wob) {
+  const { o, dims: { h: H }, cell } = x, nb = bandCount(H), half = Math.max(0.6 * cell, 0.035 * H);
+  const seams = (q, n) => {
+    const y = ((q.y + wob(q, n)) / H) * nb, i = Math.round(y);
+    return i > 0 && i < nb && (Math.abs(y - i) * H) / nb < half;
+  };
+  return x.painter({ top: o.top === 'grass', topNy: 0.55, veins: o.veins === 'embers' ? seams : null, band: cliffBand(o, H) });
 }
 // Straight module: front face towards +Z, flat back (z = -d/2), flat top, planar ends at x = -w/2 and x = +w/2.
 function buildCliff(x) {
   const { dims: { w: W, h: H, d: D }, cell, o } = x;
   const nx = Math.max(2, Math.round(W / cell)), ny = Math.max(2, Math.round(H / cell)), nz = Math.max(2, Math.round(D / cell));
+  const winAt = (px) => Math.pow(Math.max(0, Math.sin(PI * (px + W / 2) / W)), 0.6);
+  const wobAt = (px) => winAt(px) * 0.05 * H * x.N.fbm(px / 2, 3.3, 1.7, 2); // strata boundaries wander a little inside the module
   const g = displace(gridBox(W, H, D, nx, ny, nz), (v) => {
-    const u = (v.x + W / 2) / W, win = Math.pow(Math.max(0, Math.sin(PI * u)), 0.6), wz = (v.z + D / 2) / D;
-    const wob = win * 0.05 * H * x.N.fbm(v.x / 2, 3.3, 1.7, 2); // strata boundaries wander a little inside the module
-    const inset = clamp(cliffProfile(o, (v.y + wob) / H, H, D) + faceNoise(x, v.x, v.y, win, 0.5), 0, 0.85 * D);
+    const win = winAt(v.x), wz = (v.z + D / 2) / D, wob = wobAt(v.x);
+    const inset = Math.min(softInset(cliffProfile(o, (v.y + wob) / H, H, D) + faceNoise(x, v.x, v.y, win, 0.5), 0.06 * D, v.y / H), 0.85 * D);
     v.z -= inset * wz;
+    if (o.form !== 'overhang') v.y -= topDrop(x, wz, win, v.y / H, v.x);
   });
-  x.mass(x.body, 'Cliff', g, cliffPainter(x));
+  x.mass(x.body, 'Cliff', g, cliffPainter(x, (q) => wobAt(q.x)));
   x.bounds = new THREE.Box3(V(-W / 2, 0, -D / 2), V(W / 2, H, D / 2));
 }
 // Outer corner: fronts towards +Z and +X. Its end at x = -d/2 (back at z = -d/2) matches a straight module's end,
@@ -547,16 +580,20 @@ function buildCliff(x) {
 function buildCorner(x) {
   const { dims: { w: W, h: H, d: D }, cell, o } = x;
   const n = Math.max(2, Math.round(Math.max(W, D) / cell)), ny = Math.max(2, Math.round(H / cell));
+  const win = (u) => Math.pow(Math.sin((PI / 2) * clamp(u, 0, 1)), 0.6);
+  const wobAt = (px, pz, w) => w * 0.05 * H * x.N.fbm(px / 2 + pz / 2, 3.3, 1.7, 2);
   const g = displace(gridBox(D, H, D, n, ny, n), (v) => {
-    const ux = (v.x + D / 2) / D, uz = (v.z + D / 2) / D;
-    const winX = Math.pow(Math.sin((PI / 2) * ux), 0.6), winZ = Math.pow(Math.sin((PI / 2) * uz), 0.6);
+    const ux = (v.x + D / 2) / D, uz = (v.z + D / 2) / D, winX = win(ux), winZ = win(uz);
     const round = 0.3 * D; // the corner itself is rounded off
-    const p = (win) => cliffProfile(o, (v.y + win * 0.05 * H * x.N.fbm(v.x / 2 + v.z / 2, 3.3, 1.7, 2)) / H, H, D);
-    const iz = clamp(p(winX) + faceNoise(x, v.x, v.y, winX, 0.5) + round * ux ** 3, 0, 0.85 * D);
-    const ix = clamp(p(winZ) + faceNoise(x, v.z, v.y, winZ, 4.5) + round * uz ** 3, 0, 0.85 * D);
+    const p = (w) => cliffProfile(o, (v.y + wobAt(v.x, v.z, w)) / H, H, D);
+    const iz = Math.min(softInset(p(winX) + faceNoise(x, v.x, v.y, winX, 0.5) + round * ux ** 3, 0.06 * D, v.y / H), 0.85 * D);
+    const ix = Math.min(softInset(p(winZ) + faceNoise(x, v.z, v.y, winZ, 4.5) + round * uz ** 3, 0.06 * D, v.y / H), 0.85 * D);
     v.z -= iz * uz; v.x -= ix * ux;
+    if (o.form !== 'overhang') v.y -= topDrop(x, Math.max(ux, uz), Math.min(winX, winZ), v.y / H, v.x + v.z);
   });
-  x.mass(x.body, 'Corner', g, cliffPainter(x));
+  // a face towards +Z follows the X-window wobble, a face towards +X the Z one (q is displaced: close enough inside)
+  x.mass(x.body, 'Corner', g, cliffPainter(x, (q, nn) => Math.abs(nn.z) >= Math.abs(nn.x)
+    ? wobAt(q.x, q.z, win((q.x + D / 2) / D)) : wobAt(q.x, q.z, win((q.z + D / 2) / D))));
   x.bounds = new THREE.Box3(V(-D / 2, 0, -D / 2), V(D / 2, H, D / 2));
   x.dims.w = D;
 }
@@ -653,13 +690,13 @@ function buildCrag(x) {
     });
     geos.push(g); y += hs * 0.92;
   }
-  x.mass(x.body, 'Crag', geos, x.painter({ top: o.top === 'grass', topNy: 0.7, minY: H * 0.5, veins: o.veins === 'embers' ? { freq: 0.6, width: 0.05 } : null,
+  x.mass(x.body, 'Crag', geos, x.painter({ top: o.top === 'grass', topNy: 0.7, minY: H * 0.5, veins: o.veins === 'embers' ? x.bands({ spacing: H / 2.5, width: 0.08 * W, size: Math.max(W, H) }) : null,
     band: (p) => Math.floor((p.y / H) * n * 2) }));
 }
 
 // ---------- boulders and rocks ----------
 const rockPainter = (x, top) => x.painter({ top: x.o.cover === 'moss', topNy: 0.62, minY: top * 0.45,
-  veins: x.o.cover === 'embers' ? { freq: 0.9, width: 0.06 } : null });
+  veins: x.o.cover === 'embers' ? x.bands({ spacing: 0.55 * x.dims.h, width: 0.05 * Math.max(x.dims.w, x.dims.h), size: Math.max(x.dims.w, x.dims.h, x.dims.d) }) : null });
 function buildBoulder(x) {
   const { dims: { w: W, h: H, d: D }, o, r } = x;
   const geos = [];
@@ -731,7 +768,8 @@ function buildEmberCrag(x) {
     geos.push(flatBase(place(x.chunk(W * 0.13 * s, H * 0.42 * s, D * 0.13 * s, { amp: 0.25, cuts: 4, detail: Math.max(1, x.ico - 1) }),
       [Math.cos(a) * f * W, H * 0.42 * s, Math.sin(a) * f * D], [Math.sin(a) * 0.35, r.next() * 6, -Math.cos(a) * 0.35])));
   }
-  x.mass(x.body, 'Crag', geos, x.painter({ veins: { freq: 0.9 * (4 / Math.max(W, H)), width: o.veins === 'many' ? 0.026 : 0.014 }, top: true, topNy: 0.8, minY: H * 0.7,
+  const size = Math.max(W, H, D);
+  x.mass(x.body, 'Crag', geos, x.painter({ veins: x.bands({ spacing: (o.veins === 'many' ? 0.42 : 0.7) * H, width: 0.045 * size, size }), top: true, topNy: 0.8, minY: H * 0.7,
     band: (p) => (p.y > H * 0.5 ? 1 : 0) }));
 }
 function buildObsidian(x) {
@@ -742,7 +780,7 @@ function buildObsidian(x) {
     const g = new THREE.LatheGeometry([[0, -0.2], [rad, 0], [rad * 0.9, hs * 0.7], [0, hs]].map(([u, v]) => new THREE.Vector2(u, v)), sides);
     shards.push(flatBase(place(g, [Math.cos(a) * f * W, 0, Math.sin(a) * f * D], [Math.sin(a) * f * 1.2, r.next() * 6, -Math.cos(a) * f * 1.2])));
   }
-  x.mass(x.body, 'Shards', shards, x.painter({ base: 'obsidian', veins: o.glow === 'embers' ? { freq: 1.6, width: 0.05 } : null }));
+  x.mass(x.body, 'Shards', shards, x.painter({ base: 'obsidian', veins: o.glow === 'embers' ? x.bands({ spacing: 0.3 * H, width: 0.05 * H, size: 0.5 * Math.max(W, H), tilt: 0.25 }) : null }));
   if (o.base === 'rock') x.mass(x.body, 'Base', flatBase(place(x.chunk(W * 0.4, H * 0.14, D * 0.4, { detail: Math.max(1, x.ico - 1) }), [0, 0.02 * H, 0])), () => 'stone');
 }
 
@@ -765,13 +803,15 @@ function buildGolem(x) {
     : GOLEM_PARTS.map(([name, p, rad]) => [name, p, rad]);
   let cx = 0;
   x.parts = [];
+  // one set of bands through the whole golem, so a vein runs on from one chunk to the next
+  const veins = o.veins === 'embers' ? x.bands({ spacing: 0.45 * sy, width: 0.07 * sy, size: 0.5 * sy, tilt: 0.3 }) : null;
   x.noFit = o.pieces === 'kit'; // a row of chunks: keep their sizes, the row is as long as it is
   for (const [i, [name, p, rad]] of list.entries()) {
     let pos = [p[0] * sx, p[1] * sy, p[2] * sz];
     if (o.pieces === 'kit') { cx += (i ? list[i - 1][2][0] * sx : 0) + rad[0] * sx + (i ? 0.25 : 0); pos = [cx, rad[1] * sy, 0]; }
     const part = x.group(x.body, name, pos);
     const g = x.chunk(rad[0] * sx, rad[1] * sy, rad[2] * sz, { amp: 0.16, cuts: 8, cutMin: 0.5, detail: rad[1] < 0.3 ? Math.max(1, x.ico - 2) : x.ico - 1 });
-    x.mass(part, name.replace('.', '_'), g, x.painter({ off: V(...pos), veins: o.veins === 'embers' ? { freq: 1.1, width: 0.022 } : null, band: (q) => (q.y > pos[1] + rad[1] * sy * 0.5 ? 1 : 0) }));
+    x.mass(part, name.replace('.', '_'), g, x.painter({ off: V(...pos), veins: veins && ((q) => veins(q)), band: (q) => (q.y > pos[1] + rad[1] * sy * 0.5 ? 1 : 0) }));
     x.parts.push(part);
   }
 }

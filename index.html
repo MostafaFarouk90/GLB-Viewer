@@ -969,7 +969,7 @@ async function exportGLB(root, animations, s = null) {
     },
   }));
   try {
-    const buf = await exporter.parseAsync(root, { binary: true, animations, maxTextureSize: maxSize });
+    const buf = await exporter.parseAsync(root, { binary: true, trs: true, animations, maxTextureSize: maxSize }); // TRS: glTF wants it on animated nodes
     return plan.size ? await finishImages(buf, plan, maxSize) : buf;
   } finally {
     for (const [tex, mt] of restore) tex.userData.mimeType = mt;

@@ -175,6 +175,46 @@ for (const file of GENERATOR_VARIANTS) {
       expect(root.children.map((c) => json.nodes[c].name)).toContain('Rig');
     });
 
+    test('townsfolk switch on the game set: KayKit size, matte materials, bones as TRS', async ({ page }, info) => {
+      const SET = ['#chibi', '#kkScale', '#rig', '#atlas', '#gameMats'];
+      await page.uncheck('#bloom');
+      for (const id of SET) await expect(page.locator(id)).not.toBeChecked();
+      await setSeed(page, 'guard', 'game');
+      for (const id of SET) await expect(page.locator(id)).toBeChecked();
+      await expect(page.locator('#detail')).toHaveValue('game');
+      await expect(page.locator('#height')).toBeDisabled(); // KayKit size: the height follows from the head
+      expect(await page.evaluate(() => window.__chargen.state.current.root.userData.scale)).toBe(1);
+      expect(await num(page, 'sF')).toBeLessThanOrEqual(4000);
+      const h = await num(page, 'sH'); // KayKit units: Knight.glb is 2.3 to the top of its head, Rogue and Mage 2.2
+      expect(h).toBeGreaterThan(2.0); expect(h).toBeLessThan(2.9);
+      // without the palette, the guard's steel and trim would be metallic: game materials make them matte
+      await page.uncheck('#atlas');
+      let { json } = parseGLB(await download(page, info));
+      expect(json.materials.length).toBeGreaterThan(2);
+      for (const m of json.materials) {
+        expect(m.pbrMetallicRoughness?.roughnessFactor ?? 1, m.name).toBe(1);
+        expect(m.pbrMetallicRoughness?.metallicFactor ?? 1, m.name).toBe(0);
+      }
+      // every node, bones included, is written as translation/rotation/scale; the rig is in KayKit units (scale 1)
+      expect(json.nodes.filter((n) => n.matrix)).toEqual([]);
+      expect(json.nodes.find((n) => n.name === 'Rig').scale ?? [1, 1, 1]).toEqual([1, 1, 1]);
+      const root = json.nodes[json.scenes[0].nodes[0]];
+      expect(root.extras).toMatchObject({ units: 'KayKit (like Knight.glb)', gameMaterials: true, chibi: true });
+      await page.uncheck('#gameMats');
+      ({ json } = parseGLB(await download(page, info, 'shiny.glb')));
+      expect(Math.max(...json.materials.map((m) => m.pbrMetallicRoughness?.metallicFactor ?? 1))).toBeGreaterThan(0.5);
+      // off KayKit size, Height is metres again
+      await page.uncheck('#kkScale');
+      await expect(page.locator('#height')).toBeEnabled();
+      await expect.poll(() => page.evaluate(() => window.__chargen.state.current.root.userData.scale)).toBeLessThan(1);
+      // another townsfolk keeps the hand-set ticks; a mystical archetype goes back to the page defaults
+      await setSeed(page, 'miner', 'game');
+      await expect(page.locator('#gameMats')).not.toBeChecked();
+      await setSeed(page, 'wizard', 'game');
+      for (const id of SET) await expect(page.locator(id)).not.toBeChecked();
+      await expect(page.locator('#detail')).toHaveValue('low');
+    });
+
     test('KayKit skeleton on a realistic body keeps bone names and rotations', async ({ page }, info) => {
       await page.check('#rig');
       await setSeed(page, 'demon', 'kk2');
@@ -216,6 +256,7 @@ for (const file of GENERATOR_VARIANTS) {
       await page.uncheck('#bloom');
       await page.check('#chibi');
       await setSeed(page, 'guard', 'gear');
+      await page.uncheck('#rig'); // the townsfolk game set ticks it
       for (const [slot, v] of [['headwear', 'helmet'], ['item', 'spear'], ['offhand', 'shield'], ['cloak', 'cape'], ['back', 'backpack'], ['shoulders', 'pauldrons'], ['apron', 'leather']]) {
         await page.selectOption('#' + slot, v);
         await expect.poll(() => page.evaluate((k) => window.__chargen.state.traits[k], slot)).toBe(v);
