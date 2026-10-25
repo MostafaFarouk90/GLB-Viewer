@@ -413,8 +413,9 @@ const GAME_IDS = {
   'gibbet-post': { g: 'C', cat: 'post', opts: { kind: 'gibbet', state: 'weathered' }, pal: 'field' },
   'campfire-ring': { g: 'C', cat: 'campfire', opts: { fuel: 'teepee', fire: 'out', ring: 'stones', extra: 'none' }, pal: 'field' },
   'crow-perch-post': { g: 'C', cat: 'post', opts: { kind: 'perch', state: 'weathered' }, pal: 'field' },
-  'ash-tree-dead-a': { g: 'D', cat: 'tree', opts: { kind: 'dead', roots: 'roots', state: 'burnt' }, pal: 'ash' },
-  'ash-tree-dead-b': { g: 'D', cat: 'tree', opts: { kind: 'dead', roots: 'none', state: 'burnt' }, pal: 'ash' },
+  // crown < 1 narrows the branch spread, so the dead trees fit their 3 m footprint at 8 m tall (the ingest stretches 15% at most)
+  'ash-tree-dead-a': { g: 'D', cat: 'tree', opts: { kind: 'dead', roots: 'roots', state: 'burnt' }, pal: 'ash', crown: 0.5 },
+  'ash-tree-dead-b': { g: 'D', cat: 'tree', opts: { kind: 'dead', roots: 'none', state: 'burnt' }, pal: 'ash', crown: 0.5 },
   'charred-stump': { g: 'D', cat: 'tree', opts: { kind: 'stump', roots: 'roots', state: 'burnt' }, pal: 'ash', glow: true },
   'slag-heap': { g: 'D', cat: 'heap', opts: { kind: 'slag' }, pal: 'ash' },
   'ore-pile': { g: 'D', cat: 'heap', opts: { kind: 'ore' }, pal: 'ash' },
@@ -1302,6 +1303,7 @@ function buildTree(x) {
   const burnt = o.state === 'burnt', spirit = o.kind === 'spirit', bark = burnt ? M.char : spirit ? M.wood2 : M.wood;
   const leaf = spirit ? M.crystal : M.plant;
   if (o.kind === 'stump' || o.kind === 'log') return buildStumpOrLog(x, bark, burnt);
+  const crown = t.crown || 1; // branch spread (game ids that must fit a narrow footprint use less)
   const perp = (d) => { const a = Math.abs(d.y) < 0.9 ? UP : V(1, 0, 0); return d.clone().cross(a).normalize(); };
   const ends = [];
   const branch = (p0, dir, len, rad, depth) => {
@@ -1312,7 +1314,7 @@ function buildTree(x) {
     const k = o.kind === 'dead' ? r.int(2, 3) : r.int(2, 3);
     for (let i = 0; i < k; i++) {
       const ax = perp(dir).applyAxisAngle(dir, (i / k) * PI * 2 + r.next());
-      const nd = dir.clone().applyAxisAngle(ax, r.range(0.45, 0.85)).normalize();
+      const nd = dir.clone().applyAxisAngle(ax, r.range(0.45, 0.85) * crown).normalize();
       if (nd.y < -0.1) nd.y = -0.1;
       branch(p1, nd.normalize(), len * r.range(0.6, 0.78), rad * 0.62, depth - 1);
     }
@@ -1341,7 +1343,7 @@ function buildTree(x) {
     const top = tp[2];
     for (let i = 0; i < 3; i++) {
       const ax = V(Math.cos(i * 2.1), 0, Math.sin(i * 2.1));
-      branch(top, UP.clone().applyAxisAngle(ax, r.range(0.35, 0.65)), o.kind === 'dead' ? 1.1 : 1.2, 0.16, depth);
+      branch(top, UP.clone().applyAxisAngle(ax, r.range(0.35, 0.65) * crown), o.kind === 'dead' ? 1.1 : 1.2, 0.16, depth);
     }
     if (o.kind !== 'dead' && !burnt) {
       for (const e of ends) add(body, 'Foliage', x.rock(r.range(0.55, 0.8)), leaf, e, [r.next(), r.next(), r.next()], [1, 0.75, 1]);
@@ -2168,6 +2170,7 @@ function rollGame(id, seed) {
   const t = { ...rollTraits(d.cat, seed), ...outputSettings(), gameId: id, box, fit: 'height', palette: d.pal };
   Object.assign(t.opts, d.opts);
   t.enchanted = !!d.glow;
+  if (d.crown) t.crown = d.crown;
   t.colors = { ...t.colors, ...PALETTES[d.pal], ...d.colors };
   t.style = 'lowpoly'; $('style').value = 'lowpoly';
   t.detail = pickDetail(t, gameBudget(box)); $('detail').value = t.detail;
