@@ -16,7 +16,6 @@ export const GENERATORS = [
   ['structures', 'Structures', 'structures-generator.html', 'structures-generator-offline.html'],
   ['rocks', 'Rocks & cliffs', 'rocks-generator.html', 'rocks-generator-offline.html'],
   ['creatures', 'Creatures', 'creature-generator.html', 'creature-generator-offline.html'],
-  ['textures', 'Textures & decals', 'texture-generator.html', 'texture-generator-offline.html'],
 ];
 
 // The keys of `const GAME_IDS = { ... };` (one id per line), with a `box: { w, d, h }` on the same line if present.
@@ -24,7 +23,7 @@ export function gameIds(html, file) {
   const i = html.indexOf('const GAME_IDS = {');
   if (i < 0) throw new Error(`${file}: no "const GAME_IDS = {"`);
   const block = html.slice(i, html.indexOf('\n};', i)), ids = {};
-  for (const m of block.matchAll(/^\s*'([a-z0-9-]+)':(.*)$/gm)) {
+  for (const m of block.matchAll(/^\s*'([a-z0-9.-]+)':(.*)$/gm)) { // ids may hold dots (prop.greyfen.ferry-punt)
     const b = m[2].match(/box:\s*\{\s*w:\s*([\d.]+),\s*d:\s*([\d.]+),\s*h:\s*([\d.]+)\s*\}/);
     ids[m[1]] = b ? { w: +b[1], d: +b[2], h: +b[3] } : null;
   }

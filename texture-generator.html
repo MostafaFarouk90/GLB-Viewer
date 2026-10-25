@@ -96,12 +96,7 @@
     <div class="hint">Procedural 512 px game-palette textures that tile, alpha decals for the ground, and a palette atlas that turns a many-material model into one texture. For the <a href="props-generator.html" data-offline-href="props-generator-offline.html">props</a> and <a href="character-generator.html" data-offline-href="character-generator-offline.html">character</a> generators and the <a href="index.html" data-offline-href="glb-viewer-offline.html">GLB viewer &amp; optimizer</a>.</div>
 
     <h2>Game</h2>
-    <div class="row"><label for="gameId">Game id</label><select id="gameId"></select></div>
-    <div class="hint">Embers of Valdren decals from the missing-objects list. Picking one sets the decal, the game palette and its size, and the download is a flat <code>&lt;id&gt;.glb</code> ready for the game.</div>
-    <div class="btns" style="margin-top:2px">
-      <button id="targetsBtn">Load targets.json…</button>
-      <input id="targetsFile" type="file" accept=".json,application/json" hidden>
-    </div>
+    <div class="hint">The game's two decal ids, <code>ash-patch-decal</code> and <code>waystone-flagstones</code>, come from the <a href="props-generator.html" data-offline-href="props-generator-offline.html">props generator</a> as thin meshes: the game refuses a flat quad. The ash patch and flagstone circle decals here make matching images.</div>
 
     <h2>Texture</h2>
     <div class="row"><label for="kind">Type</label><select id="kind"></select></div>
@@ -590,15 +585,6 @@ const KINDS = {
 };
 const GROUPS = { tex: 'Tiling textures', decal: 'Decals (alpha)' };
 
-// ---------- game ids (Embers of Valdren) ----------
-// Flat ground pieces from the missing-objects list (section F). Sizes come from targets.json when the game adds
-// them there; "box" is the size from the list until then.
-const GAME_IDS = {
-  'ash-patch-decal': { kind: 'ashpatch', pal: 'ash', box: { w: 3, d: 3, h: 0.02 } },
-  'waystone-flagstones': { kind: 'flagstones', pal: 'field', opt: 'grass', box: { w: 9, d: 9, h: 0.1 } },
-};
-const gameBox = (id) => TARGETS.objects?.[id] || GAME_IDS[id].box;
-
 // ---------- generation ----------
 // Everything that defines an image; the pixels are a pure function of these traits and the resolution.
 function defaultColors(kind, palette, seed) {
@@ -786,8 +772,6 @@ function log(msg, cls = '') {
 }
 const isDecal = (t = state.traits) => KINDS[t.kind].group === 'decal';
 
-$('gameId').add(new Option('None (free design)', ''));
-for (const id of Object.keys(GAME_IDS)) $('gameId').add(new Option(id, id));
 for (const [g, label] of Object.entries(GROUPS)) {
   const og = document.createElement('optgroup'); og.label = label;
   for (const [k, K] of Object.entries(KINDS)) if (K.group === g) og.appendChild(new Option(K.label, k));
@@ -802,7 +786,6 @@ for (let i = 0; i < 3; i++) {
 
 function writeUI(t) {
   const K = KINDS[t.kind], decal = K.group === 'decal';
-  $('gameId').value = t.gameId || '';
   $('kind').value = t.kind; $('seed').value = t.seed; $('palette').value = t.palette;
   $('scale').value = t.scale; $('contrast').value = t.contrast; $('posterize').value = String(t.posterize); $('soft').value = t.soft;
   $('optRow').style.display = K.opts ? '' : 'none';
@@ -818,9 +801,7 @@ function writeUI(t) {
   $('flatOpts').style.display = decal ? 'none' : '';
   $('format').querySelector('[value=jpeg]').disabled = decal;
   if (decal && $('format').value === 'jpeg') $('format').value = 'png';
-  if (t.box) { $('decalW').value = t.box.w; $('decalD').value = t.box.d; }
-  $('decalW').disabled = $('decalD').disabled = !!t.box;
-  $('fileName').value = t.gameId || t.kind;
+  $('fileName').value = t.kind;
   updateLabels();
 }
 function updateLabels() {
@@ -857,10 +838,10 @@ function rebuild({ fit = false } = {}) {
     $('sS').style.color = ok ? 'var(--ok)' : 'var(--err)';
   } else { $('sS').textContent = 'decal (no tiling)'; $('sS').style.color = ''; }
   $('sA').textContent = (opaqueShare(img.data) * 100).toFixed(0) + '%';
-  if (isDecal(t)) { const b = t.box || { ...decalSize(), h: 0 }; $('sT').textContent = `${fmtLen(b.w)} × ${fmtLen(b.h)} × ${fmtLen(b.d)}`; }
+  if (isDecal(t)) { const b = { ...decalSize(), h: 0 }; $('sT').textContent = `${fmtLen(b.w)} × ${fmtLen(b.h)} × ${fmtLen(b.d)}`; }
   else $('sT').textContent = `tile ${fmtLen(Number($('tileM').value) || 2)}`;
   const K = KINDS[t.kind];
-  $('texName').textContent = t.gameId ? `${t.gameId} · ${K.label}` : K.label;
+  $('texName').textContent = K.label;
   if (isDecal(t) && !['decal', 'model'].includes($('preview').value)) $('preview').value = 'decal';
   if (!isDecal(t) && $('preview').value === 'decal') $('preview').value = 'plane';
   updatePreview(fit);
@@ -874,7 +855,7 @@ function updatePreview(fit) {
   ground.visible = true; ground.position.y = 0;
   const tile = Number($('tileM').value) || 2;
   if (mode === 'decal') {
-    const b = t.box || decalSize();
+    const b = decalSize();
     previewMesh.geometry = decalGeometry(b.w, b.d); previewMesh.position.set(0, 0.004, 0);
     previewTex.repeat.set(1, 1); previewTex.flipY = false;
     if ($('alphaMode').value === 'MASK') previewMat.alphaTest = 0.5; else { previewMat.transparent = true; previewMat.depthWrite = false; }
@@ -889,7 +870,7 @@ function updatePreview(fit) {
     previewTex.repeat.set(2, 1); previewTex.flipY = true;
   }
   previewTex.needsUpdate = true; previewMat.needsUpdate = true;
-  const span = mode === 'model' ? new THREE.Box3().setFromObject(modelHolder).getSize(new THREE.Vector3()).x : mode === 'plane' ? tile * 3 : mode === 'decal' ? (t.box || decalSize()).w : tile / 2;
+  const span = mode === 'model' ? new THREE.Box3().setFromObject(modelHolder).getSize(new THREE.Vector3()).x : mode === 'plane' ? tile * 3 : mode === 'decal' ? decalSize().w : tile / 2;
   knight.visible = $('knight').checked; knight.position.set(-((span || 1) / 2 + 0.6), 0, 0);
   if (fit) fitView();
 }
@@ -907,32 +888,14 @@ function roll(kind, seed, over = {}) {
   rebuild({ fit: true });
   log(`${KINDS[kind].label} (seed "${seed}")`);
 }
-function rollGame(id, seed) {
-  const d = GAME_IDS[id], box = gameBox(id);
-  state.traits = makeTraits(d.kind, seed, { palette: d.pal, gameId: id, box: { w: box.w, d: box.d, h: box.h }, ...(d.opt ? { opt: d.opt } : {}) });
-  $('format').value = 'png';
-  writeUI(state.traits);
-  rebuild({ fit: true });
-  log(`${id}: ${KINDS[d.kind].label}, ${fmtLen(box.w)} × ${fmtLen(box.d)}${TARGETS.objects?.[id] ? '' : ' (size from the missing-objects list, not in targets.json yet)'}, seed "${seed}"`);
-}
 let pending = 0;
 function scheduleRebuild() {
   cancelAnimationFrame(pending);
   pending = requestAnimationFrame(() => { state.traits = readUI(); updateLabels(); rebuild(); });
 }
-async function loadTargets(text, from) {
-  try {
-    const j = JSON.parse(text);
-    if (!j.objects || typeof j.objects !== 'object') throw new Error('no "objects" table');
-    TARGETS = j;
-    const known = Object.keys(GAME_IDS).filter((id) => j.objects[id]).length;
-    log(`Targets from ${from}: ${Object.keys(j.objects).length} ids, ${known} of the ${Object.keys(GAME_IDS).length} decal ids here`, 'ok');
-    if (state.traits?.gameId) rollGame(state.traits.gameId, state.traits.seed);
-  } catch (e) { log(`Could not read targets from ${from}: ${e.message}`, 'warn'); }
-}
 
 $('kind').addEventListener('change', () => roll($('kind').value, $('seed').value.trim() || randomSeed()));
-const reroll = (seed) => state.traits.gameId ? rollGame(state.traits.gameId, seed) : roll(state.traits.kind, seed);
+const reroll = (seed) => roll(state.traits.kind, seed);
 $('seed').addEventListener('change', () => reroll($('seed').value.trim() || randomSeed()));
 $('randomBtn').addEventListener('click', () => reroll(randomSeed()));
 $('colorsBtn').addEventListener('click', () => {
@@ -949,15 +912,6 @@ for (const id of ['posterize', 'opt', 'embers', 'res']) $(id).addEventListener('
 for (const id of ['decalW', 'decalD', 'tileM']) $(id).addEventListener('change', () => rebuild({ fit: true }));
 $('alphaMode').addEventListener('change', () => updatePreview(false));
 $('tile2').addEventListener('change', () => rebuild());
-$('gameId').addEventListener('change', () => {
-  const id = $('gameId').value, seed = $('seed').value.trim() || randomSeed();
-  if (id) rollGame(id, seed); else roll(state.traits.kind, seed, { gameId: undefined, box: undefined });
-});
-$('targetsBtn').addEventListener('click', () => $('targetsFile').click());
-$('targetsFile').addEventListener('change', async () => {
-  const f = $('targetsFile').files[0]; if (f) await loadTargets(await f.text(), f.name);
-  $('targetsFile').value = '';
-});
 $('preview').addEventListener('change', () => updatePreview(true));
 $('knight').addEventListener('change', () => { knight.visible = $('knight').checked; fitView(); });
 $('fitBtn').addEventListener('click', fitView);
@@ -972,17 +926,17 @@ async function busy(text, fn) {
   finally { $('busy').classList.remove('show'); state.busy = false; }
 }
 const extrasOf = (t, res) => ({ generator: 'texture-generator', kind: t.kind, seed: t.seed, palette: t.palette, colors: t.colors, scale: t.scale,
-  contrast: t.contrast, posterize: t.posterize, soft: t.soft, opt: t.opt, embers: t.embers, res, ...(t.gameId ? { gameId: t.gameId } : {}) });
+  contrast: t.contrast, posterize: t.posterize, soft: t.soft, opt: t.opt, embers: t.embers, res });
 
 // A flat GLB: the decal at its size (alpha), or one tile of the texture (opaque). Image bytes are our own PNG.
 async function exportGLB(t = state.traits, img = state.image) {
-  const decal = isDecal(t), b = decal ? (t.box || decalSize()) : { w: Number($('tileM').value) || 2, d: Number($('tileM').value) || 2 };
+  const decal = isDecal(t), b = decal ? decalSize() : { w: Number($('tileM').value) || 2, d: Number($('tileM').value) || 2 };
   const tex = new THREE.CanvasTexture(toCanvas(img)); tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace;
   if (!decal) tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   const mat = new THREE.MeshStandardMaterial({ name: decal ? 'Decal' : KINDS[t.kind].label.replace(/\s+/g, ''), map: tex, roughness: 1, metalness: 0 });
   if (decal) { if ($('alphaMode').value === 'MASK') mat.alphaTest = 0.5; else mat.transparent = true; }
   const mesh = new THREE.Mesh(decalGeometry(b.w, b.d), mat); mesh.name = decal ? 'Decal' : 'Tile';
-  const root = new THREE.Group(); root.name = kit.nodeName(t.gameId || fileBase(), 'Texture'); root.add(mesh);
+  const root = new THREE.Group(); root.name = kit.nodeName(fileBase(), 'Texture'); root.add(mesh);
   root.userData = extrasOf(t, img.res);
   try {
     const buf = await kit.writeGLB(root);
@@ -1171,20 +1125,12 @@ $('atlasPngBtn').addEventListener('click', () => busy('Encoding atlas…', async
   log(`Saved ${name} (${fmtBytes(bytes.length)})`, 'ok');
 }));
 
-// for tools/export-ids.mjs: every game id as the Download GLB button saves it
-kit.registerGenerator('texture', {
-  ids: () => Object.keys(GAME_IDS),
-  targets: () => TARGETS,
-  files: async (id, seed = id) => { rollGame(id, seed); return [{ name: id + '.glb', data: await exportGLB() }]; },
-});
-window.__texgen = { THREE, GLTFExporter, state, KINDS, GAME_IDS, makeTraits, generate, seamRatio, opaqueShare, encodePNG, makePack, exportGLB, buildAtlas, openModel, rollGame, roll, targets: () => TARGETS }; // handy for debugging in the console, and for other pages
+window.__texgen = { THREE, GLTFExporter, state, KINDS, makeTraits, generate, seamRatio, opaqueShare, encodePNG, makePack, exportGLB, buildAtlas, openModel, roll, targets: () => TARGETS }; // handy for debugging in the console, and for other pages
 
 roll('thatch', randomSeed());
-log('Ready. Pick a texture, a decal or a game id, then download the image or a GLB.', 'ok');
-// the game's live size table, when online (decal sizes fall back to the missing-objects list)
+log('Ready. Pick a texture or a decal, then download the image or a GLB.', 'ok');
 // the game's live shipped list, so a download never replaces a model the game ships (the built-in copy otherwise)
 kit.fetchShipped().catch(() => { /* offline: keep the built-in copy */ });
-kit.fetchLiveTargets().then((text) => loadTargets(text, 'the game repo'), () => { /* offline: keep the list sizes */ });
 </script>
 </body>
 </html>

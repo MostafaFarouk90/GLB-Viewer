@@ -148,7 +148,7 @@ async function runPage(name) {
       files = await page.evaluate(async ([n, id, seed, lods]) => {
         const out = await window.EmbersKit.generators[n].files(id, seed, { lods });
         const b64 = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
-        return out.map((f) => ({ name: f.name, data: b64(f.data) }));
+        return out.map((f) => ({ name: f.name, data: b64(f.data), pivot: f.pivot }));
       }, [name, id, seed, opts.lods]);
     } catch (e) {
       console.log(`  ${id}: FAILED ${e.message.split('\n')[0]}`);
@@ -159,6 +159,7 @@ async function runPage(name) {
       const data = Buffer.from(f.data, 'base64'), file = rename(f.name);
       fs.writeFileSync(path.join(dir, file), data);
       const entry = { page: name, id, seed, file: `${name}/${file}`, bytes: data.length, ...inspectGLB(data), target: targets?.objects?.[id] || null };
+      if (f.pivot) entry.pivot = f.pivot; // 'grip': a hand-held prop with its origin at the hand (section H of the list)
       if (shipped.has(id)) entry.shipped = true;
       entry.warnings = [...checks(entry, targets), ...errors.slice(before).map((e) => 'page error: ' + e)];
       if (opts.check) entry.check = checkGlb(file.replace(/\.glb$/, '').replace(/\.lod\d+$/, ''), id, entry, targets); // a LOD is checked as its id
@@ -223,7 +224,7 @@ function checks(e, targets) {
   const w = [], t = e.target, tol = targets?.tolerance ?? 0.15;
   if (e.triangles > (targets?.maxTriangles || 10000)) w.push(`${e.triangles} triangles is over the ${targets?.maxTriangles || 10000} cap`);
   if (e.bytes > (targets?.maxFileMB || 1.5) * 1048576) w.push(`${(e.bytes / 1048576).toFixed(2)} MB is over ${targets?.maxFileMB || 1.5} MB`);
-  if (e.base !== null && Math.abs(e.base) > 0.02) w.push(`base at y ${e.base}, not 0`);
+  if (e.base !== null && Math.abs(e.base) > 0.02 && e.pivot !== 'grip') w.push(`base at y ${e.base}, not 0`);
   if (t && e.size && t.h > 0) {
     const drv = Math.max(t.w, t.d) > 1.8 * t.h ? (t.w >= t.d ? 'w' : 'd') : 'h';
     const off = e.size[drv] / t[drv] - 1;
@@ -257,8 +258,12 @@ function checkGlb(fileId, id, e, cfg0) {
       if (f > 1.15 || f < 1 / 1.15) caps.push(`CAP ${name} ${(size[k] * want.h / size.h).toFixed(2)} m at the target height, want ${want[k]} m (needs ×${f.toFixed(2)}, ingest stretches ×1.15 at most)`);
     }
   }
-  if (Math.abs(e.base ?? 0) > 0.05) problems.push(`pivot: base at y ${e.base.toFixed(2)}, want 0`);
-  if (e.center && Math.hypot(e.center.x, e.center.z) > 0.1 * Math.max(size.w, size.d)) problems.push(`pivot: footprint centre at (${e.center.x.toFixed(2)}, ${e.center.z.toFixed(2)}), want about 0, 0`);
+  // a hand-held prop has its origin at the grip, as section H of the list asks, so the base-centre rules do not apply
+  if (e.pivot === 'grip') caps.push('pivot at the grip (hand-held, section H): base and footprint-centre rules skipped');
+  else {
+    if (Math.abs(e.base ?? 0) > 0.05) problems.push(`pivot: base at y ${e.base.toFixed(2)}, want 0`);
+    if (e.center && Math.hypot(e.center.x, e.center.z) > 0.1 * Math.max(size.w, size.d)) problems.push(`pivot: footprint centre at (${e.center.x.toFixed(2)}, ${e.center.z.toFixed(2)}), want about 0, 0`);
+  }
   const line = `${problems.length ? 'FAIL' : 'ok  '} ${fileId}  ${size.w.toFixed(2)} x ${size.d.toFixed(2)} x ${size.h.toFixed(2)} m${problems.length ? '  ' + problems.join('; ') : ''}`
     + caps.map((c) => '\n     ' + c).join('');
   return { ok: !problems.length, problems, caps, line };

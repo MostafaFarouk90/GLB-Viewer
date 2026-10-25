@@ -119,7 +119,7 @@
 
     <h2>Colors</h2>
     <div class="row"><label for="palette">Palette</label>
-      <select id="palette"><option value="random">Random for this seed</option><option value="field">Game: field and village</option><option value="ash">Game: ash country</option></select></div>
+      <select id="palette"><option value="random">Random for this seed</option><option value="field">Game: field and village</option><option value="ash">Game: ash country</option><option value="frost">Game: Dragonspine</option></select></div>
     <div class="colors" id="colors"></div>
 
     <h2>Output</h2>
@@ -225,6 +225,7 @@ const SW = kit.SWATCHES; // the game's palette (shared/palette.js)
 const PALETTES = {
   field: { stone: SW.warmStone, stone2: '#686358', top: SW.grass, glow: '#ffb347', dark: '#17130f', obsidian: '#1c1824' },
   ash: { stone: SW.charcoal, stone2: SW.scorched, top: SW.ashGrey, glow: SW.ember, dark: '#0f0c0a', obsidian: '#16121c' },
+  frost: { stone: SW.frostStone, stone2: '#6f767c', top: SW.snow, glow: '#ffb347', dark: '#15171a', obsidian: '#16121c' },
 };
 
 // ---------- categories ----------
@@ -290,7 +291,7 @@ const CATS = {
   },
   cluster: {
     label: 'Rock cluster', group: 'rocks', dims: { w: 2.5, h: 1, d: 2 },
-    opts: { count: opt('Stones', { few: ['Three', 1], many: ['Five', 2] }),
+    opts: { count: opt('Stones', { few: ['Three', 1], many: ['Five', 2], jumble: ['Rockfall jumble (fills a passage)', 0] }),
       cover: opt('Cover', { bare: ['Bare', 2], moss: ['Moss on top', 1], embers: ['Ember veins', 1] }) },
     nouns: ['Stones', 'Rocks', 'Outcrop'], build: buildCluster,
   },
@@ -325,7 +326,7 @@ const CATS = {
 // Rock ids the game needs. Sizes come from targets.json; "box" is the fallback for ids not in targets.json yet:
 // the cliff kit, caves and Act 2 pieces are not named by the game, so their ids and sizes are provisional.
 const GAME_GROUPS = { A: 'Rocks in targets.json (A, D)', K: 'Cliffs and ledges (provisional)', S: 'Scree, caves, arches, crags (provisional)',
-  X: 'Ash country rocks (provisional)', G: 'Act 2 stand-ins (G, provisional sizes)' };
+  X: 'Ash country rocks (provisional)', G: 'Act 2 stand-ins (G, provisional sizes)', O: 'Dragonspine (O)' };
 const GAME_IDS = {
   'boulder-large-a': { g: 'A', cat: 'boulder', opts: { form: 'round', cover: 'moss' }, pal: 'field' },
   'boulder-large-b': { g: 'A', cat: 'boulder', opts: { form: 'tor', cover: 'moss' }, pal: 'field' },
@@ -351,6 +352,7 @@ const GAME_IDS = {
   'obsidian-shards-a': { g: 'X', cat: 'obsidian', opts: { count: 'many', base: 'rock', glow: 'embers' }, pal: 'ash', box: { w: 2, d: 2, h: 1.8 } },
   'golem-rock-chunks': { g: 'G', cat: 'golem', opts: { pieces: 'rig', veins: 'embers' }, pal: 'ash', box: { w: 2.4, d: 1.3, h: 2.8 } },
   'poi-cave-mouth': { g: 'G', cat: 'cave', opts: { shape: 'low', top: 'grass', rubble: 'yes' }, pal: 'field', box: { w: 4, d: 3, h: 3 } },
+  'dragonspine-rockfall': { g: 'O', cat: 'cluster', opts: { count: 'jumble', cover: 'bare' }, pal: 'frost', box: { w: 4, d: 2, h: 3 } },
 };
 let TARGETS = kit.embeddedTargets();
 const gameBox = (id) => TARGETS.objects?.[id] || GAME_IDS[id]?.box || null;
@@ -722,6 +724,21 @@ function buildBoulder(x) {
 }
 function buildCluster(x) {
   const { dims: { w: W, h: H, d: D }, o, r } = x;
+  if (o.count === 'jumble') { // fallen boulders heaped up to the roof: three layers, smaller towards the top
+    const geos = [], layers = [[4, 0.3, 0.42], [3, 0.27, 0.36], [2, 0.24, 0.3]];
+    let y = 0;
+    layers.forEach(([n, sw, sh], li) => {
+      for (let i = 0; i < n; i++) {
+        const s = r.range(0.85, 1.1), cx = n === 1 ? 0 : (-0.5 + i / (n - 1)) * W * (0.72 - li * 0.12);
+        const g = place(x.chunk(W * sw * s * 0.5, H * sh * s * 0.5, D * 0.42 * s, li ? {} : { detail: Math.max(1, x.ico - 1) }),
+          [cx + r.range(-0.05, 0.05) * W, y + H * sh * s * 0.45, r.range(-0.08, 0.08) * D], [r.range(-0.3, 0.3), r.next() * 6, r.range(-0.3, 0.3)]);
+        geos.push(li ? g : flatBase(g));
+      }
+      y += H * sh * 0.82;
+    });
+    x.mass(x.body, 'Stones', geos, rockPainter(x, H));
+    return;
+  }
   const n = o.count === 'many' ? 5 : 3, geos = [];
   geos.push(flatBase(place(x.chunk(W * 0.26, H * 0.62, D * 0.3), [r.range(-0.06, 0.06) * W, H * 0.38, 0], [0, r.next() * 6, 0]))); // main stone, partly buried
   for (let i = 1; i < n; i++) {

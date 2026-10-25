@@ -118,7 +118,7 @@
 
     <h2>Colors</h2>
     <div class="row"><label for="palette">Palette</label>
-      <select id="palette"><option value="random">Random for this seed</option><option value="summer">Game: summer greens</option><option value="autumn">Game: autumn</option></select></div>
+      <select id="palette"><option value="random">Random for this seed</option><option value="summer">Game: summer greens</option><option value="autumn">Game: autumn</option><option value="ash">Game: ash country</option></select></div>
     <div class="colors" id="colors"></div>
 
     <h2>Output</h2>
@@ -208,9 +208,11 @@ function basePalette(r) {
 const PALETTES = {
   summer: { leaf: kit.SWATCHES.grass, leaf2: '#456f35', bark: kit.SWATCHES.bark, mark: '#3e2c1c', bloom: '#f4efe6', bloom2: '#f2a0b8', fruit: '#e0b43a', head: '#5a3b22' },
   autumn: { leaf: '#d06a2a', leaf2: '#9c3b22', bark: '#5e4128', mark: '#3a281a', bloom: '#e8b04a', bloom2: '#c8522a', fruit: '#a83a2c', head: '#5a3b22' },
+  // ash country (Act 2): dusty grey-olive leaves, scorched bark
+  ash: { leaf: '#77745f', leaf2: '#5c5a4a', bark: kit.SWATCHES.scorched, mark: '#2b2118', bloom: '#d8d0c0', bloom2: '#a8a090', fruit: '#8a3a22', head: '#4a3a2a' },
 };
 // Colours that come with a species, whatever the palette: white birch bark, pale poplar bark, dark holly.
-// Leaf colours here are left out for the autumn palette.
+// Leaf colours here are left out for the autumn and ash palettes.
 const KIND_COLORS = {
   birch: { bark: '#e6e2d6', mark: '#2e2a27', leaf: '#8fbf4e', leaf2: '#6f9e3a' },
   poplar: { bark: '#b9ad94', mark: '#7d6f58' },
@@ -248,10 +250,10 @@ const CATS = {
       kind: opt('Species', { oak: ['Oak', 2], broadleaf: ['Broadleaf', 2], ash: ['Ash or elm'], birch: ['Birch', 2], poplar: ['Poplar'], willow: ['Willow'] }),
       crown: opt('Crown', { round: ['Round', 2], layered: ['Layered', 2], open: ['Open'] }),
       roots: opt('Base', { roots: ['Big roots'], flare: ['Flared base'] }),
-      blossom: opt('Blossom', { none: ['None', 4], blossom: ['Spring blossom'] }),
+      blossom: opt('Blossom', { none: ['None', 4], blossom: ['Spring blossom'], apples: ['Apples', 0] }),
     },
     size: (o) => TREES[o.kind].size, aspect: (o) => TREES[o.kind].aspect,
-    name: (o) => `${CATS.tree.opts.crown.values[o.crown]} ${TREES[o.kind].label.toLowerCase()}${o.blossom === 'blossom' ? ' in blossom' : ''}`,
+    name: (o) => `${CATS.tree.opts.crown.values[o.crown]} ${TREES[o.kind].label.toLowerCase()}${o.blossom === 'blossom' ? ' in blossom' : o.blossom === 'apples' ? ' with apples' : ''}`,
     build: buildTree,
   },
   bush: {
@@ -300,6 +302,12 @@ const CATS = {
     name: (o) => ({ daisy: 'Daisy patch', tulip: 'Tulip patch', bell: 'Bluebell patch' })[o.flower],
     build: buildFlowers,
   },
+  reedbed: {
+    label: 'Reed bed (large)', group: 'ground',
+    opts: { state: opt('State', { green: ['Green-gold reeds in water', 2], charred: ['Burnt stubble, smouldering', 1] }) },
+    size: (o) => o.state === 'charred' ? [0.5, 0.7] : [2, 2.4], aspect: (o) => o.state === 'charred' ? 50 : 13.6,
+    name: (o) => o.state === 'charred' ? 'Burnt reed bed' : 'Reed bed', build: buildReedBed,
+  },
   reeds: {
     label: 'Reeds', group: 'ground',
     opts: { heads: opt('Cattails', { many: ['Many', 2], few: ['A few', 2], none: ['None'] }) },
@@ -312,7 +320,7 @@ const CATS = {
 // Each vegetation id from the game's missing-objects list (section A, and the F additions poplar, willow and holly):
 // which category and variants make it, which game palette it uses and any colours of its own. Sizes come from
 // targets.json; "box" is the fallback for ids not in targets.json yet (sizes from the missing-objects list).
-const GAME_GROUPS = { T: 'Trees (A, F)', S: 'Bushes and hedges (A, F)', G: 'Grass, ferns, flowers and reeds (A)' };
+const GAME_GROUPS = { T: 'Trees (A, F)', S: 'Bushes and hedges (A, F)', G: 'Grass, ferns, flowers and reeds (A)', I: 'Orchards and ash country (I, targets.json)', N: 'Greyfen reed beds (N)' };
 const GAME_IDS = {
   'oak-a': { g: 'T', cat: 'tree', opts: { kind: 'oak', crown: 'layered', roots: 'roots', blossom: 'none' }, pal: 'summer' },
   'oak-b': { g: 'T', cat: 'tree', opts: { kind: 'oak', crown: 'round', roots: 'roots', blossom: 'none' }, pal: 'summer' },
@@ -341,6 +349,13 @@ const GAME_IDS = {
   'flower-patch-red': { g: 'G', cat: 'flowers', opts: { flower: 'tulip', mix: 'one' }, pal: 'summer', colors: { bloom: '#c8302c' } },
   'reeds-a': { g: 'G', cat: 'reeds', opts: { heads: 'many' }, pal: 'summer', colors: { leaf: '#6f8f45', leaf2: '#87a352' } },
   'reeds-b': { g: 'G', cat: 'reeds', opts: { heads: 'few' }, pal: 'summer', colors: { leaf: '#6f8f45', leaf2: '#5c7a3a' } },
+  'fruit-tree-a': { g: 'I', cat: 'tree', opts: { kind: 'broadleaf', crown: 'round', roots: 'flare', blossom: 'apples' }, pal: 'summer', colors: { fruit: '#c0262b', leaf: '#5f9444', leaf2: '#4a7a38' } },
+  'fruit-tree-b': { g: 'I', cat: 'tree', opts: { kind: 'broadleaf', crown: 'round', roots: 'flare', blossom: 'blossom' }, pal: 'summer', colors: { leaf: '#e8b8c8', leaf2: '#d89ab0', bloom: '#f8e4ec', bloom2: '#f0c0d0' } },
+  'oak-ash-a': { g: 'I', cat: 'tree', opts: { kind: 'oak', crown: 'open', roots: 'roots', blossom: 'none' }, pal: 'ash' },
+  'bush-round-ash': { g: 'I', cat: 'bush', opts: { kind: 'round', form: 'lumpy' }, pal: 'ash' },
+  'grass-clump-ash': { g: 'I', cat: 'grass', opts: { kind: 'tall', seeds: 'seeds' }, pal: 'ash' },
+  'greyfen-reed-bed': { g: 'N', cat: 'reedbed', opts: { state: 'green' }, pal: 'summer', colors: { leaf: '#a8a058', leaf2: '#7f8f4a', head: '#6a4a2a', bark: '#3a4a44' }, box: { w: 30, d: 30, h: 2.2 } },
+  'greyfen-reed-bed-charred': { g: 'N', cat: 'reedbed', opts: { state: 'charred' }, pal: 'ash', colors: { leaf: '#1c1714', leaf2: '#3a3430', head: '#8d8780', bark: '#3a4a44', fruit: kit.SWATCHES.ember }, box: { w: 30, d: 30, h: 0.6 } },
 };
 let TARGETS = kit.embeddedTargets();
 const gameBox = (id) => TARGETS.objects?.[id] || GAME_IDS[id]?.box || null;
@@ -355,7 +370,7 @@ const sizeRange = (cat, opts) => { const s = CATS[cat].size; return typeof s ===
 // Colours of a plant: the seed's random set or a game palette, then the species colours, then the game id's own.
 function colorsFor(t) {
   const c = { ...basePalette(makeRng(t.category + '|' + t.seed + '|colors')), ...(PALETTES[t.palette] || {}) };
-  for (const [k, v] of Object.entries(KIND_COLORS[t.opts.kind] || {})) if (t.palette !== 'autumn' || !LEAF_KEYS.includes(k)) c[k] = v;
+  for (const [k, v] of Object.entries(KIND_COLORS[t.opts.kind] || {})) if ((t.palette !== 'autumn' && t.palette !== 'ash') || !LEAF_KEYS.includes(k)) c[k] = v;
   return { ...c, ...(t.gameId ? GAME_IDS[t.gameId].colors : {}) };
 }
 
@@ -423,6 +438,8 @@ function makeMaterials(t) {
     bloom2: std('Blossom2', { color: col(c.bloom2), roughness: 0.7 }),
     fruit: std('Berries', { color: col(c.fruit), roughness: 0.45 }),
     head: std('SeedHeads', { color: col(c.head), roughness: 0.95 }),
+    water: std('Water', { color: col(c.bark), roughness: 0.25 }), // the reed bed's shallow water (its "bark" colour)
+    ember: std('Embers', { color: col(c.fruit), emissive: col(c.fruit), emissiveIntensity: 2.5, roughness: 0.6 }),
   };
 }
 
@@ -614,6 +631,14 @@ function buildTree(x) {
     }
   } else add(body, 'Flare', x.cyl(tr * 0.95, tr * 1.35, tr * 0.9, 12), M.bark, [0, tr * 0.45, 0]);
 
+  if (o.blossom === 'apples') { // apples dotted over the outside of every cluster
+    const geos = [], b = H * 0.022;
+    for (const { p, rad, s } of clusters) for (let i = 0, n = Math.round((3 + rad * 3) * x.keep); i < n; i++) {
+      const a = r.next() * PI * 2, y = r.range(-0.6, 0.7), q = Math.sqrt(1 - y * y), dir = V(Math.cos(a) * q, y, Math.sin(a) * q);
+      geos.push(x.place(new THREE.IcosahedronGeometry(b * r.range(0.9, 1.15), 0), p.clone().add(V(dir.x * rad * s[0], dir.y * rad * s[1], dir.z * rad * s[2]).multiplyScalar(0.97))));
+    }
+    x.merged('Apples', geos, M.fruit);
+  }
   if (o.blossom === 'blossom') { // small blossoms on the upper side of every cluster
     const geos = [[], []], b = H * 0.012;
     for (const { p, rad, s } of clusters) for (let i = 0, n = Math.round((4 + rad * 4) * x.keep); i < n; i++) {
@@ -802,6 +827,35 @@ function buildReeds(x) {
   }
   x.merged('Stems', stems, M.leaf2);
   x.merged('Cattails', heads, M.head);
+}
+
+// A big reed bed in shallow water: clumps of reed stems over an uneven footprint, a few seed heads; or the same bed
+// burnt to black stubble with grey ash on the water and a few smouldering stalks. Clumps are thin cones so a 30 m bed
+// stays within the triangle budget.
+function buildReedBed(x) {
+  const { o, r, M } = x, charred = o.state === 'charred', H = charred ? 0.6 : 2.2, R = (H * x.aspect) / 2;
+  const edge = (a) => R * (0.86 + 0.1 * Math.sin(a * 3 + 1) + 0.06 * Math.sin(a * 7)); // uneven outline
+  const water = [], ash = [], stems = [[], []], heads = [], embers = [];
+  water.push(x.place(new THREE.CylinderGeometry(1, 1, 0.02, x.seg(24)), V(0, 0.01, 0), undefined, V(R * 0.97, 1, R * 0.97)));
+  const n = Math.round(320 * Math.min(1.4, x.D));
+  for (let i = 0; i < n; i++) {
+    const a = r.next() * PI * 2, d = Math.sqrt(r.next()) * edge(a), p = V(Math.cos(a) * d, 0, Math.sin(a) * d);
+    const h = H * (charred ? r.range(0.25, 0.9) : r.range(0.55, 1) * (0.85 + 0.15 * Math.sin(p.x * 0.4 + p.z * 0.3))); // uneven top
+    const w = charred ? 0.45 : 0.85, k = r.chance(0.5) ? 0 : 1; // a cone stands for a clump of stems
+    stems[k].push(x.place(new THREE.ConeGeometry(w * r.range(0.8, 1.2), h, 4), V(p.x, h / 2, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(r.range(-0.08, 0.08), r.next() * 3, r.range(-0.08, 0.08)))));
+    if (!charred && r.chance(0.12)) heads.push(x.place(new THREE.CylinderGeometry(0.05, 0.05, 0.22, 4), V(p.x, h + 0.1, p.z)));
+    if (charred && r.chance(0.05)) embers.push(x.place(new THREE.ConeGeometry(0.06, 0.12, 4), V(p.x, h + 0.04, p.z)));
+  }
+  if (charred) for (let i = 0; i < 14; i++) {
+    const a = r.next() * PI * 2, d = Math.sqrt(r.next()) * R * 0.8;
+    ash.push(x.place(new THREE.CylinderGeometry(1, 1, 0.02, 7), V(Math.cos(a) * d, 0.02, Math.sin(a) * d), undefined, V(r.range(1, 3), 1, r.range(1, 3))));
+  }
+  x.merged('Water', water, M.water);
+  x.merged('Ash', ash, M.head);
+  x.merged('Stems', stems[0], M.leaf);
+  x.merged('Stems2', stems[1], M.leaf2);
+  x.merged('SeedHeads', heads, M.head);
+  x.merged('Smoulder', embers, M.ember);
 }
 
 // ---------- viewer ----------

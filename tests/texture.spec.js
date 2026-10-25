@@ -59,7 +59,7 @@ for (const file of TEXTURE_VARIANTS) {
       await expect(page.locator('#sR')).toHaveText('512 × 512 px');
       await expect(page.locator('#sS')).toContainText('seamless ✓');
       await expect(page.locator('#texName')).toHaveText('Thatch');
-      await expect(page.locator('#log')).toContainText('Targets from the game repo');
+      await expect(page.locator('#log')).not.toContainText('Targets from'); // no game ids here, so no size table
     });
 
     test('every texture tiles, every decal fades out, every variant builds', async ({ page }) => {
@@ -159,19 +159,23 @@ for (const file of TEXTURE_VARIANTS) {
       expect(buf.toString('latin1', 8, 12)).toBe('WEBP');
     });
 
-    test('ash-patch-decal exports a game-ready flat GLB', async ({ page }, info) => {
-      await page.selectOption('#gameId', 'ash-patch-decal');
-      await expect(page.locator('#log')).toContainText('ash-patch-decal: Ash patch, 3.00 m × 3.00 m (size from the missing-objects list');
-      await expect(page.locator('#decalW')).toBeDisabled();
-      await expect(page.locator('#fileName')).toHaveValue('ash-patch-decal');
+    test('a decal exports a flat GLB at its size (the game ids come from the props page)', async ({ page }, info) => {
+      // the game refuses a flat quad, so its two decal ids are thin meshes on the props page
+      await expect(page.locator('.hint', { hasText: 'ash-patch-decal' })).toContainText('props generator');
+      expect(await page.locator('#gameId').count()).toBe(0);
+      await page.selectOption('#kind', 'ashpatch');
+      await page.selectOption('#palette', 'ash');
+      for (const id of ['#decalW', '#decalD']) { await page.fill(id, '3'); await page.press(id, 'Enter'); }
+      await expect(page.locator('#fileName')).toHaveValue('ashpatch');
       await expect(page.locator('#preview')).toHaveValue('decal');
       const { name, buf } = await download(page, info, '#glbBtn');
-      expect(name).toBe('ash-patch-decal.glb');
+      expect(name).toBe('ashpatch.glb');
       expect(buf.length).toBeLessThan(1.5 * 1048576);
       const { json, bin } = parseGLB(buf);
       const root = json.nodes[json.scenes[0].nodes[0]];
-      expect(root.name).toBe('ash-patch-decal');
-      expect(root.extras).toMatchObject({ generator: 'texture-generator', kind: 'ashpatch', gameId: 'ash-patch-decal', palette: 'ash', res: 512 });
+      expect(root.name).toBe('ashpatch');
+      expect(root.extras).toMatchObject({ generator: 'texture-generator', kind: 'ashpatch', palette: 'ash', res: 512 });
+      expect(root.extras.gameId).toBeUndefined();
       expect(json.nodes.every((n) => !n.rotation && !n.scale && !n.matrix)).toBe(true);
       const b = accessorBounds(json);
       expect(b.min.map((v) => +v.toFixed(3) + 0)).toEqual([-1.5, 0, -1.5]);
@@ -191,15 +195,14 @@ for (const file of TEXTURE_VARIANTS) {
       expect(parseGLB(buf2).json.materials[0]).toMatchObject({ alphaMode: 'MASK', alphaCutoff: 0.5 });
     });
 
-    test('waystone-flagstones is a 9 m circle; a texture tile GLB is opaque', async ({ page }, info) => {
-      await page.selectOption('#gameId', 'waystone-flagstones');
-      await expect(page.locator('#opt')).toHaveValue('grass');
+    test('a flagstone circle decal at 9 m; a texture tile GLB is opaque', async ({ page }, info) => {
+      await page.selectOption('#kind', 'flagstones');
+      for (const id of ['#decalW', '#decalD']) { await page.fill(id, '9'); await page.press(id, 'Enter'); }
       let { name, buf } = await download(page, info, '#glbBtn');
-      expect(name).toBe('waystone-flagstones.glb');
+      expect(name).toBe('flagstones.glb');
       let b = accessorBounds(parseGLB(buf).json);
       expect(b.max[0] - b.min[0]).toBeCloseTo(9, 3);
       expect(b.max[2] - b.min[2]).toBeCloseTo(9, 3);
-      await page.selectOption('#gameId', '');
       await page.selectOption('#kind', 'grass');
       await page.fill('#tileM', '4'); await page.press('#tileM', 'Enter');
       ({ name, buf } = await download(page, info, '#glbBtn'));
