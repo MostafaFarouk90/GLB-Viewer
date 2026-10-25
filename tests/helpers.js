@@ -15,6 +15,8 @@ export const ANIM_VARIANTS = ['animation-preview.html', 'animation-preview-offli
 const CDN = 'https://cdn.jsdelivr.net/';
 // The viewer's game profile fetches the live targets.json from the game repo; tests serve the repo copy instead.
 export const TARGETS_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/src/env/targets.json';
+// The generators read the game's shipped ids from its manifest; tests serve the repo copy (embers/manifest.json).
+export const MANIFEST_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/public/assets/env/manifest.json';
 
 // `ready` is the debugging global the page sets once it has started.
 export async function openApp(page, file, ready = '__glbopt') {
@@ -42,6 +44,11 @@ export async function openApp(page, file, ready = '__glbopt') {
 
   await page.route(TARGETS_URL, (route) => route.fulfill({
     status: 200, body: fs.readFileSync(path.join(ROOT, 'embers/targets.json')),
+    headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
+  }));
+
+  await page.route(MANIFEST_URL, (route) => route.fulfill({
+    status: 200, body: fs.readFileSync(path.join(ROOT, 'embers/manifest.json')),
     headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
   }));
 

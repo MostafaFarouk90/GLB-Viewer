@@ -14,6 +14,13 @@
 //   --targets x      size table: "live" (default; the game repo, falling back to the built-in copy when offline),
 //                    "builtin" (the copy in the page, made from embers/targets.json) or a path to a targets.json
 //   --lods           also LOD 1 and LOD 2 (<id>.lod1.glb, <id>.lod2.glb) where the page makes them (vegetation)
+//   --shipped how    ids the game already ships (its public/assets/env/manifest.json; most are Mostafa's own models):
+//                    "skip" (default) exports nothing for them, "gen" saves them as <id>-gen.glb (as the pages'
+//                    Download buttons do), "replace" saves them as <id>.glb, which replaces the game's model on ingest
+//   --manifest x     the shipped list: "live" (default; the game repo, falling back to the built-in copy when offline),
+//                    "builtin" (made from embers/manifest.json) or a path to a manifest.json
+//   --report-check   also run the game's full check (tools/env-pass/check-glb.mjs in the game repo) on every file, plus
+//                    the ingest's CAP rule, print its lines, write check.txt, and exit 1 when a file fails, as it does
 //   --cdn            use the CDN pages (props-generator.html) instead of the offline builds; needs internet
 //
 // It opens the offline page (*-generator-offline.html) in headless Chromium, the browser Playwright installs with
@@ -27,8 +34,9 @@ import { chromium } from '@playwright/test';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TARGETS_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/src/env/targets.json';
+const MANIFEST_URL = 'https://raw.githubusercontent.com/MostafaFarouk90/OpenWorld/main/public/assets/env/manifest.json';
 
-const args = process.argv.slice(2), opts = { pages: [], ids: null, seed: null, out: path.join(root, 'export'), targets: 'live', cdn: false, lods: false, list: false };
+const args = process.argv.slice(2), opts = { pages: [], ids: null, seed: null, out: path.join(root, 'export'), targets: 'live', manifest: 'live', shipped: 'skip', check: false, cdn: false, lods: false, list: false };
 for (let i = 0; i < args.length; i++) {
   const a = args[i], val = () => { if (i + 1 >= args.length) fail(`${a} needs a value`); return args[++i]; };
   if (a === '--ids') opts.ids = new Set(val().split(',').map((s) => s.trim()).filter(Boolean));
@@ -37,6 +45,9 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--targets') opts.targets = val();
   else if (a === '--cdn') opts.cdn = true;
   else if (a === '--lods') opts.lods = true;
+  else if (a === '--shipped') { opts.shipped = val(); if (!['skip', 'gen', 'replace'].includes(opts.shipped)) fail('--shipped is skip, gen or replace'); }
+  else if (a === '--manifest') opts.manifest = val();
+  else if (a === '--report-check') opts.check = true;
   else if (a === '--list') opts.list = true;
   else if (a === '-h' || a === '--help') { console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\nimport ')[0].replace(/^\/\/ ?/gm, '')); process.exit(0); }
   else if (a.startsWith('-')) fail(`unknown option ${a} (see --help)`);
@@ -47,17 +58,19 @@ function fail(msg) { console.error('export-ids: ' + msg); process.exit(1); }
 const allPages = fs.readdirSync(root).map((f) => f.match(/^([a-z0-9-]+)-generator\.html$/)?.[1]).filter(Boolean).sort();
 const pages = opts.pages.length ? opts.pages : allPages;
 for (const p of pages) if (!allPages.includes(p)) fail(`no page ${p}-generator.html (pages: ${allPages.join(', ')})`);
-let targetsFile = null;
-if (!['live', 'builtin'].includes(opts.targets)) {
-  targetsFile = path.resolve(opts.targets);
-  if (!fs.existsSync(targetsFile)) fail(`--targets: ${targetsFile} does not exist`);
-}
+const fileOpt = (name, v) => {
+  if (['live', 'builtin'].includes(v)) return null;
+  const f = path.resolve(v);
+  if (!fs.existsSync(f)) fail(`--${name}: ${f} does not exist`);
+  return f;
+};
+const targetsFile = fileOpt('targets', opts.targets), manifestFile = fileOpt('manifest', opts.manifest);
 
 const browser = await chromium.launch({
   executablePath: process.env.PW_CHROMIUM_PATH || undefined,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'], // WebGL without a GPU
 });
-const report = { generatedAt: new Date().toISOString(), targets: opts.targets, seed: opts.seed || '(the id)', files: [] };
+const report = { generatedAt: new Date().toISOString(), targets: opts.targets, manifest: opts.manifest, shipped: opts.shipped, seed: opts.seed || '(the id)', files: [] };
 try {
   for (const name of pages) await runPage(name);
 } finally { await browser.close(); }
@@ -66,8 +79,16 @@ if (!opts.list) {
   fs.mkdirSync(opts.out, { recursive: true });
   fs.writeFileSync(path.join(opts.out, 'report.json'), JSON.stringify(report, null, 1) + '\n');
   fs.writeFileSync(path.join(opts.out, 'report.txt'), reportText(report));
-  const warned = report.files.filter((f) => f.warnings.length).length;
-  console.log(`\n${report.files.length} files in ${opts.out}${warned ? `, ${warned} with warnings (see report.txt)` : ''}`);
+  const made = report.files.filter((f) => f.file), warned = made.filter((f) => f.warnings.length).length;
+  const skipped = report.files.filter((f) => f.skipped).length;
+  console.log(`\n${made.length} files in ${opts.out}${warned ? `, ${warned} with warnings (see report.txt)` : ''}`
+    + (skipped ? `; ${skipped} shipped id${skipped > 1 ? 's' : ''} skipped (--shipped gen saves them as <id>-gen.glb)` : ''));
+  if (opts.check) {
+    const lines = made.map((f) => f.check.line), bad = made.filter((f) => !f.check.ok).length;
+    fs.writeFileSync(path.join(opts.out, 'check.txt'), lines.join('\n') + '\n');
+    console.log(`\ncheck-glb (${opts.targets} targets):\n${lines.join('\n')}\n${bad ? `${bad} of ${made.length} fail` : `all ${made.length} ok`} (check.txt)`);
+    if (bad) process.exitCode = 1;
+  }
 }
 
 async function runPage(name) {
@@ -77,8 +98,10 @@ async function runPage(name) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  if (targetsFile) await page.route(TARGETS_URL, (r) => r.fulfill({ status: 200, body: fs.readFileSync(targetsFile), headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } }));
-  else if (opts.targets === 'builtin') await page.route(TARGETS_URL, (r) => r.abort());
+  for (const [url, file, how] of [[TARGETS_URL, targetsFile, opts.targets], [MANIFEST_URL, manifestFile, opts.manifest]]) {
+    if (file) await page.route(url, (r) => r.fulfill({ status: 200, body: fs.readFileSync(file), headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } }));
+    else if (how === 'builtin') await page.route(url, (r) => r.abort());
+  }
   // a page's own downloads (none are expected) would otherwise wait for a dialog
   page.on('download', (d) => d.cancel());
 
@@ -91,12 +114,19 @@ async function runPage(name) {
     if (opts.pages.length) fail(`${file} has no game ids to export`);
     return; // a page without game ids (the character generator)
   }
-  // let the live size table arrive (or fail) first, so every id uses the same table
-  await page.evaluate(async () => { try { await window.EmbersKit.liveTargets; } catch {} await new Promise((r) => setTimeout(r, 0)); });
+  // let the live size table and shipped list arrive (or fail) first, so every id uses the same ones
+  await page.evaluate(async () => {
+    for (const p of [window.EmbersKit.liveTargets, window.EmbersKit.liveShipped]) try { await p; } catch {}
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  const shipped = new Set(await page.evaluate(() => [...(window.EmbersKit.shipped || [])]));
 
   const ids = await page.evaluate((n) => window.EmbersKit.generators[n].ids(), name);
   const todo = opts.ids ? ids.filter((id) => opts.ids.has(id)) : ids;
-  if (opts.list) { console.log(`${name} (${ids.length}): ${ids.join(' ')}`); await page.close(); return; }
+  if (opts.list) {
+    console.log(`${name} (${ids.length}): ${ids.map((id) => shipped.has(id) ? id + ' (shipped)' : id).join(' ')}`);
+    await page.close(); return;
+  }
   if (!todo.length) { await page.close(); return; }
   const targets = await page.evaluate((n) => window.EmbersKit.generators[n].targets?.() || null, name);
   const dir = path.join(opts.out, name);
@@ -105,6 +135,13 @@ async function runPage(name) {
 
   for (const id of todo) {
     const seed = opts.seed || id;
+    if (shipped.has(id) && opts.shipped === 'skip') {
+      console.log(`  ${id}: skipped, the game ships it`);
+      report.files.push({ page: name, id, seed, file: null, skipped: 'shipped', warnings: [] });
+      continue;
+    }
+    // <id>-gen.glb, <id>-gen.lod1.glb…, so the file never replaces the game's own model
+    const rename = (f) => shipped.has(id) && opts.shipped === 'gen' ? f.replace(id, id + '-gen') : f;
     const before = errors.length;
     let files;
     try {
@@ -119,12 +156,14 @@ async function runPage(name) {
       continue;
     }
     for (const f of files) {
-      const data = Buffer.from(f.data, 'base64');
-      fs.writeFileSync(path.join(dir, f.name), data);
-      const entry = { page: name, id, seed, file: `${name}/${f.name}`, bytes: data.length, ...inspectGLB(data), target: targets?.objects?.[id] || null };
+      const data = Buffer.from(f.data, 'base64'), file = rename(f.name);
+      fs.writeFileSync(path.join(dir, file), data);
+      const entry = { page: name, id, seed, file: `${name}/${file}`, bytes: data.length, ...inspectGLB(data), target: targets?.objects?.[id] || null };
+      if (shipped.has(id)) entry.shipped = true;
       entry.warnings = [...checks(entry, targets), ...errors.slice(before).map((e) => 'page error: ' + e)];
+      if (opts.check) entry.check = checkGlb(file.replace(/\.glb$/, '').replace(/\.lod\d+$/, ''), id, entry, targets); // a LOD is checked as its id
       report.files.push(entry);
-      console.log(`  ${f.name}: ${entry.triangles.toLocaleString()} tris, ${fmtSize(entry.size)}, ${(data.length / 1024).toFixed(0)} KB${entry.warnings.length ? '  ! ' + entry.warnings.join('; ') : ''}`);
+      console.log(`  ${file}: ${entry.triangles.toLocaleString()} tris, ${fmtSize(entry.size)}, ${(data.length / 1024).toFixed(0)} KB${entry.warnings.length ? '  ! ' + entry.warnings.join('; ') : ''}`);
     }
   }
   await page.close();
@@ -134,7 +173,8 @@ async function runPage(name) {
 function inspectGLB(buf) {
   if (buf.readUInt32LE(0) !== 0x46546c67) throw new Error('not a GLB');
   const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
-  let triangles = 0;
+  let triangles = 0, indexedTriangles = 0;
+  for (const m of json.meshes || []) for (const p of m.primitives) if (p.indices !== undefined) indexedTriangles += json.accessors[p.indices].count / 3;
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
   const visit = (ni, parent) => {
     const n = json.nodes[ni], m = mul(parent, local(n));
@@ -155,7 +195,7 @@ function inspectGLB(buf) {
   for (const ni of json.scenes[json.scene ?? 0].nodes) visit(ni, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
   const ok = isFinite(min[0]), r = (x) => +x.toFixed(3);
   return {
-    triangles: Math.round(triangles), meshes: json.meshes?.length || 0, materials: json.materials?.length || 0,
+    triangles: Math.round(triangles), indexedTriangles, meshes: json.meshes?.length || 0, materials: json.materials?.length || 0,
     textures: json.images?.length || 0, animations: (json.animations || []).map((a) => a.name),
     size: ok ? { w: r(max[0] - min[0]), h: r(max[1] - min[1]), d: r(max[2] - min[2]) } : null,
     base: ok ? r(min[1]) : null, center: ok ? { x: r((min[0] + max[0]) / 2), z: r((min[2] + max[2]) / 2) } : null,
@@ -192,12 +232,46 @@ function checks(e, targets) {
   return w;
 }
 
+// The game's full check, as tools/env-pass/check-glb.mjs in the game repo prints it ("ok  <name>  w x d x h m" or
+// "FAIL <name>  <problems>"; the name is the file name, which is the id the game reads), plus the ingest's CAP rule
+// (tools/env-pass/ingest.mjs): scaled uniformly to the target height, width and depth may need at most 15% stretch
+// (proportion ids are fitted exactly, so they get no CAP line). A CAP is a warning in the game, not a FAIL.
+function checkGlb(fileId, id, e, cfg0) {
+  const cfg = { tolerance: 0.15, proportionTolerance: 1.1, maxTriangles: 10000, maxFileMB: 1.5, proportion: {}, ...cfg0 };
+  const want = cfg.objects?.[fileId], size = e.size || { w: 0, d: 0, h: 0 }, problems = [], caps = [];
+  if (e.indexedTriangles > cfg.maxTriangles) problems.push(`${Math.round(e.indexedTriangles)} triangles, budget ${cfg.maxTriangles}`);
+  if (e.bytes / 1e6 > cfg.maxFileMB) problems.push(`file ${(e.bytes / 1e6).toFixed(1)} MB, budget ${cfg.maxFileMB} MB`);
+  if (!want) problems.push('no target in src/env/targets.json' + (fileId !== id ? ` (${fileId}: the game ships ${id})` : ''));
+  else {
+    const wide = Math.max(want.w, want.d) > 1.8 * want.h;
+    if (wide) {
+      const got = Math.max(size.w, size.d), tgt = Math.max(want.w, want.d), dev = (got - tgt) / tgt;
+      if (Math.abs(dev) > cfg.tolerance) problems.push(`longest side ${got.toFixed(2)} m, want ${tgt} m (${Math.round(dev * 100)}%)`);
+    }
+    for (const [k, name] of [['w', 'width'], ['d', 'depth'], ['h', 'height']]) {
+      const dev = (size[k] - want[k]) / want[k], driver = !wide && k === 'h';
+      if (Math.abs(dev) > (driver ? cfg.tolerance : cfg.proportionTolerance)) problems.push(`${name} ${size[k].toFixed(2)} m, want ${want[k]} m (${Math.round(dev * 100)}%)`);
+    }
+    if (!Object.hasOwn(cfg.proportion || {}, fileId) && size.h > 0) for (const [k, name] of [['w', 'width'], ['d', 'depth']]) {
+      const f = want[k] / (size[k] * (want.h / size.h)); // stretch still needed after the uniform scale to the height
+      if (f > 1.15 || f < 1 / 1.15) caps.push(`CAP ${name} ${(size[k] * want.h / size.h).toFixed(2)} m at the target height, want ${want[k]} m (needs ×${f.toFixed(2)}, ingest stretches ×1.15 at most)`);
+    }
+  }
+  if (Math.abs(e.base ?? 0) > 0.05) problems.push(`pivot: base at y ${e.base.toFixed(2)}, want 0`);
+  if (e.center && Math.hypot(e.center.x, e.center.z) > 0.1 * Math.max(size.w, size.d)) problems.push(`pivot: footprint centre at (${e.center.x.toFixed(2)}, ${e.center.z.toFixed(2)}), want about 0, 0`);
+  const line = `${problems.length ? 'FAIL' : 'ok  '} ${fileId}  ${size.w.toFixed(2)} x ${size.d.toFixed(2)} x ${size.h.toFixed(2)} m${problems.length ? '  ' + problems.join('; ') : ''}`
+    + caps.map((c) => '\n     ' + c).join('');
+  return { ok: !problems.length, problems, caps, line };
+}
+
 function fmtSize(s) { return s ? `${s.w} × ${s.h} × ${s.d} m` : 'empty'; }
 function reportText(r) {
   const lines = [`Embers game id export, ${r.generatedAt}`, `targets: ${r.targets}, seed: ${r.seed}`, ''];
   for (const f of r.files) {
     lines.push(f.file ? `${f.file}  ${f.triangles} tris  ${fmtSize(f.size)} (w × h × d)  ${(f.bytes / 1024).toFixed(0)} KB`
-      + (f.target ? `  target ${f.target.w} × ${f.target.h} × ${f.target.d} m` : '') : `${f.page}/${f.id}  not exported`);
+      + (f.target ? `  target ${f.target.w} × ${f.target.h} × ${f.target.d} m` : '') + (f.shipped ? '  (the game ships this id)' : '')
+      : `${f.page}/${f.id}  ${f.skipped ? 'skipped: the game ships it' : 'not exported'}`);
+    if (f.check) for (const l of f.check.line.split('\n')) lines.push('    check: ' + l.trim());
     for (const w of f.warnings) lines.push(`    ! ${w}`);
   }
   return lines.join('\n') + '\n';

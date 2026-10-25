@@ -278,7 +278,7 @@ for (const file of ROCKS_VARIANTS) {
         expect(data.subarray(0, 4).toString('latin1'), fname).toBe('glTF');
         names.push(fname); off += 30 + n + size;
       }
-      expect(names).toEqual(['boulder-large-a.glb', 'boulder-large-b.glb', 'boulder-large-c.glb']);
+      expect(names).toEqual(['boulder-large-a-gen.glb', 'boulder-large-b.glb', 'boulder-large-c.glb']); // the game ships boulder-large-a
     });
 
     test('a loaded targets.json changes the target size', async ({ page }) => {

@@ -84,6 +84,8 @@
 <script src="shared/random.js"></script>
 <script src="shared/files.js"></script>
 <script src="shared/targets.js"></script>
+<script src="shared/manifest-data.js"></script>
+<script src="shared/manifest.js"></script>
 <script src="shared/scale-figure.js"></script>
 <script src="shared/export.js"></script>
 </head>
@@ -996,10 +998,11 @@ $('imageBtn').addEventListener('click', () => busy('Encoding image…', async ()
   log(`Saved ${name} (${state.image.res} px, ${fmtBytes(bytes.length)})`, 'ok');
 }));
 $('glbBtn').addEventListener('click', () => busy('Exporting GLB…', async () => {
-  const buf = await exportGLB(), name = fileBase() + '.glb';
+  const buf = await exportGLB(), name = kit.genBase(fileBase()) + '.glb';
   saveBlob(new Blob([buf], { type: 'model/gltf-binary' }), name);
   $('sZ').textContent = `${name} ${fmtBytes(buf.byteLength)}`;
   log(`Saved ${name} (${fmtBytes(buf.byteLength)})`, tooBig(buf.byteLength) ? 'warn' : 'ok');
+  { const note = kit.shippedNote([fileBase()]); if (note) log(note, 'warn'); }
 }));
 // Every kind with the current seed, palette and look, as PNG, plus a manifest.
 async function makePack(res = resolution()) {
@@ -1179,6 +1182,8 @@ window.__texgen = { THREE, GLTFExporter, state, KINDS, GAME_IDS, makeTraits, gen
 roll('thatch', randomSeed());
 log('Ready. Pick a texture, a decal or a game id, then download the image or a GLB.', 'ok');
 // the game's live size table, when online (decal sizes fall back to the missing-objects list)
+// the game's live shipped list, so a download never replaces a model the game ships (the built-in copy otherwise)
+kit.fetchShipped().catch(() => { /* offline: keep the built-in copy */ });
 kit.fetchLiveTargets().then((text) => loadTargets(text, 'the game repo'), () => { /* offline: keep the list sizes */ });
 </script>
 </body>

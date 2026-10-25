@@ -184,11 +184,11 @@ for (const file of PROPS_VARIANTS) {
     });
 
     test('game id export is game-ready', async ({ page }, info) => {
-      await page.selectOption('#gameId', 'basalt-columns-a');
-      await expect(page.locator('#fileName')).toHaveValue('basalt-columns-a');
+      await page.selectOption('#gameId', 'smelter-chimney');
+      await expect(page.locator('#fileName')).toHaveValue('smelter-chimney');
       await expect(page.locator('#sT')).toContainText('✓');
       const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#downloadBtn')]);
-      expect(dl.suggestedFilename()).toBe('basalt-columns-a.glb');
+      expect(dl.suggestedFilename()).toBe('smelter-chimney.glb');
       const out = info.outputPath('b.glb'); await dl.saveAs(out);
       const { json } = parseGLB(fs.readFileSync(out));
       expect(json.animations ?? []).toEqual([]);
@@ -197,19 +197,19 @@ for (const file of PROPS_VARIANTS) {
         expect(m.pbrMetallicRoughness?.metallicFactor ?? 1, m.name).toBe(0);
         expect(m.alphaMode ?? 'OPAQUE').toBe('OPAQUE');
       }
-      expect(json.nodes.find((n) => n.extras?.gameId)?.extras).toMatchObject({ gameId: 'basalt-columns-a', category: 'basalt' });
+      expect(json.nodes.find((n) => n.extras?.gameId)?.extras).toMatchObject({ gameId: 'smelter-chimney', category: 'chimney' });
       const { min, max } = glbBounds(json);
       expect(min[1]).toBeCloseTo(0, 2);
-      expect(max[1]).toBeCloseTo(4, 1);
+      expect(max[1]).toBeCloseTo(9, 1);
       expect((min[0] + max[0]) / 2).toBeCloseTo(0, 1); // footprint centred
       expect((min[2] + max[2]) / 2).toBeCloseTo(0, 1);
     });
 
     test('seed variants download as a zip of <id>-a, -b, -c', async ({ page }, info) => {
-      await page.selectOption('#gameId', 'ember-rock-a');
+      await page.selectOption('#gameId', 'stump-a');
       await page.fill('#variantCount', '3');
       const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#variantsBtn')]);
-      expect(dl.suggestedFilename()).toBe('ember-rock-variants.zip');
+      expect(dl.suggestedFilename()).toBe('stump-variants.zip');
       const out = info.outputPath('v.zip'); await dl.saveAs(out);
       const zip = fs.readFileSync(out), names = [];
       for (let off = 0; zip.readUInt32LE(off) === 0x04034b50;) { // walk the local file headers
@@ -218,7 +218,9 @@ for (const file of PROPS_VARIANTS) {
         expect(data.subarray(0, 4).toString('latin1'), name).toBe('glTF');
         names.push(name); off += 30 + n + size;
       }
-      expect(names).toEqual(['ember-rock-a.glb', 'ember-rock-b.glb', 'ember-rock-c.glb']);
+      // the game ships stump-a (Mostafa's own model), so it is saved as stump-a-gen.glb
+      expect(names).toEqual(['stump-a-gen.glb', 'stump-b.glb', 'stump-c.glb']);
+      await expect(page.locator('#log')).toContainText('stump-a already ships in the game');
     });
 
     test('a loaded targets.json changes the target size', async ({ page }) => {

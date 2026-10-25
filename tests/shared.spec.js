@@ -15,6 +15,11 @@ test('the built-in targets copy matches embers/targets.json', () => {
   expect(JSON.parse(json)).toEqual(JSON.parse(read('embers/targets.json')));
 });
 
+test('the built-in shipped list matches embers/manifest.json', () => {
+  const js = read('shared/manifest-data.js'), json = js.slice(js.indexOf('EMBEDDED_SHIPPED = ') + 19, js.lastIndexOf(';'));
+  expect(JSON.parse(json)).toEqual(Object.keys(JSON.parse(read('embers/manifest.json')).objects).sort());
+});
+
 test('every shared/ file a page loads exists, and its offline build has them inlined', () => {
   for (const f of PAGES) {
     const srcs = [...read(f).matchAll(/<script src="(shared\/[^"]+)"><\/script>/g)].map((m) => m[1]);
@@ -53,10 +58,17 @@ test('export-ids makes game ids headless, the same as the page', async ({ page }
   test.setTimeout(180_000);
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'export-ids-'));
   const run = (...a) => execFileSync(process.execPath, [path.join(ROOT, 'tools/export-ids.mjs'), ...a], { encoding: 'utf8' });
-  expect(run('--list')).toMatch(/^props \(\d+\): .*stump-a/m);
-  run('props', 'vegetation', '--ids', 'stump-a,cairn-a,oak-a', '--targets', 'builtin', '--lods', '--out', out);
-  const report = JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8'));
-  expect(report.files.map((f) => f.file).sort()).toEqual(['props/cairn-a.glb', 'props/stump-a.glb', 'vegetation/oak-a.glb', 'vegetation/oak-a.lod1.glb', 'vegetation/oak-a.lod2.glb']);
+  expect(run('--list', '--manifest', 'builtin')).toMatch(/^props \(\d+\): .*stump-a \(shipped\)/m);
+  // stump-a and oak-a ship in the game (Mostafa's models): skipped by default
+  const ids = ['props', 'vegetation', '--ids', 'stump-a,cairn-a,oak-a', '--targets', 'builtin', '--manifest', 'builtin', '--out', out];
+  run(...ids);
+  let report = JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8'));
+  expect(report.files.map((f) => [f.id, f.file, f.skipped ?? null])).toEqual([['cairn-a', 'props/cairn-a.glb', null], ['stump-a', null, 'shipped'], ['oak-a', null, 'shipped']]);
+  expect(fs.existsSync(path.join(out, 'props/stump-a.glb'))).toBe(false);
+  // --shipped gen saves them as <id>-gen.glb, as the Download buttons do
+  run(...ids, '--shipped', 'gen', '--lods');
+  report = JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8'));
+  expect(report.files.map((f) => f.file).sort()).toEqual(['props/cairn-a.glb', 'props/stump-a-gen.glb', 'vegetation/oak-a-gen.glb', 'vegetation/oak-a-gen.lod1.glb', 'vegetation/oak-a-gen.lod2.glb']);
   for (const f of report.files) {
     const { json } = parseGLB(fs.readFileSync(path.join(out, f.file)));
     expect(json.asset.version).toBe('2.0');
@@ -65,7 +77,17 @@ test('export-ids makes game ids headless, the same as the page', async ({ page }
   }
   const stump = report.files.find((f) => f.id === 'stump-a');
   expect(stump.size.h).toBeCloseTo(stump.target.h, 2);
-  expect(fs.readFileSync(path.join(out, 'report.txt'), 'utf8')).toContain('props/stump-a.glb');
+  expect(fs.readFileSync(path.join(out, 'report.txt'), 'utf8')).toContain('props/stump-a-gen.glb  ');
+
+  // --report-check: the game's check-glb lines; a -gen file has no target, so it fails and the exit code is 1
+  let status = 0, stdout = '';
+  try { stdout = run(...ids, '--shipped', 'gen', '--report-check'); } catch (e) { status = e.status; stdout = e.stdout; }
+  expect(status).toBe(1);
+  const check = fs.readFileSync(path.join(out, 'check.txt'), 'utf8');
+  expect(check).toMatch(/^ok {3}cairn-a {2}[\d.]+ x [\d.]+ x [\d.]+ m$/m);
+  expect(check).toMatch(/^FAIL stump-a-gen .*no target in src\/env\/targets.json \(stump-a-gen: the game ships stump-a\)/m);
+  expect(stdout).toContain('2 of 3 fail');
+  expect(run('props', '--ids', 'cairn-a', '--targets', 'builtin', '--manifest', 'builtin', '--report-check', '--out', out)).toContain('all 1 ok');
 
   // byte for byte what the page's own export gives for the same id and seed
   await openApp(page, 'props-generator-offline.html', '__propgen');
@@ -73,6 +95,6 @@ test('export-ids makes game ids headless, the same as the page', async ({ page }
     const [f] = await window.EmbersKit.generators.props.files('stump-a', 'stump-a');
     return Array.from(new Uint8Array(f.data));
   });
-  expect(Buffer.from(fromPage).equals(fs.readFileSync(path.join(out, 'props/stump-a.glb')))).toBe(true);
+  expect(Buffer.from(fromPage).equals(fs.readFileSync(path.join(out, 'props/stump-a-gen.glb')))).toBe(true);
   fs.rmSync(out, { recursive: true, force: true });
 });

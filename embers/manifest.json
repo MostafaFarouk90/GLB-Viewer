@@ -1,0 +1,367 @@
+{
+ "$comment": "Written by tools/env-pass/ingest.mjs. Runtime copies of environment objects: size in metres (w, d, h), pivot at the base centre, front +Z.",
+ "objects": {
+  "autumn-tree-a": {
+   "id": "autumn-tree-a",
+   "scale": 8.452,
+   "trisBefore": 50016,
+   "trisAfter": 6892,
+   "mb": 0.39
+  },
+  "birch-a": {
+   "id": "birch-a",
+   "scale": 6.773,
+   "trisBefore": 49982,
+   "trisAfter": 4644,
+   "mb": 0.27
+  },
+  "boulder-large-a": {
+   "id": "boulder-large-a",
+   "scale": 3.16,
+   "trisBefore": 50000,
+   "trisAfter": 4500,
+   "mb": 0.2
+  },
+  "bush-flowering-a": {
+   "id": "bush-flowering-a",
+   "scale": 1.096,
+   "trisBefore": 50000,
+   "trisAfter": 9142,
+   "mb": 0.56
+  },
+  "bush-round-a": {
+   "id": "bush-round-a",
+   "scale": 1.204,
+   "trisBefore": 50000,
+   "trisAfter": 4500,
+   "mb": 0.23
+  },
+  "elm-or-ash-a": {
+   "id": "elm-or-ash-a",
+   "scale": 8.689,
+   "trisBefore": 50004,
+   "trisAfter": 4500,
+   "mb": 0.22
+  },
+  "fern-a": {
+   "id": "fern-a",
+   "scale": 1.6,
+   "trisBefore": 50008,
+   "trisAfter": 5416,
+   "mb": 0.32
+  },
+  "flower-patch-yellow": {
+   "id": "flower-patch-yellow",
+   "scale": 0.765,
+   "trisBefore": 50000,
+   "trisAfter": 9658,
+   "mb": 0.57
+  },
+  "grass-clump-a": {
+   "id": "grass-clump-a",
+   "scale": 0.478,
+   "trisBefore": 49980,
+   "trisAfter": 4500,
+   "mb": 0.25
+  },
+  "hedge-corner": {
+   "id": "hedge-corner",
+   "scale": 2.846,
+   "trisBefore": 49954,
+   "trisAfter": 9970,
+   "mb": 0.59
+  },
+  "hedge-straight": {
+   "id": "hedge-straight",
+   "scale": 3.151,
+   "trisBefore": 49884,
+   "trisAfter": 8078,
+   "mb": 0.48
+  },
+  "log-fallen-a": {
+   "id": "log-fallen-a",
+   "scale": 2.696,
+   "trisBefore": 49998,
+   "trisAfter": 4642,
+   "mb": 0.27
+  },
+  "mushrooms-a": {
+   "id": "mushrooms-a",
+   "scale": 0.339,
+   "trisBefore": 50004,
+   "trisAfter": 4500,
+   "mb": 0.21
+  },
+  "oak-a": {
+   "id": "oak-a",
+   "scale": 14.031,
+   "trisBefore": 50000,
+   "trisAfter": 4500,
+   "mb": 0.21
+  },
+  "rock-cluster-a": {
+   "id": "rock-cluster-a",
+   "scale": 2.359,
+   "trisBefore": 49998,
+   "trisAfter": 4500,
+   "mb": 0.25
+  },
+  "stump-a": {
+   "id": "stump-a",
+   "scale": 0.952,
+   "trisBefore": 49992,
+   "trisAfter": 4500,
+   "mb": 0.23
+  },
+  "barn-a": {
+   "id": "barn-a",
+   "scale": 10.023,
+   "stretch": [
+    1.115,
+    1.358
+   ],
+   "proportion": true,
+   "trisBefore": 50070,
+   "trisAfter": 4486,
+   "mb": 0.27
+  },
+  "beehive-skep": {
+   "id": "beehive-skep",
+   "scale": 0.894,
+   "stretch": [
+    1.15,
+    1.077
+   ],
+   "capped": [
+    "width 0.63 m, want 0.7 m, factor still needed 1.11"
+   ],
+   "trisBefore": 49956,
+   "trisAfter": 4500,
+   "mb": 0.22
+  },
+  "cottage-thatch-a": {
+   "id": "cottage-thatch-a",
+   "scale": 6.346,
+   "stretch": [
+    0.916,
+    1.032
+   ],
+   "trisBefore": 50042,
+   "trisAfter": 4494,
+   "mb": 0.3
+  },
+  "garden-bed-a": {
+   "id": "garden-bed-a",
+   "scale": 1.18,
+   "stretch": [
+    1.305,
+    1.191
+   ],
+   "proportion": true,
+   "tile": 2,
+   "trisBefore": 99976,
+   "trisAfter": 4340,
+   "mb": 0.23
+  },
+  "haybale-a": {
+   "id": "haybale-a",
+   "scale": 1.318,
+   "stretch": [
+    0.898,
+    0.951
+   ],
+   "trisBefore": 50010,
+   "trisAfter": 4818,
+   "mb": 0.28
+  },
+  "haycart-a": {
+   "id": "haycart-a",
+   "scale": 2.406,
+   "stretch": [
+    1.15,
+    1.15
+   ],
+   "capped": [
+    "width 2.75 m, want 3.2 m, factor still needed 1.16",
+    "depth 1.51 m, want 1.6 m, factor still needed 1.06"
+   ],
+   "trisBefore": 50000,
+   "trisAfter": 5358,
+   "mb": 0.32
+  },
+  "haystack-round": {
+   "id": "haystack-round",
+   "scale": 3.373,
+   "stretch": [
+    0.85,
+    0.85
+   ],
+   "capped": [
+    "width 2.48 m, want 2.4 m, factor still needed 0.97",
+    "depth 2.63 m, want 2.4 m, factor still needed 0.91"
+   ],
+   "trisBefore": 50000,
+   "trisAfter": 5422,
+   "mb": 0.31
+  },
+  "market-stall-a": {
+   "id": "market-stall-a",
+   "scale": 3.664,
+   "stretch": [
+    0.974,
+    1.15
+   ],
+   "capped": [
+    "depth 2.14 m, want 2.4 m, factor still needed 1.12"
+   ],
+   "trisBefore": 49864,
+   "trisAfter": 4768,
+   "mb": 0.28
+  },
+  "market-stall-b": {
+   "id": "market-stall-b",
+   "scale": 3.817,
+   "stretch": [
+    0.99,
+    0.96
+   ],
+   "trisBefore": 49956,
+   "trisAfter": 5090,
+   "mb": 0.29
+  },
+  "milestone-a": {
+   "id": "milestone-a",
+   "scale": 1.027,
+   "stretch": [
+    1.15,
+    0.85
+   ],
+   "capped": [
+    "width 0.56 m, want 0.6 m, factor still needed 1.08",
+    "depth 0.43 m, want 0.4 m, factor still needed 0.92"
+   ],
+   "trisBefore": 49968,
+   "trisAfter": 4500,
+   "mb": 0.25
+  },
+  "picket-fence": {
+   "id": "picket-fence",
+   "scale": 1.942,
+   "stretch": [
+    0.815,
+    0.614
+   ],
+   "proportion": true,
+   "tile": 2,
+   "trisBefore": 100000,
+   "trisAfter": 4500,
+   "mb": 0.2
+  },
+  "signpost-a": {
+   "id": "signpost-a",
+   "scale": 2.15,
+   "stretch": [
+    1.079,
+    0.292
+   ],
+   "proportion": true,
+   "trisBefore": 50000,
+   "trisAfter": 4500,
+   "mb": 0.22
+  },
+  "stable-a": {
+   "id": "stable-a",
+   "scale": 6.641,
+   "stretch": [
+    1.084,
+    1.15
+   ],
+   "capped": [
+    "depth 4.30 m, want 5 m, factor still needed 1.16"
+   ],
+   "trisBefore": 49600,
+   "trisAfter": 4482,
+   "mb": 0.26
+  },
+  "stonewall-low": {
+   "id": "stonewall-low",
+   "scale": 1.708,
+   "stretch": [
+    0.978,
+    0.95
+   ],
+   "proportion": true,
+   "tile": 2,
+   "trisBefore": 98992,
+   "trisAfter": 4494,
+   "mb": 0.28
+  },
+  "trough-a": {
+   "id": "trough-a",
+   "scale": 1.523,
+   "stretch": [
+    1.15,
+    0.964
+   ],
+   "capped": [
+    "width 1.84 m, want 2 m, factor still needed 1.09"
+   ],
+   "trisBefore": 50000,
+   "trisAfter": 4500,
+   "mb": 0.22
+  },
+  "washing-line": {
+   "id": "washing-line",
+   "scale": 3.06,
+   "stretch": [
+    1.251,
+    0.412
+   ],
+   "proportion": true,
+   "trisBefore": 49994,
+   "trisAfter": 4498,
+   "mb": 0.23
+  },
+  "wattle-fence": {
+   "id": "wattle-fence",
+   "scale": 1.843,
+   "stretch": [
+    0.837,
+    0.925
+   ],
+   "proportion": true,
+   "tile": 2,
+   "trisBefore": 100016,
+   "trisAfter": 4490,
+   "mb": 0.25
+  },
+  "well-bucket-rope": {
+   "id": "well-bucket-rope",
+   "scale": 0.531,
+   "stretch": [
+    0.95,
+    1.15
+   ],
+   "capped": [
+    "depth 0.38 m, want 0.4 m, factor still needed 1.06"
+   ],
+   "trisBefore": 49654,
+   "trisAfter": 4486,
+   "mb": 0.22
+  },
+  "woodpile-chop": {
+   "id": "woodpile-chop",
+   "scale": 1.855,
+   "stretch": [
+    1.15,
+    0.936
+   ],
+   "capped": [
+    "width 1.81 m, want 2 m, factor still needed 1.11"
+   ],
+   "trisBefore": 49926,
+   "trisAfter": 4498,
+   "mb": 0.24
+  }
+ }
+}

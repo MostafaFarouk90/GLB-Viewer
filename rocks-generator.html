@@ -78,6 +78,8 @@
 <script src="shared/random.js"></script>
 <script src="shared/files.js"></script>
 <script src="shared/targets.js"></script>
+<script src="shared/manifest-data.js"></script>
+<script src="shared/manifest.js"></script>
 <script src="shared/targets-data.js"></script>
 <script src="shared/palette.js"></script>
 <script src="shared/scale-figure.js"></script>
@@ -1094,9 +1096,10 @@ $('downloadBtn').addEventListener('click', async () => {
   state.busy = true; $('busy').classList.add('show'); $('busyText').textContent = 'Exporting GLB…';
   try {
     const { buf } = await exportGLB();
-    const name = fileBase() + '.glb';
+    const name = kit.genBase(fileBase()) + '.glb';
     saveBlob(new Blob([buf], { type: 'model/gltf-binary' }), name);
     log(`Saved ${name} (${fmtBytes(buf.byteLength)})`, buf.byteLength > (TARGETS.maxFileMB || 1.5) * 1048576 ? 'warn' : 'ok');
+    { const note = kit.shippedNote([fileBase()]); if (note) log(note, 'warn'); }
   } catch (e) { console.error(e); log('Export failed: ' + (e.message || e), 'err'); }
   finally { $('busy').classList.remove('show'); state.busy = false; }
 });
@@ -1112,12 +1115,13 @@ $('variantsBtn').addEventListener('click', async () => {
       await new Promise((res) => setTimeout(res, 0));
       const t = { ...state.traits, seed: i === 0 ? state.traits.seed : `${state.traits.seed}-${name.slice(-1)}` };
       const c = buildRock(t);
-      try { files.push({ name: name + '.glb', data: (await exportGLB(c, t)).buf }); }
+      try { files.push({ name: kit.genBase(name) + '.glb', data: (await exportGLB(c, t)).buf }); }
       finally { disposeRock(c); }
     }
     const zip = makeZip(files), zipName = names[0].replace(/-a$/, '') + '-variants.zip';
     saveBlob(zip, zipName);
-    log(`Saved ${zipName}: ${names.map((x) => x + '.glb').join(', ')} (${fmtBytes(zip.size)})`, 'ok');
+    log(`Saved ${zipName}: ${files.map((f) => f.name).join(', ')} (${fmtBytes(zip.size)})`, 'ok');
+    { const note = kit.shippedNote(names); if (note) log(note, 'warn'); }
   } catch (e) { console.error(e); log('Export failed: ' + (e.message || e), 'err'); }
   finally { $('busy').classList.remove('show'); state.busy = false; }
 });
@@ -1133,6 +1137,8 @@ window.__rockgen = { THREE, state, CATS, GAME_IDS, PALETTES, rollTraits, rollGam
 roll('cliff', randomSeed());
 log('Ready. Pick a piece or a game id, press Randomize, then Download GLB.', 'ok');
 // the game's live size table, when online (the built-in copy is used otherwise)
+// the game's live shipped list, so a download never replaces a model the game ships (the built-in copy otherwise)
+kit.fetchShipped().catch(() => { /* offline: keep the built-in copy */ });
 kit.fetchLiveTargets().then((text) => loadTargets(text, 'the game repo'), () => { /* offline: keep the built-in copy */ });
 </script>
 </body>
