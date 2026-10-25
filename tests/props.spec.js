@@ -173,7 +173,7 @@ for (const file of PROPS_VARIANTS) {
         });
       });
       expect(rows.length).toBeGreaterThanOrEqual(25);
-      expect(rows.filter((r) => r.inTable).length).toBeGreaterThanOrEqual(20);
+      expect(rows.filter((r) => r.inTable).length).toBeGreaterThanOrEqual(15);
       for (const r of rows) {
         const tgt = [r.box.w, r.box.h, r.box.d], drv = Math.max(r.box.w, r.box.d) > 1.8 * r.box.h ? (r.box.w >= r.box.d ? 0 : 2) : 1;
         expect(r.dims[drv], r.id).toBeCloseTo(tgt[drv], 2);

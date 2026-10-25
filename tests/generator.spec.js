@@ -253,6 +253,7 @@ for (const file of GENERATOR_VARIANTS) {
     });
 
     test('gear hangs on KayKit bones and downloads as a kit', async ({ page }, info) => {
+      test.setTimeout(240_000); // the townsfolk game set adds the skeleton, palette and game budget to every rebuild
       await page.uncheck('#bloom');
       await page.check('#chibi');
       await setSeed(page, 'guard', 'gear');
