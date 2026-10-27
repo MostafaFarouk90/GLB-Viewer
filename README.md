@@ -10,6 +10,8 @@ A single-page tool to view a `.glb` / `.gltf` model and change its face count, s
 
 Works in current Chrome, Edge, Firefox and Safari.
 
+Online, every page is also on GitHub Pages: https://mostafafarouk90.github.io/GLB-Viewer/ (the viewer; the row of links under each page's title opens the generators, the animation preview and the coverage dashboard). An offline page's links open the other offline pages.
+
 ## Controls
 - **Target faces / %**: below 100% decimates (meshoptimizer). Above 100% it subdivides (Loop) and trims to the exact count.
 - **Subdivision levels/type**: Auto picks the number of levels; "Flat" adds faces without changing the shape.
@@ -198,6 +200,7 @@ node tools/export-ids.mjs --help                            # every option
 Code that several pages use lives in `shared/` and is loaded by each source page with a plain `<script src="shared/….js">` tag; the offline build copies it into the page, so the `*-offline.html` files stay single files. These are classic scripts on a `window.EmbersKit` object rather than ES modules because browsers refuse module imports from `file://` pages, and the source pages must keep opening by double-click.
 
 - `kit.js`: the `EmbersKit` object, `EmbersKit.use({ THREE, … })` (the page hands over its three.js) and the generator registry that `tools/export-ids.mjs` calls.
+- `nav.js`: the row of links to every page under each page's title (`EmbersKit.PAGES`). Add a new page there and load `shared/nav.js` from it.
 - `random.js`: seeded random numbers (`makeRng`, `hashSeed`, `randomSeed`).
 - `files.js`: `saveBlob`, the zip writer and variant file names.
 - `targets.js` and `targets-data.js`: the live `targets.json` URL and fetch, the built-in copy (written from `embers/targets.json` by `npm run build`), the driver axis and fit-to-box rules.

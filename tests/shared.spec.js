@@ -98,3 +98,17 @@ test('export-ids makes game ids headless, the same as the page', async ({ page }
   expect(Buffer.from(fromPage).equals(fs.readFileSync(path.join(out, 'props/stump-a-gen.glb')))).toBe(true);
   fs.rmSync(out, { recursive: true, force: true });
 });
+
+test('the nav lists every page, on every page, and offline builds link offline builds', async ({ page }) => {
+  const listed = [...read('shared/nav.js').matchAll(/\['[^']+', '([\w.-]+)', '([\w.-]+)'\]/g)];
+  expect(listed.map((m) => m[1]).sort()).toEqual([...PAGES].sort());
+  for (const [, online, off] of listed) expect(fs.existsSync(path.join(ROOT, off)), off).toBe(true);
+  for (const f of PAGES) expect(read(f), f).toContain('<script src="shared/nav.js"></script>');
+
+  for (const [file, ready] of [['props-generator.html', '__propgen'], ['props-generator-offline.html', '__propgen']]) {
+    await openApp(page, file, ready);
+    const links = await page.locator('nav.kit-nav a').evaluateAll((as) => as.map((a) => [a.getAttribute('href'), a.hasAttribute('aria-current')]));
+    expect(links.map((l) => l[0]), file).toEqual(listed.map((m) => file.includes('offline') ? m[2] : m[1]));
+    expect(links.filter((l) => l[1]).map((l) => l[0]), file).toEqual([file]);
+  }
+});
