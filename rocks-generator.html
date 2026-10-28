@@ -334,7 +334,7 @@ const GAME_IDS = {
   'rock-cluster-a': { g: 'A', cat: 'cluster', opts: { count: 'many', cover: 'bare' }, pal: 'field' },
   'ember-rock-a': { g: 'A', cat: 'embercrag', opts: { form: 'outcrop', veins: 'many' }, pal: 'ash' },
   'ember-rock-b': { g: 'A', cat: 'boulder', opts: { form: 'split', cover: 'embers' }, pal: 'ash' },
-  'basalt-columns-a': { g: 'A', cat: 'basalt', opts: { form: 'cluster', glow: 'none' }, pal: 'ash' },
+  'basalt-columns-a': { g: 'A', cat: 'basalt', opts: { form: 'cluster', glow: 'none' }, pal: 'ash', colors: { stone: '#5a5e66', stone2: '#535760', top: '#7d828b' } }, // lighter blue-grey basalt that reads as stone in daylight (review 3)
   'cliff-face-a': { g: 'K', cat: 'cliff', opts: { form: 'straight', strata: 'bands', top: 'grass', veins: 'none' }, pal: 'field', box: { w: 6, d: 3, h: 6 } },
   'cliff-face-b': { g: 'K', cat: 'cliff', opts: { form: 'straight', strata: 'bands', top: 'grass', veins: 'none' }, pal: 'field', box: { w: 6, d: 3, h: 6 } },
   'cliff-corner-a': { g: 'K', cat: 'corner', opts: { form: 'straight', strata: 'bands', top: 'grass', veins: 'none' }, pal: 'field', box: { w: 3, d: 3, h: 6 } },
@@ -1025,7 +1025,7 @@ function rollGame(id, seed) {
   const t = { ...rollTraits(d.cat, seed), ...outputSettings(), gameId: id, box, palette: d.pal };
   Object.assign(t.opts, d.opts);
   t.dims = { w: box.w, h: box.h, d: box.d };
-  t.colors = { ...t.colors, ...PALETTES[d.pal] };
+  t.colors = { ...t.colors, ...PALETTES[d.pal], ...d.colors };
   t.style = 'lowpoly'; $('style').value = 'lowpoly';
   t.detail = pickDetail(t, gameBudget(box)); $('detail').value = t.detail;
   state.traits = t;
