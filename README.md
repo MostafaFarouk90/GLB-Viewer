@@ -1,6 +1,25 @@
 # GLB Viewer & Optimizer
 
-A single-page tool to view a `.glb` / `.gltf` model and change its face count, smoothness and file size, then download the result as GLB. Plain HTML + JavaScript: no server, no install, no build step to use it.
+A browser toolkit for the Embers of Valdren game's 3D assets. The main page views a `.glb` / `.gltf` model and changes its face count, smoothness and file size, then downloads the result as GLB; the other pages generate characters, creatures, props, structures, rocks, vegetation and textures as game-ready GLB/PNG files. Plain HTML + JavaScript: no server, no install, no build step to use it.
+
+## Pages
+Every page has a row of links under its title to all the others. Each tool comes as a readable page that loads its libraries from the jsDelivr CDN (needs internet) and an `-offline.html` build with every library inside, which opens by double-click with no internet.
+
+| Page | CDN file | Offline file | What it does |
+| --- | --- | --- | --- |
+| [GLB viewer](#glb-viewer--optimizer) | `index.html` | `glb-viewer-offline.html` | View, decimate, subdivide, smooth and shrink any GLB; game-ready check, variant forge, batch |
+| [Characters](#mystical-character-generator) | `character-generator.html` | `character-generator-offline.html` | Mystical characters and townsfolk NPCs, KayKit chibi look and 41-bone skeleton |
+| [Creatures](#creature-generator) | `creature-generator.html` | `creature-generator-offline.html` | Animals and monsters, static or rigged |
+| [Animation](#animation-preview-and-clip-baker) | `animation-preview.html` | `animation-preview-offline.html` | Play clips on a rigged GLB, make procedural clips and bake them in |
+| [Props](#fantasy-props-generator) | `props-generator.html` | `props-generator-offline.html` | Weapons, loot, camp, road and tavern props, sized from the game's targets |
+| [Structures](#structures-kit-generator) | `structures-generator.html` | `structures-generator-offline.html` | Modular structure pieces the KayKit packs lack |
+| [Rocks](#rock-and-cliff-kit) | `rocks-generator.html` | `rocks-generator-offline.html` | Rocks, boulders and tileable cliff modules |
+| [Vegetation](#vegetation-generator) | `vegetation-generator.html` | `vegetation-generator-offline.html` | Trees, bushes, hedges, grass, ferns, flowers and reeds, with LODs |
+| [Textures](#texture-and-decal-generator) | `texture-generator.html` | `texture-generator-offline.html` | Base-colour textures, ground decals and the palette atlas |
+| [Coverage](#coverage-dashboard) | `coverage.html` | (same file) | Every game id: shipped, passing, still needed, and which generator makes it |
+| README | `readme.html` | (same file) | This file, rendered in the browser |
+
+`readme.html` shows this README with its contents list. Over the web it reads `README.md` itself; opened from disk (where browsers block reading files) it uses the copy in `shared/readme-data.js`, which `npm run build` writes from `README.md`.
 
 ## Run it
 1. Double-click **`glb-viewer-offline.html`**. It works with no internet because every library is inside the file.
@@ -201,6 +220,7 @@ Code that several pages use lives in `shared/` and is loaded by each source page
 
 - `kit.js`: the `EmbersKit` object, `EmbersKit.use({ THREE, … })` (the page hands over its three.js) and the generator registry that `tools/export-ids.mjs` calls.
 - `nav.js`: the row of links to every page under each page's title (`EmbersKit.PAGES`). Add a new page there and load `shared/nav.js` from it.
+- `readme-data.js`: this README as a string for `readme.html` when it is opened from disk (written from `README.md` by `npm run build`).
 - `random.js`: seeded random numbers (`makeRng`, `hashSeed`, `randomSeed`).
 - `files.js`: `saveBlob`, the zip writer and variant file names.
 - `targets.js` and `targets-data.js`: the live `targets.json` URL and fetch, the built-in copy (written from `embers/targets.json` by `npm run build`), the driver axis and fit-to-box rules.
@@ -221,6 +241,6 @@ npm run build    # regenerate the *-offline.html files
 npm test         # Playwright tests (Chromium) against the CDN pages and their offline files
 ```
 
-**After editing a source page or a `shared/` file, run `npm run build` and commit the regenerated offline files together with it.** When `embers/targets.json` or `embers/manifest.json` changes, `npm run build` also rewrites `shared/targets-data.js` or `shared/manifest-data.js`, the pages' offline copies (tests check they match). `coverage.html` has no offline build; its built-in copies of the missing-objects list and of each generator's `GAME_IDS` are refreshed by `npm run coverage-data` (a test fails when they are stale), so run it after changing either. Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
+**After editing a source page or a `shared/` file, run `npm run build` and commit the regenerated offline files together with it.** When `embers/targets.json`, `embers/manifest.json` or `README.md` changes, `npm run build` also rewrites `shared/targets-data.js`, `shared/manifest-data.js` or `shared/readme-data.js`, the pages' offline copies (tests check they match). `coverage.html` has no offline build; its built-in copies of the missing-objects list and of each generator's `GAME_IDS` are refreshed by `npm run coverage-data` (a test fails when they are stale), so run it after changing either. Tests run offline: CDN requests from the source pages are served from `node_modules`, and the offline file is checked to make no CDN requests. Set `PW_CHROMIUM_PATH` to use a specific Chromium binary.
 
 There is intentionally no CI: build and test locally before committing.

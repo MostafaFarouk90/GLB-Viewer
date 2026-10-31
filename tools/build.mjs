@@ -18,7 +18,8 @@
 // see shared/kit.js) are replaced by the file's contents.
 //
 // It also writes shared/targets-data.js from embers/targets.json and shared/manifest-data.js from embers/manifest.json,
-// so the pages' offline copies of the game's size table and shipped ids are the ones in embers/.
+// so the pages' offline copies of the game's size table and shipped ids are the ones in embers/, and
+// shared/readme-data.js from README.md for readme.html.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,6 +37,7 @@ const fail = (msg) => { console.error('build failed: ' + msg); process.exit(1); 
 
 writeTargetsData();
 writeShippedData();
+writeReadmeData();
 for (const [src, out] of PAGES) await buildPage(src, out);
 
 function writeTargetsData() {
@@ -56,6 +58,16 @@ function writeShippedData() {
     + `(window.EmbersKit = window.EmbersKit || {}).EMBEDDED_SHIPPED = ${JSON.stringify(ids, null, 1)};\n`;
   const out = path.join(root, 'shared/manifest-data.js');
   if (!fs.existsSync(out) || fs.readFileSync(out, 'utf8') !== js) { fs.writeFileSync(out, js); console.log('wrote shared/manifest-data.js'); }
+}
+
+// shared/readme-data.js: README.md as a string, for readme.html opened from disk (browsers block fetch() on file://).
+function writeReadmeData() {
+  const md = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+  const js = '// Made by tools/build.mjs from README.md: do not edit, edit README.md and run "npm run build".\n'
+    + '// The copy readme.html shows when it is opened from disk; see readme.html.\n'
+    + `(window.EmbersKit = window.EmbersKit || {}).README_MD = ${JSON.stringify(md).replace(/<\//g, '<\\/')};\n`;
+  const out = path.join(root, 'shared/readme-data.js');
+  if (!fs.existsSync(out) || fs.readFileSync(out, 'utf8') !== js) { fs.writeFileSync(out, js); console.log('wrote shared/readme-data.js'); }
 }
 
 async function buildPage(srcName, outName) {
