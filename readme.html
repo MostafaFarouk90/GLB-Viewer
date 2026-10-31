@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toolkit README</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
+    --text: #e6e8ec; --muted: #8b93a3; --accent: #e8a33d; --accent2: #b97a1f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 14px 16px 60px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  .layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 28px; align-items: start; }
+  #toc { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; font-size: 12.5px;
+    border-right: 1px solid var(--line); padding-right: 12px; }
+  #toc b { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin: 4px 0 6px; font-weight: 500; }
+  #toc a { display: block; color: var(--muted); text-decoration: none; padding: 2px 0; }
+  #toc a.sub { padding-left: 12px; font-size: 12px; }
+  #toc a:hover { color: var(--accent); }
+  #doc { min-width: 0; }
+  #doc h1 { font-size: 26px; margin: 4px 0 8px; }
+  #doc h2 { font-size: 19px; margin: 34px 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
+  #doc h3 { font-size: 15px; margin: 22px 0 6px; }
+  #doc h2, #doc h3 { scroll-margin-top: 12px; }
+  #doc p { margin: 8px 0; }
+  #doc ul, #doc ol { margin: 6px 0; padding-left: 22px; }
+  #doc li { margin: 3px 0; }
+  #doc li > ul, #doc li > ol { margin: 2px 0; }
+  #doc a { color: var(--accent); }
+  #doc code { font: 12.5px ui-monospace, Menlo, Consolas, monospace; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+  #doc pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+  #doc pre code { background: none; border: 0; padding: 0; }
+  #doc .tbl { overflow-x: auto; margin: 10px 0; border: 1px solid var(--line); border-radius: 8px; }
+  #doc table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  #doc th, #doc td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  #doc td code { white-space: nowrap; }
+  #doc th { background: var(--panel); color: var(--muted); font-weight: 500; }
+  #doc tr:last-child td { border-bottom: 0; }
+  #source { color: var(--muted); font-size: 12px; margin-top: 40px; }
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    #toc { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 10px; }
+  }
+</style>
+<script src="shared/kit.js"></script>
+<script src="shared/readme-data.js"></script>
+<script src="shared/nav.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <h1>Toolkit README</h1>
+  <div class="layout">
+    <nav id="toc" aria-label="Contents"><b>Contents</b></nav>
+    <main id="doc">Loading…</main>
+  </div>
+  <div id="source"></div>
+</div>
+<script>
+// Shows README.md as a page, with no libraries and no build step. Over http(s) it reads README.md next to this page, so
+// the live site is always current; opened from disk (fetch is blocked on file://), or when the server does not hand out
+// README.md, it uses EmbersKit.README_MD from shared/readme-data.js, which "npm run build" writes from README.md.
+(function () {
+  const kit = window.EmbersKit;
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // GitHub's heading anchors: lower case, punctuation dropped, spaces to dashes.
+  const slug = (s) => s.toLowerCase().replace(/<[^>]+>/g, '').replace(/[^\w\- ]+/g, '').replace(/ /g, '-');
+  // Page file names in `code` link to the page itself.
+  const pageFiles = new Set((kit.PAGES || []).flatMap((p) => [p[1], p[2]]));
+
+  function inline(text) {
+    const codes = [];
+    let s = text.replace(/`([^`]+)`/g, (_, c) => {
+      const html = `<code>${esc(c)}</code>`;
+      codes.push(pageFiles.has(c) ? `<a href="${esc(c)}">${html}</a>` : html);
+      return `\u0000${codes.length - 1}\u0000`;
+    });
+    s = esc(s);
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, href) => `<a href="${href}">${t}</a>`);
+    s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+[^\s<).,;:])/g, (_, pre, url) => `${pre}<a href="${url}">${url}</a>`);
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|[^\w*])\*([^*\s][^*]*?)\*(?![\w*])/g, '$1<em>$2</em>');
+    return s.replace(/\u0000(\d+)\u0000/g, (_, i) => codes[+i]);
+  }
+
+  const LIST = /^(\s*)([-*]|\d+\.)\s+(.*)$/;
+  const cells = (line) => line.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+
+  function render(md) {
+    const lines = md.replace(/\r\n?/g, '\n').split('\n');
+    const out = [], toc = [], seen = {};
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line.trim()) { i++; continue; }
+      let m;
+      if ((m = line.match(/^```(\w*)/))) {
+        const body = [];
+        for (i++; i < lines.length && !lines[i].startsWith('```'); i++) body.push(lines[i]);
+        i++;
+        out.push(`<pre><code>${esc(body.join('\n'))}</code></pre>`);
+      } else if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
+        const level = m[1].length, html = inline(m[2]);
+        // Repeated headings get -1, -2… as on GitHub.
+        let id = slug(m[2].replace(/`/g, ''));
+        if (id in seen) id += '-' + ++seen[id]; else seen[id] = 0;
+        out.push(`<h${level} id="${id}">${html}</h${level}>`);
+        if (level === 2 || level === 3) toc.push([level, id, html.replace(/<\/?(a|code)[^>]*>/g, '')]);
+        i++;
+      } else if (line.trim().startsWith('|') && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1] || '')) {
+        const head = cells(line);
+        i += 2;
+        const rows = [];
+        for (; i < lines.length && lines[i].trim().startsWith('|'); i++) rows.push(cells(lines[i]));
+        out.push('<div class="tbl"><table><thead><tr>' + head.map((c) => `<th>${inline(c)}</th>`).join('')
+          + '</tr></thead><tbody>' + rows.map((r) => '<tr>' + r.map((c) => `<td>${inline(c)}</td>`).join('') + '</tr>').join('')
+          + '</tbody></table></div>');
+      } else if (LIST.test(line)) {
+        // Items with their indent; a non-blank line that is not an item continues the item before it.
+        const items = [];
+        for (; i < lines.length; i++) {
+          const l = lines[i];
+          if (!l.trim()) { if (LIST.test(lines[i + 1] || '') || /^\s+\S/.test(lines[i + 1] || '')) continue; break; }
+          const im = l.match(LIST);
+          if (im) items.push({ indent: im[1].length, ordered: /\d/.test(im[2]), text: im[3] });
+          else if (items.length && (/^\s/.test(l) || !/^(#|```|\|)/.test(l))) items[items.length - 1].text += ' ' + l.trim();
+          else break;
+        }
+        out.push(renderList(items));
+      } else {
+        const para = [];
+        for (; i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|\s*\|)/.test(lines[i]) && !LIST.test(lines[i]); i++) para.push(lines[i].trim());
+        out.push(`<p>${inline(para.join(' '))}</p>`);
+      }
+    }
+    return { html: out.join('\n'), toc };
+  }
+
+  // Nested lists from indents: a deeper item opens a list inside the item before it.
+  function renderList(items) {
+    let html = '', k = 0;
+    function level(indent) {
+      const tag = items[k].ordered ? 'ol' : 'ul';
+      html += `<${tag}>`;
+      while (k < items.length && items[k].indent >= indent) {
+        const it = items[k++];
+        html += `<li>${inline(it.text)}`;
+        if (k < items.length && items[k].indent > it.indent) level(items[k].indent);
+        html += '</li>';
+      }
+      html += `</${tag}>`;
+    }
+    level(items[0].indent);
+    return html;
+  }
+
+  function show(md, from) {
+    const { html, toc } = render(md);
+    document.getElementById('doc').innerHTML = html;
+    const nav = document.getElementById('toc');
+    for (const [lvl, id, label] of toc) {
+      const a = document.createElement('a');
+      a.href = '#' + id;
+      a.innerHTML = label;
+      if (lvl === 3) a.className = 'sub';
+      nav.appendChild(a);
+    }
+    document.getElementById('source').textContent = from;
+    window.__readme = { from, headings: toc.length };
+    if (location.hash) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
+  }
+
+  const builtIn = () => show(kit.README_MD || '# README\n\nshared/readme-data.js is missing; run "npm run build".',
+    'Shown from the copy in shared/readme-data.js.');
+  if (location.protocol === 'file:') builtIn();
+  else fetch('README.md', { cache: 'no-cache' })
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then((md) => show(md, 'Shown from README.md.'), builtIn);
+})();
+</script>
+</body>
+</html>

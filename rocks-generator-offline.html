@@ -95,7 +95,7 @@
 // The links between the toolkit pages: a row of every page, put right under the page's <h1>, with the page itself
 // marked. Each page loads it with a classic script tag (src="shared/nav.js"); loaded that way it links the CDN pages; the
 // offline build inlines it (no src), and then it links the *-offline.html pages, so an offline copy stays offline.
-// coverage.html has no offline build, so it is linked as it is from both.
+// coverage.html and readme.html have no offline build, so they are linked as they are from both.
 (function (kit) {
   kit.PAGES = [
     ['GLB viewer', 'index.html', 'glb-viewer-offline.html'],
@@ -108,6 +108,7 @@
     ['Vegetation', 'vegetation-generator.html', 'vegetation-generator-offline.html'],
     ['Textures', 'texture-generator.html', 'texture-generator-offline.html'],
     ['Coverage', 'coverage.html', 'coverage.html'],
+    ['README', 'readme.html', 'readme.html'],
   ];
   const offline = !document.currentScript.src;
 
